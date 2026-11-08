@@ -65,5 +65,8 @@ Run 8 keeps its fixed building order and can't be rearranged.
 ## Run 8 (Bruce McLaren Village)
 Buildings in order Amon → Hulme → Monaco → Austin, then reception. Door codes are on the building banners (add them with **••• → Door codes**). Mailboxes are grouped by bank. Reception, the Care Centre and the Serviced Apartments are one tile: one tap when you hand the bundle over. Details: [Run 8](run8-village.md).
 
+## Your password
+**Change password** under your name on the Runs page. If you forget it, ask Mike for a temporary one.
+
 ## New version of the app
 The app updates itself. If it says "A new version is ready", tap **Reload**. If something looks old, close the app fully and open it again.

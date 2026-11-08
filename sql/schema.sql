@@ -297,3 +297,230 @@ begin
     create policy delivery_photos_add on storage.objects for insert to authenticated with check (bucket_id = 'delivery-photos' and public.is_member());
   end if;
 end $$;
+
+-- ===============================================================
+-- Dispatch: roles, the address register, locations and policies.
+-- Model (docs/business-rules.md#locations): a location group (e.g. Bruce McLaren Village)
+-- holds operating locations (where the vehicle stops), which hold service locations
+-- (where the work is done on foot: a letterbox, Bank 1, reception). Every address on a
+-- run sheet is registered automatically and can be tied to an operating and a service location.
+-- Policies (entry point, access notes, time windows, speed limits) attach at any level.
+-- Members can read all of it; only dispatchers can change it.
+-- ===============================================================
+
+-- Roles: 'driver' = app only, 'dispatcher' = app + dispatch dashboard. Inactive members are locked out.
+alter table public.members add column if not exists role text not null default 'driver';
+alter table public.members add column if not exists active boolean not null default true;
+alter table public.members add column if not exists added_at timestamptz not null default now();
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'members_role_check') then
+    alter table public.members add constraint members_role_check check (role in ('driver', 'dispatcher'));
+  end if;
+end $$;
+
+create or replace function public.is_member() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.members
+    where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) and active
+  );
+$$;
+
+create or replace function public.is_dispatcher() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.members
+    where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) and active and role = 'dispatcher'
+  );
+$$;
+
+drop policy if exists members_add on public.members;
+create policy members_add on public.members for insert to authenticated with check (public.is_dispatcher());
+drop policy if exists members_change on public.members;
+create policy members_change on public.members for update to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());
+
+-- Never lock everyone out: there must always be an active dispatcher.
+create or replace function public.members_keep_a_dispatcher() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if old.role = 'dispatcher' and old.active
+     and (tg_op = 'DELETE' or new.role <> 'dispatcher' or not new.active)
+     and not exists (select 1 from public.members where role = 'dispatcher' and active and email <> old.email) then
+    raise exception 'There must always be at least one active dispatcher.';
+  end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists members_keep_a_dispatcher on public.members;
+create trigger members_keep_a_dispatcher before update or delete on public.members
+  for each row execute function public.members_keep_a_dispatcher();
+
+-- Location groups: a village, a building, a street or an area. Groups can sit inside groups.
+create table if not exists public.location_groups (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  kind       text not null default 'area',          -- village, building, street, area
+  parent_id  uuid references public.location_groups(id) on delete set null,
+  route      text,                                  -- optional: the run it belongs to
+  notes      text,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+-- Operating locations: where the vehicle stops (a GPS point), in order along a route.
+create table if not exists public.operating_locations (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid references public.location_groups(id) on delete set null,
+  name       text not null,
+  route      text,
+  seq        int,
+  lat        double precision,
+  lng        double precision,
+  notes      text,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+-- Service locations: where the driver does the work from that stop (letterbox, bank, reception…).
+create table if not exists public.service_locations (
+  id                    uuid primary key default gen_random_uuid(),
+  operating_location_id uuid not null references public.operating_locations(id) on delete cascade,
+  name                  text not null,
+  kind                  text not null default 'letterbox', -- letterbox, bank, reception, lobby, door, other
+  seq                   int,
+  lat                   double precision,
+  lng                   double precision,
+  notes                 text,
+  validated_at          timestamptz,               -- someone checked it on the ground
+  validated_by          text,
+  updated_at            timestamptz not null default now(),
+  updated_by            text
+);
+
+-- The address register: every address ever seen on a run sheet, filled automatically.
+create table if not exists public.addresses (
+  address_key           text primary key,          -- HOWICK|UXBRIDGE ROAD|1/71, as on run_lines
+  area                  text,
+  street                text not null,
+  number                text not null,
+  routes                text[] not null default '{}',
+  first_seen            date,
+  last_seen             date,
+  last_run_id           text,
+  operating_location_id uuid references public.operating_locations(id) on delete set null,
+  service_location_id   uuid references public.service_locations(id) on delete set null,
+  validated_at          timestamptz,               -- the assignment was checked on the ground
+  validated_by          text,
+  notes                 text,
+  updated_at            timestamptz not null default now(),
+  updated_by            text
+);
+create index if not exists addresses_operating_idx on public.addresses (operating_location_id);
+create index if not exists addresses_service_idx on public.addresses (service_location_id);
+
+-- Policies: rules attached to a group, an operating location, a service location or one address.
+-- kind: entry_point (lat/lng + note), access_note (note), not_before (time_from),
+--       time_window (time_from–time_to), speed_limit (speed_kmh), restriction (note).
+-- days: which weekdays it applies to (Mon..Sun); empty = every day.
+create table if not exists public.location_policies (
+  id                    uuid primary key default gen_random_uuid(),
+  group_id              uuid references public.location_groups(id) on delete cascade,
+  operating_location_id uuid references public.operating_locations(id) on delete cascade,
+  service_location_id   uuid references public.service_locations(id) on delete cascade,
+  address_key           text references public.addresses(address_key) on delete cascade,
+  kind                  text not null,
+  note                  text,
+  lat                   double precision,
+  lng                   double precision,
+  time_from             time,
+  time_to               time,
+  speed_kmh             int,
+  days                  text[] not null default '{}',
+  active                boolean not null default true,
+  updated_at            timestamptz not null default now(),
+  updated_by            text,
+  constraint location_policies_kind_check check (kind in ('entry_point', 'access_note', 'not_before', 'time_window', 'speed_limit', 'restriction')),
+  constraint location_policies_one_target check (num_nonnulls(group_id, operating_location_id, service_location_id, address_key) = 1)
+);
+
+-- Every change to people, locations, addresses and policies is logged.
+create table if not exists public.dispatch_history (
+  id        bigint generated always as identity primary key,
+  at        timestamptz not null default now(),
+  by_email  text default (auth.jwt() ->> 'email'),
+  entity    text not null,
+  entity_id text,
+  action    text not null,
+  data      jsonb
+);
+create or replace function public.log_dispatch_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare rec jsonb := to_jsonb(coalesce(new, old));
+begin
+  -- The register filling itself as sheets load is not logged (it would be hundreds of rows a day);
+  -- only a person's changes to an address (assignment, validation, notes) are.
+  if tg_table_name = 'addresses' and (tg_op = 'INSERT' or (tg_op = 'UPDATE'
+     and jsonb_build_array(rec -> 'operating_location_id', rec -> 'service_location_id', rec -> 'validated_at', rec -> 'notes')
+       = jsonb_build_array(to_jsonb(old) -> 'operating_location_id', to_jsonb(old) -> 'service_location_id', to_jsonb(old) -> 'validated_at', to_jsonb(old) -> 'notes'))) then
+    return new;
+  end if;
+  insert into public.dispatch_history (entity, entity_id, action, data)
+  values (tg_table_name, coalesce(rec ->> 'id', rec ->> 'address_key', rec ->> 'email'), lower(tg_op), rec);
+  return coalesce(new, old);
+end $$;
+do $$ declare t text; begin
+  foreach t in array array['members', 'location_groups', 'operating_locations', 'service_locations', 'addresses', 'location_policies'] loop
+    execute format('drop trigger if exists %I_log on public.%I', t, t);
+    execute format('create trigger %I_log after insert or update or delete on public.%I for each row execute function public.log_dispatch_change()', t, t);
+  end loop;
+end $$;
+
+-- Fill the register as sheets are loaded (from the app or the evening fetch).
+create or replace function public.register_address() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.addresses as a (address_key, area, street, number, routes, first_seen, last_seen, last_run_id)
+  select new.address_key, split_part(new.address_key, '|', 1), new.street, new.number, array[r.route], r.delivery_date, r.delivery_date, r.id
+  from public.runs r where r.id = new.run_id
+  on conflict (address_key) do update set
+    street      = excluded.street,
+    number      = excluded.number,
+    routes      = (select array(select distinct x from unnest(a.routes || excluded.routes) x order by 1)),
+    first_seen  = least(a.first_seen, excluded.first_seen),
+    last_seen   = greatest(a.last_seen, excluded.last_seen),
+    last_run_id = case when excluded.last_seen >= coalesce(a.last_seen, excluded.last_seen) then excluded.last_run_id else a.last_run_id end;
+  return new;
+end $$;
+drop trigger if exists run_lines_register on public.run_lines;
+create trigger run_lines_register after insert on public.run_lines
+  for each row execute function public.register_address();
+
+-- Register everything already loaded (safe to repeat).
+insert into public.addresses as a (address_key, area, street, number, routes, first_seen, last_seen, last_run_id)
+select distinct on (l.address_key) l.address_key, split_part(l.address_key, '|', 1), l.street, l.number,
+       (select array(select distinct r2.route from public.run_lines l2 join public.runs r2 on r2.id = l2.run_id where l2.address_key = l.address_key order by 1)),
+       (select min(r2.delivery_date) from public.run_lines l2 join public.runs r2 on r2.id = l2.run_id where l2.address_key = l.address_key),
+       r.delivery_date, r.id
+from public.run_lines l join public.runs r on r.id = l.run_id
+order by l.address_key, r.delivery_date desc
+on conflict (address_key) do nothing;
+
+-- The register as the dashboard shows it: with the GPS learned from deliveries.
+create or replace view public.address_register with (security_invoker = true) as
+select a.*, p.taps as gps_taps, p.lat as gps_lat, p.lng as gps_lng, p.median_accuracy_m as gps_accuracy_m,
+       o.name as operating_name, s.name as service_name, o.group_id
+from public.addresses a
+left join public.address_positions p on p.address_key = a.address_key
+left join public.operating_locations o on o.id = a.operating_location_id
+left join public.service_locations s on s.id = a.service_location_id;
+
+do $$ declare t text; begin
+  foreach t in array array['location_groups', 'operating_locations', 'service_locations', 'addresses', 'location_policies', 'dispatch_history'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I_read on public.%I', t, t);
+    execute format('create policy %I_read on public.%I for select to authenticated using (public.is_member())', t, t);
+    if t <> 'dispatch_history' then
+      execute format('drop policy if exists %I_write on public.%I', t, t);
+      execute format('create policy %I_write on public.%I for all to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher())', t, t);
+    end if;
+  end loop;
+end $$;

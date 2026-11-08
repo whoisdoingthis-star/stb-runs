@@ -5,6 +5,8 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Dispatch dashboard** (for App + Dispatch access): the **address register** (every address from every run sheet, added automatically, with learned GPS), **locations** (groups → operating locations where the vehicle stops → service locations where the work is done, set on a map and validated), **policies** (entry point, access notes, time windows, speed limits, restrictions, by day), and **users** (add people, App only or App + Dispatch, temporary passwords, switch off). Drivers' screens are unchanged. (`addresses`, `location_groups`, `operating_locations`, `service_locations`, `location_policies`, `dispatch_history`; `members.role`, `members.active`; Edge Function `admin-users`)
+- **Change password** on the Runs page.
 - **Moving tiles a long way**: while holding a tile or street, drag it to the top or bottom of the screen and the list scrolls by itself (it stopped working upwards once you had scrolled down). No more dropping it at the top and picking it up again.
 - Docs as code: documentation now lives in `docs/` and changes with the code; automatic checks (tests, docs links, data model, changelog, version bump, secrets) run on every change. Docs-only change for the phones.
 

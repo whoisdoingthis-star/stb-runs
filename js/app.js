@@ -131,6 +131,8 @@ async function route() {
   const m = /^\/r\/([A-Za-z0-9+]+)/.exec(hash);
   if (m) return viewRun(m[1].split('+').filter(Boolean));
   if (hash === '/load' && app.pendingLoad) return viewLoad();
+  const dz = /^\/dispatch(?:\/(\w+))?/.exec(hash);
+  if (dz) return import('./dispatch.js').then((m) => m.viewDispatch({ app, h, mount, toast, titleCase, shortRoute }, dz[1] || 'addresses'));
   return viewHome();
 }
 
@@ -168,7 +170,9 @@ async function viewHome() {
     h('div', { class: 'topbar' },
       h('div', { style: 'flex:1' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
       app.store.mode === 'shared' ? h('div', { class: 'small muted', style: 'text-align:right' }, app.me.name, h('br'),
-        h('button', { class: 'link small', style: 'padding:0', onclick: async () => { await app.store.signOut(); route(); } }, 'Sign out')) : null),
+        h('button', { class: 'link small', style: 'padding:0', onclick: async () => { await app.store.signOut(); route(); } }, 'Sign out'), h('br'),
+        h('button', { class: 'link small', style: 'padding:0', onclick: () => changePassword() }, 'Change password')) : null),
+    app.me.role === 'dispatcher' ? h('a', { class: 'btn big-toggle', href: '#/dispatch', style: 'margin-bottom:10px' }, 'Dispatch dashboard') : null,
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: runs and ticks are saved on this phone only. Nothing is shared or uploaded.') : null,
     app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs') : null,
     h('label', { class: app.store.mode === 'shared' ? 'btn big' : 'btn primary big', style: app.store.mode === 'shared' ? 'margin-top:8px' : null, for: 'pdf' }, 'Manually upload runsheet'), fileInput,
@@ -231,6 +235,28 @@ async function viewHome() {
   let t;
   const unwatch = app.store.watchRuns(() => { clearTimeout(t); t = setTimeout(renderList, 1500); });
   app.cleanup = () => { unwatch(); clearTimeout(t); };
+}
+
+// Change your own password (e.g. after a dispatcher set a temporary one).
+function changePassword() {
+  const p1 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 8, required: true });
+  const p2 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 8, required: true });
+  const msg = h('div', { class: 'small', hidden: true });
+  const close = () => panel.remove();
+  const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
+    h('form', { class: 'sheet', onsubmit: async (e) => {
+      e.preventDefault();
+      const fail = (t) => { msg.hidden = false; msg.className = 'banner bad'; msg.textContent = t; };
+      if (p1.value.length < 8) return fail('At least 8 characters, please.');
+      if (p1.value !== p2.value) return fail('The two passwords are different.');
+      try { await app.store.changePassword(p1.value); close(); toast('Password changed.'); } catch (err) { fail(err.message); }
+    } },
+    h('h2', null, 'Change password'),
+    h('label', { class: 'field' }, h('span', null, 'New password'), p1),
+    h('label', { class: 'field' }, h('span', null, 'Same again'), p2),
+    msg,
+    h('div', { style: 'display:flex;gap:8px' }, h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'), h('button', { class: 'btn primary', type: 'submit', style: 'flex:1' }, 'Change password'))));
+  document.body.append(panel);
 }
 
 // Re-fetch a delivery date's sheets from RouteSmart (e.g. after a late change phoned in).

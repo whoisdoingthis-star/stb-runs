@@ -17,17 +17,17 @@
 | `GITHUB_DISPATCH_TOKEN is not set` | Add the token in Supabase → Edge Functions → Secrets ([setup](setup.md#4-get-runs-button)). |
 | `GitHub refused the request (401/403)` | The token expired or lost access. Make a new one, replace the secret. |
 | `Invalid JWT` | Turn off *Verify JWT with legacy secret* on the `refetch` function. |
-| `This login is not on the family list` | Add the email to `members`. |
+| `This login is not on the family list` | Add them on the Users tab (or switch them back on). |
 | Started, but nothing changed after 5 minutes | Look at the job in GitHub Actions (as above). |
 
 ## A phone shows an old version
 Close the app fully and reopen (twice if needed). The bottom bar colour on Android is fixed at install: remove and re-add the icon to change it.
 
-## Add a family member
-1. Supabase **Authentication → Users → Add user** (auto-confirm).
-2. SQL editor: `insert into public.members (email, display_name) values ('…', 'Name');`
-3. Send them the [family guide](family-guide.md).
-Remove someone: delete them from `members` (they lose access immediately) and from Authentication.
+## Add a family member, change access, forgotten password
+Dispatch dashboard → **Users** ([dispatch guide](dispatch-guide.md#users)). If the dashboard itself is unreachable, the same can be done in Supabase: Authentication → Users (login), and the `members` table (name, role, active).
+
+## Locked out of dispatch
+If no dispatcher can sign in: Supabase SQL editor → `update public.members set role = 'dispatcher', active = true where email ilike '<your email>';`
 
 ## Change a password or key
 | What | Steps |

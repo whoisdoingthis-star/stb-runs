@@ -245,15 +245,26 @@ export class SupabaseStore extends Base {
     if (!this.me || this.me.id !== user.id) {
       let name = LS.get(`stb.name.${user.id}`, null);
       let res = null;
-      try { res = await this.sb.from('members').select('display_name').ilike('email', user.email).maybeSingle(); } catch { /* offline */ }
+      let role = LS.get(`stb.role.${user.id}`, 'driver');
+      try {
+        res = await this.sb.from('members').select('display_name, role').ilike('email', user.email).maybeSingle();
+        // Before the dispatch part of the schema is applied there is no role column: carry on as a driver.
+        if (res.error && /role/.test(res.error.message)) res = await this.sb.from('members').select('display_name').ilike('email', user.email).maybeSingle();
+      } catch { /* offline */ }
       if (res && !res.error) {
-        if (!res.data) throw new Error('This login is not on the family list yet. Add the email to the members table.');
+        if (!res.data) throw new Error('This login is not on the family list, or its access has been switched off.');
         name = res.data.display_name;
+        role = res.data.role || 'driver';
         LS.set(`stb.name.${user.id}`, name);
+        LS.set(`stb.role.${user.id}`, role);
       }
-      this.me = { id: user.id, email: user.email, name: name || user.email.split('@')[0] };
+      this.me = { id: user.id, email: user.email, name: name || user.email.split('@')[0], role };
     }
     return this.me;
+  }
+  async changePassword(password) {
+    const { error } = await this.sb.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
   }
   async signIn(email, password) {
     const { error } = await this.sb.auth.signInWithPassword({ email, password });

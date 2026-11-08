@@ -16,6 +16,8 @@ flowchart LR
 | Web app | `index.html`, `js/`, hosted on GitHub Pages | Everything the family sees. Static files, no build step. Works offline once opened (`sw.js`). |
 | Parser | `js/parser.js` | Reads the PDF by text position (pdf.js), builds one tile per address, checks totals, matches Key Report items. The same code runs on the phone and in the fetcher. |
 | Evening fetch | `fetcher/fetch-run-sheets.mjs`, `.github/workflows/fetch-run-sheets.yml` | Every 15 minutes from 19:05 to about 21:50 NZ: if tomorrow's runs aren't loaded, signs in to RouteSmart in a hidden browser, requests the report, parses and checks it, saves each run, stores the PDF. Stops once all five runs are in. |
+| Dispatch dashboard | `js/dispatch.js` (`#/dispatch`), maps from OpenStreetMap via Leaflet (`vendor/leaflet`) | Address register, locations, policies, users. Loaded only when opened, so drivers' phones never download it. |
+| User admin | `supabase/functions/admin-users/index.ts` | Dispatcher-only: create logins with a temporary password, set passwords, change access, switch people off and on. |
 | Get Runs | `supabase/functions/refetch/index.ts` | Checks the caller is a family member, then starts the evening-fetch job for the chosen date (forced, so it replaces what's there). |
 | Database | Supabase project `stb-runs` (Sydney), `sql/schema.sql` | Runs, addresses, taps, custom orders, door codes, photos. Row-level security limits everything to the members list. See [data model](data-model.md). |
 | Live updates | Supabase Realtime | Taps, order changes and replaced sheets reach every open phone within a second or two. |

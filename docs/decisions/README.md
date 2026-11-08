@@ -15,5 +15,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0009 | [Docs as code](0009-docs-as-code.md) | 2026-11-08 | Accepted |
 | 0010 | [Public repository, no secrets in it](0010-public-repository.md) | 2026-11-08 | Accepted (revisit for STB) |
 | 0011 | [Known security shortcuts during the PoC](0011-known-security-shortcuts.md) | 2026-11-08 | Accepted (temporary) |
+| 0012 | [Locations: groups, operating locations, service locations](0012-dispatch-location-model.md) | 2026-11-08 | Accepted |
+| 0013 | [Roles enforced by the database; temporary passwords instead of email invites](0013-roles-enforced-by-database.md) | 2026-11-08 | Accepted (revisit for STB) |
 
 New decision: copy the latest file, take the next number, add it to this table.

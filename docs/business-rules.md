@@ -62,3 +62,28 @@ Before midday NZ: today's runs (being delivered this morning). After midday: tom
 
 ## What counts as "a detail changed"
 When a sheet replaces an earlier one for the same run and day, these are compared address by address: address added, address removed, papers or quantities changed, delivery note changed. Changes to order or flags alone are not counted. — `js/rows.js` `diffLines`
+
+## Locations: operating and service
+(Mike, 8 Nov 2026.) Three levels, so navigation goes where the vehicle stops and the work is planned where it's done:
+
+| Level | Meaning | Run 8 example | Street example |
+|---|---|---|---|
+| **Location group** | A village, building, street or area. Groups can sit inside groups. Policies set on a group apply to everything in it | Bruce McLaren Village | Uxbridge Road |
+| **Operating location** | Where the vehicle stops: a GPS point with a stop number along the run | Monaco car park | Outside 41 Uxbridge Road |
+| **Service location** | Where the driver does the work from that stop, on foot | Monaco Bank 1, Bank 2, Reception | The letterboxes at 35–49B |
+| **Address** | What the sheet lists (one tile) | Unit 379 | 38B Uxbridge Road |
+
+- **The address register** holds every address ever seen on a run sheet, filled automatically when any sheet loads (app or evening fetch), with the runs it's on and when it was first and last seen. Addresses are identified by the same key as the tiles, so an assignment carries over to every future sheet.
+- Each address can be assigned to an operating location and a service location, and the assignment **validated** once checked on the ground. Re-assigning clears validation.
+- Service locations can be **validated** themselves (the bank or letterbox is where we think it is).
+- **Learned GPS**: deliveries ticked with an accurate fix (40 m or better) are averaged per address; that is the best guess of where the letterbox is, and can set a stop's GPS ("the middle of the delivered addresses").
+
+## Policies
+Rules attached to exactly one group, operating location, service location or address, applying to everything beneath it (an address inherits from its service location, its operating location and every group above). Kinds: **entry point** from the road (note and/or GPS), **access note**, **no service before** a time, **deliver between** two times, **speed limit**, **delivery restriction**. Optional days of the week (none = every day); can be switched off without deleting. (Mike, 8 Nov 2026)
+
+## People and access
+- **App only** (`driver`): runs, ticks, photos, reordering.
+- **App + Dispatch** (`dispatcher`): also the dispatch dashboard: the register, locations, policies and users. Mike is the first dispatcher. (Mike, 8 Nov 2026)
+- Enforced by the database, not just the screens: only dispatchers can change locations, policies, assignments or people.
+- There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
+- New people get a temporary password from a dispatcher, in person, and can change it in the app.

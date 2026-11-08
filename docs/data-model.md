@@ -4,7 +4,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 
 | Table | Holds | Notes |
 |---|---|---|
-| `members` | Family members: email, display name | The display name shows on ticked tiles. Add people here and in Supabase Authentication. |
+| `members` | Everyone with access: email, display name, `role` (`driver` = app only, `dispatcher` = app + dispatch), `active` | The display name shows on ticked tiles. Managed on the dashboard's Users tab. A trigger keeps at least one active dispatcher. |
 | `runs` | One row per route per delivery day | `summary` (counts, papers by publication, dockets), `checks`, `warnings`, `key_report`, `source` (`auto` = evening fetch, `upload` = manual), `updated_at`, `last_changes` (what changed when the sheet was last replaced: `{at, count, items[]}`). |
 | `run_lines` | The tiles: one per address on a run | `address_key` (same every day), `parts` (papers and quantities), `sources` (original sheet lines), `note`, `flags` (complaint, start, stop, check day…). Replaced whole when a sheet is replaced. |
 | `tap_events` | Every tick and untick, never changed or deleted | Who, device time, server time, GPS (`lat`, `lng`, `accuracy_m`, `fix_age_ms`), device. Runs with taps can't be deleted. |
@@ -14,10 +14,20 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `access_code_history` | Every door code change | Filled by a trigger. |
 | `photos` | Delivery photos: route, address, run, storage path, time, GPS, who | The image is in the private `delivery-photos` storage bucket. Members can add and view; nobody can edit or delete from the app. |
 | `photo_watch` | Addresses to photograph on every delivery | Per route and address; added from the photo screen. |
+| `addresses` | The address register: every address seen on a run sheet | Filled by a trigger on `run_lines` (runs, first/last seen). Dispatchers set `operating_location_id`, `service_location_id`, validation and notes. |
+| `location_groups` | Villages, buildings, streets, areas | Can nest (`parent_id`). Optional run. |
+| `operating_locations` | Where the vehicle stops | Group, run, stop number (`seq`), GPS. |
+| `service_locations` | Where the work is done from a stop | Kind (letterbox, bank, reception, lobby, door, other), order, GPS, validation. Deleted with their operating location. |
+| `location_policies` | Rules on a group, stop, service location or address | Exactly one target. Kind, note, GPS (entry point), times, speed, days, active. |
+| `dispatch_history` | Every change to people, locations, assignments and policies | Who, when, what (the row as JSON). Filled by triggers; the register filling itself isn't logged. |
 
 ## Views
 - `line_status`: latest tick state per tile.
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.
+- `address_register`: the register with learned GPS and location names, as the dashboard shows it.
+
+## Who can change what
+Everything is readable by active members. Runs, tiles, taps, photos, custom orders and door codes can be written by any active member. Locations, policies, the register's assignments and people can only be changed by dispatchers (`is_dispatcher()`).
 
 ## Storage buckets (private)
 - `run-sheets`: the PDFs the evening fetch downloads, kept for the record.

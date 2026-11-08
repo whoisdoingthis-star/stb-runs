@@ -37,3 +37,36 @@ console.log('non-member sees sequences:', (await db.query('select count(*)::int 
 console.log('non-member sees codes:', (await db.query('select count(*)::int n from access_codes')).rows[0].n);
 console.log('non-member sees runs:', (await db.query('select count(*)::int n from runs')).rows[0].n);
 try { await db.query(`insert into runs(route, delivery_date) values ('X','2026-11-07')`); console.log('FAIL stranger insert'); } catch(e){ console.log('stranger insert blocked'); }
+
+// ---- dispatch: roles, register, locations (assertions fail the run) ----
+const check = (name, ok) => { console.log(ok ? '✓' : '✗', name); if (!ok) process.exitCode = 1; };
+const as = async (email) => db.exec(`reset role; update auth.ctx set email='${email}'; set role authenticated;`);
+await db.exec(`reset role; insert into members (email, display_name, role) values ('lisa@example.com','Lisa','driver') on conflict do nothing; update members set role='dispatcher' where email='mike@example.com';`);
+check('existing address registered by backfill or trigger', (await db.query(`select routes from addresses where address_key='K|A|1'`)).rows[0]?.routes?.includes('HOWICK06'));
+await as('lisa@example.com');
+const run2 = (await db.query(`insert into runs(route, delivery_date) values ('HOWICK10','2026-11-09') returning id`)).rows[0].id;
+await db.query(`insert into run_lines(run_id,line_key,seq,block,street,number,pub,qty,address_key) values ($1,'K|A|1',1,1,'A','1','NZH',1,'K|A|1'),($1,'K|B|2',2,1,'B','2','NZH',1,'K|B|2')`, [run2]);
+const reg = (await db.query(`select address_key, routes, first_seen::text, last_seen::text from addresses order by 1`)).rows;
+check('a driver loading a sheet registers its addresses', reg.length === 2 && reg[0].routes.join() === 'HOWICK06,HOWICK10' && reg[0].first_seen === '2026-11-06' && reg[0].last_seen === '2026-11-09');
+let blocked = false; try { await db.query(`insert into location_groups(name) values ('X')`); } catch { blocked = true; }
+check('a driver cannot create locations', blocked);
+await db.query(`update addresses set notes='hack' where address_key='K|B|2'`);
+check('a driver cannot change the register', (await db.query(`select notes from addresses where address_key='K|B|2'`)).rows[0].notes === null);
+await db.query(`update members set role='dispatcher' where email='lisa@example.com'`);
+check('a driver cannot promote themselves', (await db.query(`select role from members where email='lisa@example.com'`)).rows[0].role === 'driver');
+await as('mike@example.com');
+const g = (await db.query(`insert into location_groups(name, kind) values ('Bruce McLaren Village','village') returning id`)).rows[0].id;
+const o = (await db.query(`insert into operating_locations(group_id, name, lat, lng) values ($1,'Monaco car park',-36.9,174.9) returning id`, [g])).rows[0].id;
+const s = (await db.query(`insert into service_locations(operating_location_id, name, kind) values ($1,'Monaco Bank 1','bank') returning id`, [o])).rows[0].id;
+await db.query(`update addresses set operating_location_id=$1, service_location_id=$2, validated_at=now(), validated_by='Mike' where address_key='K|B|2'`, [o, s]);
+check('a dispatcher assigns an address', (await db.query(`select operating_name, service_name from address_register where address_key='K|B|2'`)).rows[0].service_name === 'Monaco Bank 1');
+await db.query(`insert into location_policies(group_id, kind, note, lat, lng) values ($1,'entry_point','Enter from Bruce McLaren Rd',-36.9,174.9)`, [g]);
+await db.query(`insert into location_policies(group_id, kind, time_from, time_to) values ($1,'time_window','05:00','07:00')`, [g]);
+blocked = false; try { await db.query(`insert into location_policies(group_id, operating_location_id, kind) values ($1,$2,'access_note')`, [g, o]); } catch { blocked = true; }
+check('a policy has exactly one target', blocked);
+check('changes are logged', (await db.query(`select count(*)::int n from dispatch_history where entity in ('location_groups','addresses','location_policies')`)).rows[0].n >= 4);
+blocked = false; try { await db.query(`update members set role='driver' where email='mike@example.com'`); } catch (e) { blocked = /at least one active dispatcher/.test(e.message); }
+check('the last dispatcher cannot be removed', blocked);
+await db.query(`update members set active=false where email='lisa@example.com'`);
+await as('lisa@example.com');
+check('a deactivated member sees nothing', (await db.query('select count(*)::int n from runs')).rows[0].n === 0);
