@@ -146,8 +146,8 @@ async function viewHome() {
       app.store.mode === 'shared' ? h('div', { class: 'small muted', style: 'text-align:right' }, app.me.name, h('br'),
         h('button', { class: 'link small', style: 'padding:0', onclick: async () => { await app.store.signOut(); route(); } }, 'Sign out')) : null),
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: runs and ticks are saved on this phone only. Nothing is shared or uploaded.') : null,
-    h('label', { class: 'btn primary big', for: 'pdf' }, 'Load run sheet (PDF)'), fileInput,
-    app.store.mode === 'shared' ? h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => openRefetch() }, 'Re-fetch from RouteSmart') : null,
+    app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs') : null,
+    h('label', { class: app.store.mode === 'shared' ? 'btn big' : 'btn primary big', style: app.store.mode === 'shared' ? 'margin-top:8px' : null, for: 'pdf' }, 'Manually upload runsheet'), fileInput,
     list));
 
   async function renderList() {
@@ -189,14 +189,17 @@ async function viewHome() {
 }
 
 // Re-fetch a delivery date's sheets from RouteSmart (e.g. after a late change phoned in).
-function nzTomorrow() {
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
-  return new Date(Date.parse(`${p.year}-${p.month}-${p.day}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
+// Which delivery day "Get Runs" means: before midday NZ it's today's run
+// (the one being delivered this morning), after midday it's tomorrow's.
+function nzRunDay() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+  const today = Date.parse(`${p.year}-${p.month}-${p.day}T12:00:00Z`);
+  return new Date(Number(p.hour) < 12 ? today : today + 864e5).toISOString().slice(0, 10);
 }
 function openRefetch() {
-  const date = h('input', { type: 'date', value: nzTomorrow() });
+  const date = h('input', { type: 'date', value: nzRunDay() });
   const msg = h('div', { class: 'small', hidden: true });
-  const go = h('button', { class: 'btn primary', type: 'submit', style: 'flex:1' }, 'Re-fetch now');
+  const go = h('button', { class: 'btn primary', type: 'submit', style: 'flex:1' }, 'Get Runs');
   const close = () => panel.remove();
   const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
     h('form', {
@@ -207,15 +210,15 @@ function openRefetch() {
         try {
           await app.store.refetch(date.value);
           close();
-          toast(`Re-fetch started for ${fmtDate(date.value)}. It takes 2 to 3 minutes; the runs update by themselves.`);
+          toast(`Getting the runs for ${fmtDate(date.value)} from RouteSmart. Give it 2 to 3 minutes; they appear here by themselves.`);
         } catch (err) {
           msg.hidden = false; msg.className = 'banner bad'; msg.textContent = err.message;
-          go.disabled = false; go.textContent = 'Re-fetch now';
+          go.disabled = false; go.textContent = 'Get Runs';
         }
       },
     },
-    h('h2', null, 'Re-fetch from RouteSmart'),
-    h('p', { class: 'small muted' }, 'Downloads the sheets again and replaces the runs for that date. Every total is checked again, and ticks already made are kept. Use this if a change is phoned in after 7pm.'),
+    h('h2', null, 'Get Runs'),
+    h('p', { class: 'small muted' }, 'Gets the latest run sheets for that day from RouteSmart. Every total is checked, and if the runs are already here they are replaced with the latest version. Ticks already made are kept.'),
     h('label', { class: 'field' }, h('span', null, 'Delivery date'), date),
     msg,
     h('div', { style: 'display:flex;gap:8px' },
