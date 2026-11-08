@@ -268,3 +268,26 @@ end $$;
 --   ('mum@example.com',  'Mum')
 -- on conflict (email) do update set display_name = excluded.display_name;
 alter table public.runs add column if not exists last_changes jsonb; -- what changed the last time the sheet was replaced
+
+-- Delivery photos (for disputed non-delivery complaints) and the addresses to photo every time.
+create table if not exists public.photos (
+  id uuid primary key default gen_random_uuid(),
+  run_id text references public.runs(id) on delete set null,
+  route text not null, line_key text, address_key text not null, path text not null,
+  taken_at timestamptz not null default now(), lat double precision, lng double precision, user_name text);
+create table if not exists public.photo_watch (
+  route text not null, address_key text not null, added_by text, added_at timestamptz not null default now(),
+  primary key (route, address_key));
+alter table public.photos enable row level security;
+alter table public.photo_watch enable row level security;
+drop policy if exists photos_read on public.photos;
+create policy photos_read on public.photos for select to authenticated using (public.is_member());
+drop policy if exists photos_add on public.photos;
+create policy photos_add on public.photos for insert to authenticated with check (public.is_member());
+drop policy if exists photo_watch_rw on public.photo_watch;
+create policy photo_watch_rw on public.photo_watch for all to authenticated using (public.is_member()) with check (public.is_member());
+insert into storage.buckets (id, name, public) values ('delivery-photos', 'delivery-photos', false) on conflict (id) do nothing;
+drop policy if exists delivery_photos_read on storage.objects;
+create policy delivery_photos_read on storage.objects for select to authenticated using (bucket_id = 'delivery-photos' and public.is_member());
+drop policy if exists delivery_photos_add on storage.objects;
+create policy delivery_photos_add on storage.objects for insert to authenticated with check (bucket_id = 'delivery-photos' and public.is_member());

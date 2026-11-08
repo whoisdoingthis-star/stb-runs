@@ -314,3 +314,13 @@ html.big .change-list { font-size: 18px; }
 html.big .street h2 { font-size: 24px; padding: 12px 14px; }
 .street h2 .code { background: #fff; color: #1c1b18; }
 .street h2 .code.add { background: transparent; color: #fff; border-color: #fff; }
+
+/* delivery photos */
+.cam { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 800; }
+.cam.has { background: var(--done); color: #fff; }
+.tile.done .cam:not(.has) { background: var(--ink); color: var(--bg); }
+html.big .cam { font-size: 18px; padding: 10px 14px; }
+html.big .tile.done .cam.has { background: #fff; color: #15803d; }
+.photo-sheet { max-height: 92vh; overflow: auto; }
+.photo-preview { display: block; width: 100%; max-height: 45vh; object-fit: contain; background: #000; border-radius: 10px; margin: 8px 0; }
+#toast button + button { margin-left: 0; }

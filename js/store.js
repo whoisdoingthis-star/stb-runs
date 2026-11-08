@@ -185,6 +185,16 @@ export class LocalStore extends Base {
   addEvents(list, hold) { super.addEvents(list, hold); for (const e of list) this.bc()?.postMessage({ type: 'tap', ev: e }); }
   async loadAccessCodes(route) { return this.cachedCodes(route); }
   async saveAccessCodes(route, codes) { LS.set(`stb.codes.${route}`, codes); }
+  // Demo mode keeps a note that a photo was taken (the photo itself stays on the phone).
+  async savePhoto(blob, meta) { LS.set('stb.demo.photos', [...LS.get('stb.demo.photos', []), { ...meta, taken_at: new Date().toISOString() }]); return null; }
+  async loadPhotos(ids) { return LS.get('stb.demo.photos', []).filter((p) => ids.includes(p.run_id)); }
+  async loadWatch(routes) { const all = LS.get('stb.watch', {}); return Object.fromEntries(routes.map((r) => [r, all[r] || []])); }
+  async setWatch(route, addressKey, on) {
+    const all = LS.get('stb.watch', {});
+    const set = new Set(all[route] || []);
+    if (on) set.add(addressKey); else set.delete(addressKey);
+    all[route] = [...set]; LS.set('stb.watch', all);
+  }
   saveSequence(route, keys, by) { super.saveSequence(route, keys, by); this.bc()?.postMessage({ type: 'seq', route, v: this.cachedSeq(route) }); }
   subscribe(ids, me, on) {
     const bc = this.bc();
@@ -356,6 +366,44 @@ export class SupabaseStore extends Base {
     } catch {
       return Object.fromEntries(routes.map((r) => [r, this.cachedSeq(r)]));
     }
+  }
+  /** Upload a delivery photo and record it against the address. Returns the stored path. */
+  async savePhoto(blob, meta) {
+    const safe = String(meta.address_key || 'x').replace(/[^A-Za-z0-9]+/g, '-');
+    const path = `${meta.date}/${meta.route}/${safe}-${Date.now()}.jpg`;
+    const { error: upErr } = await this.sb.storage.from('delivery-photos').upload(path, blob, { contentType: 'image/jpeg' });
+    if (upErr) throw upErr;
+    const { error } = await this.sb.from('photos').insert({
+      run_id: meta.run_id, route: meta.route, line_key: meta.line_key, address_key: meta.address_key, path,
+      taken_at: new Date().toISOString(), lat: meta.lat ?? null, lng: meta.lng ?? null, user_name: meta.user_name,
+    });
+    if (error) throw error;
+    return path;
+  }
+  async loadPhotos(ids) {
+    try {
+      const { data, error } = await this.sb.from('photos').select('run_id, line_key, address_key, taken_at, user_name').in('run_id', ids);
+      if (error) throw error;
+      return data;
+    } catch { return []; }
+  }
+  /** Addresses where the family wants a photo every delivery (e.g. after a disputed complaint). */
+  async loadWatch(routes) {
+    try {
+      const { data, error } = await this.sb.from('photo_watch').select('route, address_key').in('route', routes);
+      if (error) throw error;
+      const out = Object.fromEntries(routes.map((r) => [r, []]));
+      for (const w of data) (out[w.route] ||= []).push(w.address_key);
+      LS.set('stb.watch', out);
+      return out;
+    } catch { const all = LS.get('stb.watch', {}); return Object.fromEntries(routes.map((r) => [r, all[r] || []])); }
+  }
+  async setWatch(route, addressKey, on, by) {
+    const q = on
+      ? this.sb.from('photo_watch').upsert({ route, address_key: addressKey, added_by: by })
+      : this.sb.from('photo_watch').delete().eq('route', route).eq('address_key', addressKey);
+    const { error } = await q;
+    if (error) throw error;
   }
   async loadAccessCodes(route) {
     try {

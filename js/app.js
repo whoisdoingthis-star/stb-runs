@@ -41,10 +41,11 @@ function toggleBig() {
 let toastTimer;
 function toast(msg, action) {
   const t = document.getElementById('toast');
-  t.replaceChildren(...[h('span', null, msg), action ? h('button', { onclick: () => { action.fn(); t.hidden = true; } }, action.label) : null].filter(Boolean));
+  const actions = (Array.isArray(action) ? action : [action]).filter(Boolean);
+  t.replaceChildren(h('span', null, msg), ...actions.map((a) => h('button', { onclick: () => { t.hidden = true; a.fn(); } }, a.label)));
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, action ? 5000 : 3500);
+  toastTimer = setTimeout(() => { t.hidden = true; }, actions.length ? 6000 : 3500);
 }
 
 const fmtDate = (iso, long) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-NZ',
@@ -239,6 +240,24 @@ function lastRefreshed(rs) {
   if (!latest) return null;
   const how = latest.r.source === 'auto' ? 'from RouteSmart' : 'by manual upload';
   return h('div', { class: 'refreshed' }, h('span', { class: 'refreshed-label' }, 'Runs last updated'), h('b', null, fmtStamp(latest.t)), h('span', { class: 'muted' }, ` ${how}`));
+}
+
+// Shrink a camera photo to a sensible size and stamp the address and time
+// along the bottom, so the picture explains itself when it's forwarded.
+async function stampPhoto(file, lines) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale), hgt = Math.round(bmp.height * scale);
+  const c = document.createElement('canvas'); c.width = w; c.height = hgt;
+  const g = c.getContext('2d');
+  g.drawImage(bmp, 0, 0, w, hgt);
+  const fs = Math.max(18, Math.round(w / 32));
+  const pad = Math.round(fs * 0.6);
+  const boxH = lines.length * fs * 1.3 + pad * 2;
+  g.fillStyle = 'rgba(0,0,0,0.62)'; g.fillRect(0, hgt - boxH, w, boxH);
+  g.fillStyle = '#fff'; g.textBaseline = 'top';
+  lines.forEach((t, i) => { g.font = `${i === 0 ? 'bold ' : ''}${fs}px sans-serif`; g.fillText(t, pad, hgt - boxH + pad + i * fs * 1.3, w - pad * 2); });
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not process the photo'))), 'image/jpeg', 0.82));
 }
 
 // "Run 13: 3 details changed" / "Run 13: no details changed".
@@ -471,6 +490,8 @@ async function viewRun(ids) {
     useCustom: true,   // show our own order when a route has one
     blocks: {},        // section id -> { runId, route, keys } for dragging whole streets
     codes: {},         // route -> { section id -> door code }, for routes with a layout
+    photos: await app.store.loadPhotos(ids),   // photos taken on these runs
+    watch: await app.store.loadWatch([...new Set(data.map((d) => d.run.route))]), // route -> addresses to photo every time
   };
   for (const r of new Set(data.map((d) => d.run.route))) if (layoutFor(r)) S.codes[r] = await app.store.loadAccessCodes(r);
   const hasCustom = (d) => !!S.seq[d.run.route]?.keys?.length;
@@ -533,12 +554,85 @@ async function viewRun(ids) {
     app.store.addEvents(evs, !fresh);
     if (navigator.vibrate) navigator.vibrate(done ? 15 : [10, 40, 10]);
     render();
-    if (done) toast(`✓ ${label}`, { label: 'Undo', fn: () => tapMany(lines, label, flashKey) });
+    if (done) toast(`✓ ${label}`, [{ label: 'Undo', fn: () => tapMany(lines, label, flashKey) }, lines.length === 1 ? { label: '📷 Photo', fn: () => takePhoto(lines[0]) } : null]);
     if (!fresh) {
       const fix = await geo.fixFor(now);
       const patch = fix ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc, fix_age_ms: Math.max(0, now - fix.t) } : {};
       app.store.patchEvents(evs.map((e) => e.id), patch);
     }
+  }
+
+  // ---- delivery photos -------------------------------------------------
+  // For addresses that complain about non-delivery: a photo of the paper in
+  // the box, stamped with the address and time, saved to the run and ready to
+  // send on WhatsApp.
+  const watched = (l) => (S.watch[l.route] || []).includes(l.address_key);
+  const photosOf = (l) => S.photos.filter((p) => p.run_id === l.run_id && p.address_key === l.address_key);
+  const wantsPhoto = (l) => watched(l) || (l.flags || []).some((f) => f.type === 'complaint');
+  const camInput = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+  document.body.append(camInput);
+  let camFor = null;
+  camInput.addEventListener('change', () => {
+    const f = camInput.files[0]; camInput.value = '';
+    if (f && camFor) photoTaken(camFor, f);
+  });
+  function takePhoto(l) { camFor = l; camInput.click(); }
+
+  async function photoTaken(l, file) {
+    const when = new Date();
+    const fix = geo.last && Date.now() - geo.last.t < 60000 ? geo.last : null;
+    const addr = `${l.number} ${titleCase(l.street)}`;
+    const stamp = [addr, `${shortRoute(l.route)} · ${when.toLocaleString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
+      `Delivered by ${app.me.name}${fix ? ` · GPS ${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : ''}`];
+    let blob;
+    try { blob = await stampPhoto(file, stamp); } catch { blob = file; }
+    const name = `${addr.replace(/[^A-Za-z0-9]+/g, '-')}-${when.toISOString().slice(0, 16).replace(/[:T]/g, '')}.jpg`;
+    const photoFile = new File([blob], name, { type: 'image/jpeg' });
+    const shareText = `Delivered: ${addr}, ${when.toLocaleString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} (${shortRoute(l.route)})`;
+
+    // Taking the photo counts as delivering, if it isn't ticked yet.
+    if (!status()[`${l.run_id}::${l.line_key}`]?.done) tap(l);
+
+    const meta = { run_id: l.run_id, route: l.route, line_key: l.line_key, address_key: l.address_key, date, user_name: app.me.name, lat: fix?.lat, lng: fix?.lng };
+    const saveMsg = h('div', { class: 'small muted' }, 'Saving to the run…');
+    const save = async () => {
+      saveMsg.className = 'small muted'; saveMsg.textContent = 'Saving to the run…';
+      try {
+        await app.store.savePhoto(blob, meta);
+        S.photos.push({ ...meta, taken_at: when.toISOString() }); render();
+        saveMsg.className = 'small ok'; saveMsg.textContent = app.store.mode === 'demo' ? 'Kept on this phone (demo mode).' : '✓ Saved to the run.';
+      } catch (e) {
+        saveMsg.className = 'small fail';
+        saveMsg.replaceChildren(`Not saved yet (${navigator.onLine ? e.message : 'no signal'}). `, h('button', { class: 'link', style: 'padding:0', onclick: save }, 'Try again'));
+      }
+    };
+    save();
+
+    const url = URL.createObjectURL(photoFile);
+    const watchBox = h('input', { type: 'checkbox', checked: watched(l), onchange: async (e) => {
+      const on = e.target.checked;
+      const list = new Set(S.watch[l.route] || []); if (on) list.add(l.address_key); else list.delete(l.address_key);
+      S.watch[l.route] = [...list]; render();
+      try { await app.store.setWatch(l.route, l.address_key, on, app.me.name); } catch (err) { toast(`Couldn't save that: ${err.message}`); }
+    } });
+    const canShareFile = !!(navigator.canShare && navigator.canShare({ files: [photoFile] }));
+    const close = () => { panel.remove(); URL.revokeObjectURL(url); };
+    const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
+      h('div', { class: 'sheet photo-sheet' },
+        h('h2', null, `📷 ${addr}`),
+        h('img', { class: 'photo-preview', src: url, alt: `Delivery photo, ${addr}` }),
+        saveMsg,
+        h('button', { class: 'btn primary big', onclick: async () => {
+          try {
+            if (canShareFile) await navigator.share({ files: [photoFile], text: shareText });
+            else { const a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove(); toast('Photo downloaded. Send it from your gallery.'); }
+          } catch { /* share closed */ }
+        } }, canShareFile ? 'Send (WhatsApp…)' : 'Save photo to phone'),
+        h('label', { class: 'choice' }, watchBox, h('span', null, 'Ask for a photo at this address every delivery')),
+        h('div', { style: 'display:flex;gap:8px;margin-top:10px' },
+          h('button', { class: 'btn', style: 'flex:1', onclick: () => { close(); takePhoto(l); } }, 'Take another'),
+          h('button', { class: 'btn', style: 'flex:1', onclick: close }, 'Done'))));
+    document.body.append(panel);
   }
 
   // How a run is laid out: a route layout (Run 8 village) if it has one,
@@ -763,6 +857,11 @@ async function viewRun(ids) {
     flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
     ...flags.filter((f) => f.type === 'complaint' && f.text).map((f) => h('div', { class: 'flag-detail' }, f.text.replace(/^Complaint:\s*/, ''))),
     l.note ? h('div', { class: 'note' }, l.note) : null,
+    (wantsPhoto(l) || photosOf(l).length) ? h('span', {
+      class: `cam ${photosOf(l).length ? 'has' : ''}`, role: 'button', tabindex: '0',
+      'aria-label': `Take a delivery photo at ${l.number} ${titleCase(l.street)}`,
+      onclick: (e) => { e.stopPropagation(); e.preventDefault(); if (drag.suppressClick) return; takePhoto(l); },
+    }, photosOf(l).length ? `📷 Photo taken (${photosOf(l).length})` : '📷 Take photo') : null,
     done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null,
     done ? h('div', { class: 'done-word' }, 'DONE') : null);
   }
@@ -1024,6 +1123,7 @@ async function viewRun(ids) {
   document.addEventListener('visibilitychange', wake);
 
   app.cleanup = () => {
+    camInput.remove();
     endDrag(false);
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
