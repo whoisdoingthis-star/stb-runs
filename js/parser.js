@@ -182,6 +182,27 @@ function parseKeyReportPage(page, out) {
   }
 }
 
+// "MISSED", "0711", "WKLY7" -> "Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)".
+// The key report's comment is the date of the problem as DDMM.
+const COMPLAINT_TYPES = { MISSED: 'Missed delivery', WET: 'Wet paper', DAMAGED: 'Damaged paper', LATE: 'Late delivery', WRONG: 'Wrong paper', DAMAGE: 'Damaged paper' };
+export function complaintText(c, deliveryDate) {
+  const type = String(c.type || '').toUpperCase();
+  const what = COMPLAINT_TYPES[type] || (type ? `${type[0]}${type.slice(1).toLowerCase()} complaint` : 'Complaint');
+  let when = '';
+  const raw = String(c.comments || '').trim();
+  const m = /^(\d{2})(\d{2})$/.exec(raw);
+  if (m) {
+    const year = deliveryDate ? Number(String(deliveryDate).slice(0, 4)) : new Date().getFullYear();
+    const d = new Date(Date.UTC(year, Number(m[2]) - 1, Number(m[1])));
+    if (deliveryDate && d > new Date(`${deliveryDate}T00:00:00Z`)) d.setUTCFullYear(year - 1);
+    const f = (o) => d.toLocaleDateString('en-NZ', { ...o, timeZone: 'UTC' });
+    when = ` on ${f({ weekday: 'short' })} ${d.getUTCDate()} ${f({ month: 'short' })}`;
+  } else if (raw) when = ` (${raw})`;
+  const svc = /^WKLY(\d)$/i.exec(c.service || '');
+  const extra = [c.publication, svc ? `${svc[1]}-day subscriber` : c.service].filter(Boolean).join(', ');
+  return `${what}${when}${extra ? ` (${extra})` : ''}`;
+}
+
 function parseDeliveryPage(page, out) {
   const lines = toLines(page.items);
   const all = page.items;
@@ -421,7 +442,7 @@ function finishRoute(r, kr) {
     }
     for (const c of kr.complaints) {
       const hits = findLines(c.address, c.publication);
-      const text = `Complaint: ${c.publication} ${[c.type, c.service].filter(Boolean).join(' ')}`.trim();
+      const text = complaintText(c, r.deliveryDate);
       if (hits.length) hits.forEach((h) => h.flags.push({ type: 'complaint', text }));
       else warnings.push(`Complaint for ${c.address} ${c.publication} (${c.type || ''}) has no tile on this run.`);
     }

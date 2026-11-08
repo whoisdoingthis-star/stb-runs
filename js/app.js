@@ -644,6 +644,7 @@ async function viewRun(ids) {
     S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
     l.bankNote ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday', title: l.bankNote }, 'Check bank')) : null,
     flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
+    ...flags.filter((f) => f.type === 'complaint' && f.text).map((f) => h('div', { class: 'flag-detail' }, f.text.replace(/^Complaint:\s*/, ''))),
     l.note ? h('div', { class: 'note' }, l.note) : null,
     done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null);
   }
