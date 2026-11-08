@@ -185,6 +185,7 @@ async function viewHome() {
       h('div', { class: 'date-head' }, h('h2', null, fmtDate(date)),
         rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null,
         rs.length > 1 ? h('button', { class: 'btn small', onclick: () => shareRuns(rs.map((r) => r.id), `${rs.map((r) => r.route).join(' + ')} ${fmtDate(date)}`) }, 'Text all') : null),
+      paperSummary(rs),
       rs.map((r) => {
         const lines = r.summary?.lines || 0;
         const pct = lines ? Math.round((100 * (r.done || 0)) / lines) : 0;
@@ -208,6 +209,31 @@ async function viewHome() {
 }
 
 // Re-fetch a delivery date's sheets from RouteSmart (e.g. after a late change phoned in).
+// Papers to pick up for a day: each run's copies by publication, plus totals.
+function paperSummary(rs) {
+  const runs = [...rs].sort((a, b) => a.route.localeCompare(b.route));
+  const pubs = [...new Set(runs.flatMap((r) => Object.keys(r.summary?.byPub || {})))]
+    .sort((a, b) => (a === 'NZH' ? -1 : b === 'NZH' ? 1 : a.localeCompare(b)));
+  if (!pubs.length) return null;
+  const n = (r, p) => r.summary?.byPub?.[p] || 0;
+  const total = (p) => runs.reduce((t, r) => t + n(r, p), 0);
+  const grand = runs.reduce((t, r) => t + (r.summary?.copies || 0), 0);
+  const head = (p) => {
+    const c = pubColor(p);
+    return h('th', null, h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, p));
+  };
+  return h('div', { class: 'card paper-sum' },
+    h('div', { class: 'paper-sum-title' }, 'Papers to collect'),
+    h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Run'), pubs.map(head), h('th', null, 'Total'))),
+      h('tbody', null, runs.map((r) => h('tr', null,
+        h('td', null, r.route.replace(/^HOWICK0?/, 'Run ')),
+        pubs.map((p) => h('td', { class: n(r, p) ? '' : 'zero' }, n(r, p) || '–')),
+        h('td', { class: 'tot' }, r.summary?.copies ?? '?')))),
+      h('tfoot', null, h('tr', null, h('td', null, 'All runs'), pubs.map((p) => h('td', null, total(p))), h('td', { class: 'tot' }, grand)))),
+    h('div', { class: 'small muted' }, `${runs.reduce((t, r) => t + (r.summary?.lines || 0), 0)} addresses across ${runs.length} run${runs.length === 1 ? '' : 's'}`));
+}
+
 // Which delivery day "Get Runs" means: before midday NZ it's today's run
 // (the one being delivered this morning), after midday it's tomorrow's.
 function nzRunDay() {

@@ -1,6 +1,6 @@
 // Keeps the app itself on the phone so it opens with no signal.
 // Bump VERSION whenever any file changes, so phones pick up the new copy.
-const VERSION = 'stb-runs-v22';
+const VERSION = 'stb-runs-v23';
 const SHELL = [
   './', 'index.html', 'styles.css', 'config.js', 'manifest.webmanifest',
   'js/app.js', 'js/store.js', 'js/geo.js', 'js/parser.js', 'js/sequence.js', 'js/village.js', 'js/rows.js',

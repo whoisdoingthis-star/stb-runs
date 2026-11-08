@@ -266,3 +266,14 @@ html.big .code { font-size: 17px; }
 html.big h3.bank { font-size: 17px; color: var(--ink); }
 html.big .comp-head { font-size: 18px; }
 html.big .comp-list { font-size: 16px; }
+
+/* papers to collect (Runs home) */
+.paper-sum-title { font-weight: 800; margin-bottom: 8px; }
+.paper-sum table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+.paper-sum th, .paper-sum td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+.paper-sum th:first-child, .paper-sum td:first-child { text-align: left; }
+.paper-sum td.zero { color: var(--muted); }
+.paper-sum .tot { font-weight: 800; }
+.paper-sum tfoot td { font-weight: 800; border-bottom: 0; border-top: 2px solid var(--ink); }
+html.big .paper-sum-title { font-size: 22px; }
+html.big .paper-sum th, html.big .paper-sum td { padding: 10px 4px; font-size: 20px; }
