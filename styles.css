@@ -160,7 +160,21 @@ button { cursor: pointer; }
 .pub b { font-weight: 800; }
 .pub.nzh { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--muted); }
 .tile { overflow: hidden; }
-.tile.has-pub { padding-left: 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--tint) 10%, var(--card)), var(--card) 70%); }
+.tile.has-pub { padding-left: 16px; }
+/* tile colours by kind of drop (see COLORS in app.js) */
+.tile.kind-retail { background: #e3edff; border-color: #a9c3f5; }
+.tile.kind-retail .stripe { background: #2563eb; }
+.tile.kind-other { background: #fff6dd; border-color: #f5d27a; }
+.tile.kind-other .stripe { background: #f59e0b; }
+.tile.kind-multi { background: #ffe6d1; border-color: #f2a873; }
+.tile.kind-multi .stripe { background: #c2410c; }
+.tile.has-pub.done { background: var(--done-bg); border-color: var(--done-line); }
+@media (prefers-color-scheme: dark) {
+  .tile.kind-retail { background: #14254a; border-color: #2b4a8a; }
+  .tile.kind-other { background: #3a2c08; border-color: #6b5214; }
+  .tile.kind-multi { background: #3d1f0b; border-color: #7a3a12; }
+  .tile.has-pub.done { background: var(--done-bg); border-color: var(--done-line); }
+}
 .tile.has-pub.done { background: var(--done-bg); }
 .stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 7px; }
 

@@ -51,24 +51,28 @@ const fmtDate = (iso, long) => new Date(`${iso}T12:00:00`).toLocaleDateString('e
   long ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } : { weekday: 'short', day: 'numeric', month: 'short' });
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
 const shortRoute = (route) => route.replace(/^[A-Z]+0?/, 'Run ');
-// Every publication other than NZH gets its own colour. Known ones are fixed;
-// any new publication code gets a colour from the spare set, the same every time.
-const PUB_COLORS = {
-  NZHR: ['#f59e0b', '#1c1300'], // Herald retail: amber
-  LIS: ['#7c3aed', '#fff'],     // purple
-  WW: ['#db2777', '#fff'],      // pink
-  SST: ['#2563eb', '#fff'],     // Sunday Star-Times: blue
-  SSTR: ['#0e7490', '#fff'],    // SST retail: dark teal
-  TVG: ['#ea580c', '#fff'],     // TV Guide: bright orange, high contrast (Run 8 rules)
+// Colour scheme (Mike, 8 Nov):
+//   NZH                      plain (outlined chip)
+//   retail (NZHR, SSTR…)     blue chip, light blue tile: a shop drop with a docket
+//   any other publication    yellow/orange chip, light yellow tile
+//   several publications     darker orange chips, light orange tile
+// No greens anywhere: green means delivered.
+const COLORS = {
+  retail: ['#2563eb', '#fff'],
+  other: ['#f59e0b', '#1c1300'],
+  multi: ['#c2410c', '#fff'],
 };
-// No greens: green means delivered.
-const SPARE = [['#c2410c', '#fff'], ['#a21caf', '#fff'], ['#4338ca', '#fff'], ['#be123c', '#fff'], ['#854d0e', '#fff'], ['#475569', '#fff']];
-function pubColor(p) {
+function pubColor(p, kind) {
   if (p === 'NZH') return null;
-  if (PUB_COLORS[p]) return PUB_COLORS[p];
-  let n = 0;
-  for (const c of p) n = (n * 31 + c.charCodeAt(0)) >>> 0;
-  return SPARE[n % SPARE.length];
+  if (isRetailPub(p)) return COLORS.retail;
+  return kind === 'multi' ? COLORS.multi : COLORS.other;
+}
+// What kind of drop an address is, for the tile's colour.
+function tileKind(parts) {
+  if (parts.some((pt) => isRetailPub(pt.pub))) return 'retail';
+  if (new Set(parts.map((pt) => basePub(pt.pub))).size > 1) return 'multi';
+  if (parts.some((pt) => pt.pub !== 'NZH')) return 'other';
+  return null;
 }
 const partsOf = (l) => (Array.isArray(l.parts) && l.parts.length ? l.parts : [{ pub: l.pub, qty: l.qty }]);
 const FLAG_LABEL = { unrouted: 'Not routed', start: 'New', complaint: 'Complaint', stop: 'Stop?', weekday: 'Check day', combined: 'Combined' };
@@ -682,8 +686,8 @@ async function viewRun(ids) {
     noteTimer = setTimeout(() => { floatbar.classList.remove('has-note'); fbNote.textContent = ''; }, 6000);
   }
 
-  function pubChip(p, n) {
-    const c = pubColor(p);
+  function pubChip(p, n, kind) {
+    const c = pubColor(p, kind);
     const chip = h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, isRetailPub(p) ? basePub(p) : p, n > 1 ? h('b', null, ` ×${n}`) : null);
     return isRetailPub(p) ? [chip, h('span', { class: 'pub docket' }, '+ DOCKET')] : chip;
   }
@@ -694,15 +698,10 @@ async function viewRun(ids) {
     const flags = l.flags || [];
     const parts = partsOf(l);
     const plainNZH = parts.length === 1 && parts[0].pub === 'NZH';
-    const colours = parts.map((pt) => pubColor(pt.pub)).filter(Boolean).map((c) => c[0]);
-    // A stripe down the left edge in each non-NZH publication's colour.
-    const stripe = colours.length ? h('span', {
-      class: 'stripe',
-      style: `background:${colours.length === 1 ? colours[0] : `linear-gradient(${colours.map((c, i) => `${c} ${(100 * i) / colours.length}% ${(100 * (i + 1)) / colours.length}%`).join(',')})`}`,
-    }) : null;
+    const kind = tileKind(parts);
+    const stripe = kind ? h('span', { class: 'stripe' }) : null;
     return h('button', {
-      class: `tile ${done ? 'done' : ''} ${colours.length ? 'has-pub' : ''} ${S.flash === key ? 'flash' : ''}`,
-      style: colours.length ? `--tint:${colours[0]}` : null,
+      class: `tile ${done ? 'done' : ''} ${kind ? `has-pub kind-${kind}` : ''} ${S.flash === key ? 'flash' : ''}`,
       'aria-pressed': String(done),
       'aria-label': `${l.number} ${titleCase(l.street)}, ${parts.map((pt) => `${pt.qty} ${pt.pub}`).join(' and ')}${done ? ', done' : ''}`,
       'data-key': key,
@@ -714,7 +713,7 @@ async function viewRun(ids) {
     stripe,
     h('div', { class: 'num' }, l.number,
       plainNZH && l.qty > 1 ? h('span', { class: 'badge qty' }, `×${l.qty}`) : null),
-    plainNZH ? null : h('div', { class: 'pubs' }, parts.map((pt) => pubChip(pt.pub, pt.qty))),
+    plainNZH ? null : h('div', { class: 'pubs' }, parts.map((pt) => pubChip(pt.pub, pt.qty, kind))),
     S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
     l.bankNote ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday', title: l.bankNote }, 'Check bank')) : null,
     flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
