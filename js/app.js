@@ -138,32 +138,80 @@ async function viewHome() {
         h('button', { class: 'link small', style: 'padding:0', onclick: async () => { await app.store.signOut(); route(); } }, 'Sign out')) : null),
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: runs and ticks are saved on this phone only. Nothing is shared or uploaded.') : null,
     h('label', { class: 'btn primary big', for: 'pdf' }, 'Load run sheet (PDF)'), fileInput,
+    app.store.mode === 'shared' ? h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => openRefetch() }, 'Re-fetch from RouteSmart') : null,
     list));
-  let runs;
-  try { runs = await app.store.listRuns(); } catch (e) {
-    list.replaceChildren(h('div', { class: 'banner bad' }, `Could not load runs: ${e.message}`));
-    return;
+
+  async function renderList() {
+    let runs;
+    try { runs = await app.store.listRuns(); } catch (e) {
+      list.replaceChildren(h('div', { class: 'banner bad' }, `Could not load runs: ${e.message}`));
+      return;
+    }
+    if (!runs.length) {
+      list.replaceChildren(h('div', { class: 'empty' }, 'No runs yet. They load themselves from RouteSmart each evening after 7pm, or load a PDF.'));
+      return;
+    }
+    const byDate = {};
+    for (const r of runs) (byDate[r.delivery_date] ||= []).push(r);
+    list.replaceChildren(...Object.entries(byDate).map(([date, rs]) => h('section', { class: 'date-group' },
+      h('div', { class: 'date-head' }, h('h2', null, fmtDate(date)),
+        rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null,
+        rs.length > 1 ? h('button', { class: 'btn small', onclick: () => shareRuns(rs.map((r) => r.id), `${rs.map((r) => r.route).join(' + ')} ${fmtDate(date)}`) }, 'Text all') : null),
+      rs.map((r) => {
+        const lines = r.summary?.lines || 0;
+        const pct = lines ? Math.round((100 * (r.done || 0)) / lines) : 0;
+        const when = r.updated_at || r.created_at;
+        const how = r.source === 'auto' ? 'Fetched' : 'Loaded';
+        return h('div', { class: 'card run-card' },
+          h('button', { class: 'main', style: 'background:none;border:0;padding:0;text-align:left', onclick: () => { location.hash = `#/r/${r.id}`; } },
+            h('div', { class: 'route' }, r.route),
+            h('div', { class: 'small muted' }, `${r.done || 0} of ${lines} done · ${r.summary?.copies ?? '?'} copies`),
+            when ? h('div', { class: 'small muted' }, `${how} ${new Date(when).toLocaleString('en-NZ', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`) : null,
+            h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` }))),
+          h('button', { class: 'btn small', onclick: () => shareRuns([r.id], `${r.route} ${fmtDate(r.delivery_date)}`) }, 'Text link'));
+      }))));
   }
-  if (!runs.length) {
-    list.replaceChildren(h('div', { class: 'empty' }, 'No runs yet. Load the PDF run sheet from the carrier to start.'));
-    return;
-  }
-  const byDate = {};
-  for (const r of runs) (byDate[r.delivery_date] ||= []).push(r);
-  list.replaceChildren(...Object.entries(byDate).map(([date, rs]) => h('section', { class: 'date-group' },
-    h('div', { class: 'date-head' }, h('h2', null, fmtDate(date)),
-      rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null,
-      rs.length > 1 ? h('button', { class: 'btn small', onclick: () => shareRuns(rs.map((r) => r.id), `${rs.map((r) => r.route).join(' + ')} ${fmtDate(date)}`) }, 'Text all') : null),
-    rs.map((r) => {
-      const lines = r.summary?.lines || 0;
-      const pct = lines ? Math.round((100 * (r.done || 0)) / lines) : 0;
-      return h('div', { class: 'card run-card' },
-        h('button', { class: 'main', style: 'background:none;border:0;padding:0;text-align:left', onclick: () => { location.hash = `#/r/${r.id}`; } },
-          h('div', { class: 'route' }, r.route),
-          h('div', { class: 'small muted' }, `${r.done || 0} of ${lines} done · ${r.summary?.copies ?? '?'} copies`),
-          h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` }))),
-        h('button', { class: 'btn small', onclick: () => shareRuns([r.id], `${r.route} ${fmtDate(r.delivery_date)}`) }, 'Text link'));
-    }))));
+  await renderList();
+
+  // New or replaced sheets (the evening fetch, a re-fetch, someone's upload) show up by themselves.
+  let t;
+  const unwatch = app.store.watchRuns(() => { clearTimeout(t); t = setTimeout(renderList, 1500); });
+  app.cleanup = () => { unwatch(); clearTimeout(t); };
+}
+
+// Re-fetch a delivery date's sheets from RouteSmart (e.g. after a late change phoned in).
+function nzTomorrow() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return new Date(Date.parse(`${p.year}-${p.month}-${p.day}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
+}
+function openRefetch() {
+  const date = h('input', { type: 'date', value: nzTomorrow() });
+  const msg = h('div', { class: 'small', hidden: true });
+  const go = h('button', { class: 'btn primary', type: 'submit', style: 'flex:1' }, 'Re-fetch now');
+  const close = () => panel.remove();
+  const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
+    h('form', {
+      class: 'sheet',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        go.disabled = true; go.textContent = 'Starting…';
+        try {
+          await app.store.refetch(date.value);
+          close();
+          toast(`Re-fetch started for ${fmtDate(date.value)}. It takes 2 to 3 minutes; the runs update by themselves.`);
+        } catch (err) {
+          msg.hidden = false; msg.className = 'banner bad'; msg.textContent = err.message;
+          go.disabled = false; go.textContent = 'Re-fetch now';
+        }
+      },
+    },
+    h('h2', null, 'Re-fetch from RouteSmart'),
+    h('p', { class: 'small muted' }, 'Downloads the sheets again and replaces the runs for that date. Every total is checked again, and ticks already made are kept. Use this if a change is phoned in after 7pm.'),
+    h('label', { class: 'field' }, h('span', null, 'Delivery date'), date),
+    msg,
+    h('div', { style: 'display:flex;gap:8px' },
+      h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'), go)));
+  document.body.append(panel);
 }
 
 // ---------------------------------------------------------------- load a PDF
@@ -828,6 +876,14 @@ async function viewRun(ids) {
       showNote(v ? `${v.by || 'Someone'} changed the order` : 'Order reset to the sheet');
     },
     reconnect: () => refresh(),
+    runChanged: async (run) => {
+      if (drag.active) return;
+      try {
+        S.data = await app.store.loadRuns(ids);
+        render();
+        showNote(`${run.route || 'Run'} sheet updated ${fmtTime(run.updated_at || new Date().toISOString())}`);
+      } catch { /* keep showing the old sheet; next refresh will pick it up */ }
+    },
   });
   async function refresh() {
     if (document.visibilityState !== 'visible' || drag.active) return;

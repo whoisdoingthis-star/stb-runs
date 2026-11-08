@@ -242,6 +242,12 @@ begin
   ) then
     alter publication supabase_realtime add table public.route_sequences;
   end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'runs'
+  ) then
+    alter publication supabase_realtime add table public.runs;
+  end if;
 end $$;
 
 -- A private bucket for the PDFs the evening fetch downloads (kept for the record).

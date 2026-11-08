@@ -89,20 +89,23 @@ async function saveRun(sb, r, filename) {
   const row = { ...runRow(r, filename), source: 'auto', updated_at: new Date().toISOString() };
   const { data: existing, error: e0 } = await sb.from('runs').select('id').eq('route', r.route).eq('delivery_date', r.deliveryDate).maybeSingle();
   if (e0) throw e0;
-  let id = existing?.id;
-  if (id) {
-    const { error } = await sb.from('runs').update(row).eq('id', id);
-    if (error) throw error;
+  if (existing?.id) {
+    // Swap the addresses first and touch the run row last: phones watching the
+    // run reload when the row changes, so the new addresses are already there.
+    const id = existing.id;
     const { error: e2 } = await sb.from('run_lines').delete().eq('run_id', id);
     if (e2) throw e2;
-  } else {
-    const { data, error } = await sb.from('runs').insert(row).select('id').single();
+    const { error: e3 } = await sb.from('run_lines').insert(lineRows(id, r));
+    if (e3) throw e3;
+    const { error } = await sb.from('runs').update(row).eq('id', id);
     if (error) throw error;
-    id = data.id;
+    return id;
   }
-  const { error: e3 } = await sb.from('run_lines').insert(lineRows(id, r));
+  const { data, error } = await sb.from('runs').insert(row).select('id').single();
+  if (error) throw error;
+  const { error: e3 } = await sb.from('run_lines').insert(lineRows(data.id, r));
   if (e3) throw e3;
-  return id;
+  return data.id;
 }
 
 // ---------------------------------------------------------------- routesmart

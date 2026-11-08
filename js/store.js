@@ -149,7 +149,16 @@ export class LocalStore extends Base {
     const row = { id, ...runRow(r, filename), created_at: new Date().toISOString() };
     LS.set('stb.demo.runs', [...runs.filter((x) => x.id !== id), row]);
     this.cacheRun(id, { run: row, lines: lineRows(id, r) });
+    this.bc()?.postMessage({ type: 'run', run: { ...row, updated_at: new Date().toISOString() } });
     return id;
+  }
+  async refetch() { throw new Error('Re-fetch needs the shared (Supabase) version of the app.'); }
+  watchRuns(cb) {
+    const bc = this.bc();
+    if (!bc) return () => {};
+    const h = ({ data: m }) => { if (m.type === 'run') cb(m.run); };
+    bc.addEventListener('message', h);
+    return () => bc.removeEventListener('message', h);
   }
   async loadRuns(ids) {
     const out = [];
@@ -186,6 +195,7 @@ export class LocalStore extends Base {
     const hello = () => bc.postMessage({ type: 'here', dev, ids, name: 'Another screen' });
     const handler = ({ data: m }) => {
       if (m.type === 'tap' && ids.includes(m.ev.run_id)) on.event?.(m.ev);
+      else if (m.type === 'run' && ids.includes(m.run.id)) on.runChanged?.(m.run);
       else if (m.type === 'seq') on.seq?.(m.route, m.v);
       else if (m.type === 'here' && m.dev !== dev && m.ids.some((i) => ids.includes(i))) {
         const isNew = !others.has(m.dev);
@@ -240,7 +250,7 @@ export class SupabaseStore extends Base {
 
   async listRuns() {
     const { data, error } = await this.sb.from('runs')
-      .select('id, route, delivery_date, weekday_name, summary, created_at')
+      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source')
       .order('delivery_date', { ascending: false }).order('route').limit(60);
     if (error) { const c = LS.get('stb.runlist', []); if (c.length) return c; throw error; }
     const ids = data.map((r) => r.id);
@@ -260,18 +270,39 @@ export class SupabaseStore extends Base {
   async saveRun(r, filename, replaceId) {
     let id = replaceId;
     if (replaceId) {
-      const { error } = await this.sb.from('runs').update({ ...runRow(r, filename), updated_at: new Date().toISOString() }).eq('id', replaceId);
-      if (error) throw error;
+      // Swap the addresses first, then touch the run row last: phones watching
+      // the run reload when the row changes, so the new addresses are already in.
       const { error: delErr } = await this.sb.from('run_lines').delete().eq('run_id', replaceId);
       if (delErr) throw delErr;
-    } else {
-      const { data, error } = await this.sb.from('runs').insert(runRow(r, filename)).select('id').single();
+      const { error: lErr } = await this.sb.from('run_lines').insert(lineRows(id, r));
+      if (lErr) throw lErr;
+      const { error } = await this.sb.from('runs').update({ ...runRow(r, filename), updated_at: new Date().toISOString() }).eq('id', replaceId);
       if (error) throw error;
-      id = data.id;
+      return id;
     }
+    const { data, error } = await this.sb.from('runs').insert(runRow(r, filename)).select('id').single();
+    if (error) throw error;
+    id = data.id;
     const { error: lErr } = await this.sb.from('run_lines').insert(lineRows(id, r));
     if (lErr) throw lErr;
     return id;
+  }
+  /** Ask the server to re-fetch a date's sheets from RouteSmart (shared mode only). */
+  async refetch(date) {
+    const { data, error } = await this.sb.functions.invoke('refetch', { body: { date } });
+    if (error) {
+      let msg = error.message;
+      try { const b = await error.context.json(); if (b?.error) msg = b.error; } catch { /* keep message */ }
+      throw new Error(msg);
+    }
+    return data;
+  }
+  /** Call back whenever any run is added or its sheet replaced (for the runs list). */
+  watchRuns(cb) {
+    const ch = this.sb.channel('runs-list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'runs' }, (p) => cb(p.new || p.old))
+      .subscribe();
+    return () => { this.sb.removeChannel(ch); };
   }
   async loadRuns(ids) {
     try {
@@ -391,6 +422,11 @@ export class SupabaseStore extends Base {
         });
       channels.push(ch);
     }
+    // A run's sheet was replaced (manual reload or re-fetch): tell the open run view.
+    const runsCh = this.sb.channel(`runs:${ids.join(',')}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'runs', filter: `id=in.(${ids.join(',')})` }, (p) => on.runChanged?.(p.new))
+      .subscribe();
+    channels.push(runsCh);
     const routes = on.routes || [];
     if (routes.length) {
       const seqCh = this.sb.channel(`seq:${routes.join(',')}`)
