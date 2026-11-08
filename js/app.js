@@ -990,20 +990,32 @@ async function viewRun(ids) {
       drag.target = { anchor: after ? keys[keys.length - 1] : keys[0], after };
     }
   }
+  // While a tile or street is lifted, hold it near the top or bottom of the
+  // screen and the list scrolls that way: faster the closer to the edge, and
+  // speeding up the longer it's held there, until you let go or move away.
   function autoScroll() {
     if (!drag.active) return;
-    const top = document.querySelector('.runhead')?.getBoundingClientRect().bottom || 0;
-    const edge = 70;
-    let dy = 0;
-    if (drag.y < top + edge) dy = -Math.ceil((top + edge - drag.y) / 6);
-    else if (drag.y > innerHeight - edge) dy = Math.ceil((drag.y - (innerHeight - edge)) / 6);
-    if (dy) { window.scrollBy(0, dy); moveGhost(drag.x, drag.y); }
+    const top = Math.max(0, document.querySelector('.floatbar')?.getBoundingClientRect().bottom || 0);
+    const bottom = window.visualViewport ? window.visualViewport.height : innerHeight;
+    const zone = Math.max(90, (bottom - top) * 0.18);
+    let dir = 0, depth = 0;
+    if (drag.y < top + zone) { dir = -1; depth = (top + zone - drag.y) / zone; }
+    else if (drag.y > bottom - zone) { dir = 1; depth = (drag.y - (bottom - zone)) / zone; }
+    if (dir) {
+      drag.edgeSince ||= performance.now();
+      const held = Math.min(2, 1 + (performance.now() - drag.edgeSince) / 1500);
+      const step = Math.round((3 + 22 * Math.min(1, depth) ** 2) * held);
+      const before = window.scrollY;
+      window.scrollBy(0, dir * step);
+      if (window.scrollY !== before) moveGhost(drag.x, drag.y);
+    } else drag.edgeSince = 0;
     drag.raf = requestAnimationFrame(autoScroll);
   }
   function endDrag(drop) {
     const a = drag.active;
     if (!a) return;
     cancelAnimationFrame(drag.raf);
+    drag.edgeSince = 0;
     a.ghost.remove();
     a.src.classList.remove('drag-src');
     document.body.classList.remove('is-dragging');

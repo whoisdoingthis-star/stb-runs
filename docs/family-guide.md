@@ -58,6 +58,7 @@ Keep going. Ticks are saved on the phone and sent when there is signal ("3 to se
 
 ## Changing the order of a run
 If the sheet's order is wrong, **press and hold** a tile for half a second until it lifts, drag it, and let go. A blue line shows where it will go (left half of a tile = before it, right half = after). Hold a **street name** to move the whole street.
+To move something a long way, keep holding it and drag it towards the **top or bottom of the screen**: the list scrolls by itself, faster the closer you are to the edge and the longer you hold it there. Move away from the edge to stop, then drop it in place.
 The new order is saved for that run for everyone, and used every day from then on. **••• → Switch** shows the sheet's own order; **••• → Reset to sheet order** undoes all your moves.
 Run 8 keeps its fixed building order and can't be rearranged.
 

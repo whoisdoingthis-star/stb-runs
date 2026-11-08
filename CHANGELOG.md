@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Moving tiles a long way**: while holding a tile or street, drag it to the top or bottom of the screen and the list scrolls by itself (it stopped working upwards once you had scrolled down). No more dropping it at the top and picking it up again.
 - Docs as code: documentation now lives in `docs/` and changes with the code; automatic checks (tests, docs links, data model, changelog, version bump, secrets) run on every change. Docs-only change for the phones.
 
 ## 2026-11-08 (Sun): ready for the first live trial
