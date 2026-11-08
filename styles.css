@@ -277,3 +277,5 @@ html.big .comp-list { font-size: 16px; }
 .paper-sum tfoot td { font-weight: 800; border-bottom: 0; border-top: 2px solid var(--ink); }
 html.big .paper-sum-title { font-size: 22px; }
 html.big .paper-sum th, html.big .paper-sum td { padding: 10px 4px; font-size: 20px; }
+.pub.docket { background: var(--ink); color: var(--bg); }
+.paper-sum .dk { border-left: 1px dashed var(--line); padding-left: 8px; }

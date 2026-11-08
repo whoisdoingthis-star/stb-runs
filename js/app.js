@@ -3,6 +3,7 @@ import { LocalStore, SupabaseStore, statusFrom, uuid, deviceLabel } from './stor
 import { Geo } from './geo.js';
 import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
+import { isRetailPub, basePub } from './parser.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -209,15 +210,27 @@ async function viewHome() {
 }
 
 // Re-fetch a delivery date's sheets from RouteSmart (e.g. after a late change phoned in).
-// Papers to pick up for a day: each run's copies by publication, plus totals.
+// Papers to collect for a day: each run's copies by paper, plus totals.
+// Retail codes (NZHR…) are the same paper, so they count in its column;
+// the Dockets column is how many delivery dockets to bring (one per retail drop).
 function paperSummary(rs) {
   const runs = [...rs].sort((a, b) => a.route.localeCompare(b.route));
-  const pubs = [...new Set(runs.flatMap((r) => Object.keys(r.summary?.byPub || {})))]
+  const papers = (r) => {
+    const out = {};
+    for (const [p, q] of Object.entries(r.summary?.byPub || {})) out[basePub(p)] = (out[basePub(p)] || 0) + q;
+    return out;
+  };
+  const retailCopies = (r) => Object.entries(r.summary?.byPub || {}).filter(([p]) => isRetailPub(p)).reduce((t, [, q]) => t + q, 0);
+  const docketsOf = (r) => (r.summary?.dockets ?? null);
+  const pubs = [...new Set(runs.flatMap((r) => Object.keys(papers(r))))]
     .sort((a, b) => (a === 'NZH' ? -1 : b === 'NZH' ? 1 : a.localeCompare(b)));
   if (!pubs.length) return null;
-  const n = (r, p) => r.summary?.byPub?.[p] || 0;
+  const n = (r, p) => papers(r)[p] || 0;
   const total = (p) => runs.reduce((t, r) => t + n(r, p), 0);
   const grand = runs.reduce((t, r) => t + (r.summary?.copies || 0), 0);
+  const anyRetail = runs.some((r) => retailCopies(r));
+  const dk = (r) => { const d = docketsOf(r); return d == null ? (retailCopies(r) ? '?' : '–') : (d || '–'); };
+  const dkTotal = runs.every((r) => docketsOf(r) != null || !retailCopies(r)) ? runs.reduce((t, r) => t + (docketsOf(r) || 0), 0) : '?';
   const head = (p) => {
     const c = pubColor(p);
     return h('th', null, h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, p));
@@ -225,13 +238,16 @@ function paperSummary(rs) {
   return h('div', { class: 'card paper-sum' },
     h('div', { class: 'paper-sum-title' }, 'Papers to collect'),
     h('table', null,
-      h('thead', null, h('tr', null, h('th', null, 'Run'), pubs.map(head), h('th', null, 'Total'))),
+      h('thead', null, h('tr', null, h('th', null, 'Run'), pubs.map(head), h('th', null, 'Total'), anyRetail ? h('th', { class: 'dk' }, 'Dockets') : null)),
       h('tbody', null, runs.map((r) => h('tr', null,
         h('td', null, r.route.replace(/^HOWICK0?/, 'Run ')),
         pubs.map((p) => h('td', { class: n(r, p) ? '' : 'zero' }, n(r, p) || '–')),
-        h('td', { class: 'tot' }, r.summary?.copies ?? '?')))),
-      h('tfoot', null, h('tr', null, h('td', null, 'All runs'), pubs.map((p) => h('td', null, total(p))), h('td', { class: 'tot' }, grand)))),
-    h('div', { class: 'small muted' }, `${runs.reduce((t, r) => t + (r.summary?.lines || 0), 0)} addresses across ${runs.length} run${runs.length === 1 ? '' : 's'}`));
+        h('td', { class: 'tot' }, r.summary?.copies ?? '?'),
+        anyRetail ? h('td', { class: `dk ${retailCopies(r) ? '' : 'zero'}` }, dk(r)) : null))),
+      h('tfoot', null, h('tr', null, h('td', null, 'All runs'), pubs.map((p) => h('td', null, total(p))), h('td', { class: 'tot' }, grand),
+        anyRetail ? h('td', { class: 'dk' }, dkTotal) : null))),
+    h('div', { class: 'small muted' }, `${runs.reduce((t, r) => t + (r.summary?.lines || 0), 0)} addresses across ${runs.length} run${runs.length === 1 ? '' : 's'}`,
+      anyRetail ? `. NZH includes ${runs.reduce((t, r) => t + retailCopies(r), 0)} retail copies (NZHR); each shop also gets a delivery docket.` : ''));
 }
 
 // Which delivery day "Get Runs" means: before midday NZ it's today's run
@@ -668,7 +684,8 @@ async function viewRun(ids) {
 
   function pubChip(p, n) {
     const c = pubColor(p);
-    return h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, p, n > 1 ? h('b', null, ` ×${n}`) : null);
+    const chip = h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, isRetailPub(p) ? basePub(p) : p, n > 1 ? h('b', null, ` ×${n}`) : null);
+    return isRetailPub(p) ? [chip, h('span', { class: 'pub docket' }, '+ DOCKET')] : chip;
   }
 
   function tile(l, ev, opts = {}) {

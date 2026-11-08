@@ -182,6 +182,11 @@ function parseKeyReportPage(page, out) {
   }
 }
 
+// A publication code ending in R is the same paper delivered to a retailer
+// (NZHR = NZH to a shop), which also needs a delivery docket.
+export const isRetailPub = (p) => /^[A-Z]{2,}R$/.test(p || '');
+export const basePub = (p) => (isRetailPub(p) ? p.slice(0, -1) : p);
+
 // "MISSED", "0711", "WKLY7" -> "Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)".
 // The key report's comment is the date of the problem as DDMM.
 const COMPLAINT_TYPES = { MISSED: 'Missed delivery', WET: 'Wet paper', DAMAGED: 'Damaged paper', LATE: 'Late delivery', WRONG: 'Wrong paper', DAMAGE: 'Damaged paper' };
@@ -405,7 +410,9 @@ function finishRoute(r, kr) {
   const byPub = {};
   for (const ln of r.lines) for (const pt of ln.parts) byPub[pt.pub] = (byPub[pt.pub] || 0) + pt.qty;
   const copies = r.lines.reduce((s, l) => s + l.qty, 0);
-  r.summary = { lines: r.lines.length, sheetLines, multiPub: r.lines.filter((l) => l.parts.length > 1).length, copies, byPub, streets: new Set(r.lines.map((l) => l.street)).size };
+  // Retail drops (NZHR, SSTR…: the same paper, plus a delivery docket) need one docket per address.
+  const dockets = r.lines.filter((l) => l.parts.some((pt) => isRetailPub(pt.pub))).length;
+  r.summary = { lines: r.lines.length, sheetLines, multiPub: r.lines.filter((l) => l.parts.length > 1).length, copies, byPub, dockets, streets: new Set(r.lines.map((l) => l.street)).size };
 
   const pubs = new Set([...Object.keys(byPub), ...Object.keys(r.listTotals.byPub), ...Object.keys(kr?.pubs || {})]);
   for (const p of [...pubs].sort()) {
