@@ -4,7 +4,7 @@
 // Both keep a local copy of open runs and a queue of taps not yet sent,
 // so the app keeps working with no signal.
 
-import { lineRows, runRow } from './rows.js';
+import { lineRows, runRow, changeRecord } from './rows.js';
 
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -146,10 +146,14 @@ export class LocalStore extends Base {
   async saveRun(r, filename, replaceId) {
     const runs = this.runs();
     const id = replaceId || shortId();
-    const row = { id, ...runRow(r, filename), created_at: new Date().toISOString() };
+    const prev = replaceId ? this.cachedRun(replaceId) : null;
+    const now = new Date().toISOString();
+    const row = { id, ...runRow(r, filename), source: 'upload', created_at: prev?.run.created_at || now, updated_at: now,
+      last_changes: prev ? changeRecord(prev.lines, lineRows(id, r)) : null };
+    this.lastChanges = row.last_changes;
     LS.set('stb.demo.runs', [...runs.filter((x) => x.id !== id), row]);
     this.cacheRun(id, { run: row, lines: lineRows(id, r) });
-    this.bc()?.postMessage({ type: 'run', run: { ...row, updated_at: new Date().toISOString() } });
+    this.bc()?.postMessage({ type: 'run', run: row });
     return id;
   }
   async refetch() { throw new Error('Re-fetch needs the shared (Supabase) version of the app.'); }
@@ -250,7 +254,7 @@ export class SupabaseStore extends Base {
 
   async listRuns() {
     const { data, error } = await this.sb.from('runs')
-      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source')
+      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source, last_changes')
       .order('delivery_date', { ascending: false }).order('route').limit(60);
     if (error) { const c = LS.get('stb.runlist', []); if (c.length) return c; throw error; }
     const ids = data.map((r) => r.id);
@@ -272,15 +276,19 @@ export class SupabaseStore extends Base {
     if (replaceId) {
       // Swap the addresses first, then touch the run row last: phones watching
       // the run reload when the row changes, so the new addresses are already in.
+      const { data: oldLines } = await this.sb.from('run_lines').select('line_key, address_key, street, number, pub, qty, note, parts').eq('run_id', replaceId);
+      const rows = lineRows(id, r);
       const { error: delErr } = await this.sb.from('run_lines').delete().eq('run_id', replaceId);
       if (delErr) throw delErr;
-      const { error: lErr } = await this.sb.from('run_lines').insert(lineRows(id, r));
+      const { error: lErr } = await this.sb.from('run_lines').insert(rows);
       if (lErr) throw lErr;
-      const { error } = await this.sb.from('runs').update({ ...runRow(r, filename), updated_at: new Date().toISOString() }).eq('id', replaceId);
+      this.lastChanges = changeRecord(oldLines || [], rows);
+      const { error } = await this.sb.from('runs').update({ ...runRow(r, filename), source: 'upload', last_changes: this.lastChanges, updated_at: new Date().toISOString() }).eq('id', replaceId);
       if (error) throw error;
       return id;
     }
-    const { data, error } = await this.sb.from('runs').insert(runRow(r, filename)).select('id').single();
+    this.lastChanges = null;
+    const { data, error } = await this.sb.from('runs').insert({ ...runRow(r, filename), source: 'upload' }).select('id').single();
     if (error) throw error;
     id = data.id;
     const { error: lErr } = await this.sb.from('run_lines').insert(lineRows(id, r));

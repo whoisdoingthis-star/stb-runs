@@ -267,3 +267,4 @@ end $$;
 --   ('lisa@example.com', 'Lisa'),
 --   ('mum@example.com',  'Mum')
 -- on conflict (email) do update set display_name = excluded.display_name;
+alter table public.runs add column if not exists last_changes jsonb; -- what changed the last time the sheet was replaced

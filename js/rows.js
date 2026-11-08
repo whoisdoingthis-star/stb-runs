@@ -16,3 +16,32 @@ export function lineRows(runId, r) {
     sources: l.sources || [], parts: l.parts || [],
   }));
 }
+
+// What changed between the sheet already loaded and the new one for the same
+// route and day: addresses added or removed, papers or quantities changed,
+// delivery notes changed. Returns short lines a driver can read, e.g.
+//   "Added 12 Smith Road (NZH ×1)", "45 Uxbridge Road: NZH 1 → 2".
+const titleCase = (s) => String(s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+const label = (l) => `${l.number} ${titleCase(l.street)}`;
+const papers = (l) => (l.parts?.length ? l.parts : [{ pub: l.pub, qty: l.qty }])
+  .map((p) => `${p.pub} ×${p.qty}`).sort().join(', ');
+
+export function diffLines(oldLines, newLines) {
+  const before = new Map(oldLines.map((l) => [l.address_key || l.line_key, l]));
+  const after = new Map(newLines.map((l) => [l.address_key || l.line_key, l]));
+  const out = [];
+  for (const [k, l] of after) {
+    const o = before.get(k);
+    if (!o) { out.push(`Added ${label(l)} (${papers(l)})`); continue; }
+    if (papers(o) !== papers(l)) out.push(`${label(l)}: ${papers(o)} → ${papers(l)}`);
+    if ((o.note || '') !== (l.note || '')) out.push(`${label(l)}: note ${l.note ? `now "${l.note}"` : 'removed'}`);
+  }
+  for (const [k, o] of before) if (!after.has(k)) out.push(`Removed ${label(o)} (${papers(o)})`);
+  return out;
+}
+
+/** The record kept on the run row: when the sheet was last replaced and what changed. */
+export function changeRecord(oldLines, newLines) {
+  const items = diffLines(oldLines, newLines);
+  return { at: new Date().toISOString(), count: items.length, items: items.slice(0, 50) };
+}

@@ -25,7 +25,7 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appJs = (f) => path.join(here, '..', 'js', f);
 const { extractPages, parseReport } = await import(appJs('parser.js'));
-const { runRow, lineRows } = await import(appJs('rows.js'));
+const { runRow, lineRows, changeRecord } = await import(appJs('rows.js'));
 
 const env = (k, d = '') => (process.env[k] ?? d).toString().trim();
 const BASE = env('RS_BASE_URL', 'https://optimize.routesmart.com');
@@ -93,11 +93,15 @@ async function saveRun(sb, r, filename) {
     // Swap the addresses first and touch the run row last: phones watching the
     // run reload when the row changes, so the new addresses are already there.
     const id = existing.id;
+    const { data: oldLines } = await sb.from('run_lines').select('line_key, address_key, street, number, pub, qty, note, parts').eq('run_id', id);
+    const rows = lineRows(id, r);
     const { error: e2 } = await sb.from('run_lines').delete().eq('run_id', id);
     if (e2) throw e2;
-    const { error: e3 } = await sb.from('run_lines').insert(lineRows(id, r));
+    const { error: e3 } = await sb.from('run_lines').insert(rows);
     if (e3) throw e3;
-    const { error } = await sb.from('runs').update(row).eq('id', id);
+    const changes = changeRecord(oldLines || [], rows);
+    console.log(`${r.route}: ${changes.count ? `${changes.count} detail(s) changed${changes.items.map((x) => `\n   - ${x}`).join('')}` : 'no details changed'}`);
+    const { error } = await sb.from('runs').update({ ...row, last_changes: changes }).eq('id', id);
     if (error) throw error;
     return id;
   }

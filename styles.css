@@ -293,3 +293,24 @@ html.big .paper-sum-title { font-size: 22px; }
 html.big .paper-sum th, html.big .paper-sum td { padding: 10px 4px; font-size: 20px; }
 .pub.docket { background: var(--ink); color: var(--bg); }
 .paper-sum .dk { border-left: 1px dashed var(--line); padding-left: 8px; }
+
+/* when the runs were last updated, and what changed */
+.refreshed { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--brand); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 15px; }
+.refreshed-label { color: var(--muted); }
+.changes.some { color: var(--warn); font-weight: 700; }
+.changes.none { color: var(--done); font-weight: 600; }
+.run-card { flex-wrap: wrap; }
+.change-list { flex-basis: 100%; margin-top: 6px; font-size: 14px; }
+.change-list summary { color: var(--info); font-weight: 700; cursor: pointer; }
+.change-list ul { margin: 6px 0 0; padding-left: 18px; }
+html.big .refreshed { font-size: 19px; }
+html.big .change-list { font-size: 18px; }
+
+/* street names: a bold banner so a new street is obvious */
+.street h2 { background: var(--brand); color: var(--brand-ink); text-transform: uppercase; letter-spacing: .05em; font-weight: 900; font-size: 16px; padding: 9px 12px; margin: 0 0 8px; border-radius: 10px; align-items: center; }
+.street h2 .count { color: inherit; opacity: .8; font-weight: 700; margin-left: auto; letter-spacing: 0; }
+.street.all-done h2 { background: var(--done); color: #fff; }
+.street.review h2 { background: var(--warn); color: #fff; }
+html.big .street h2 { font-size: 24px; padding: 12px 14px; }
+.street h2 .code { background: #fff; color: #1c1b18; }
+.street h2 .code.add { background: transparent; color: #fff; border-color: #fff; }

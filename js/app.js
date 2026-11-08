@@ -186,10 +186,24 @@ async function viewHome() {
     }
     const byDate = {};
     for (const r of runs) (byDate[r.delivery_date] ||= []).push(r);
+    // After Get Runs: once every run for that day has been replaced, say what changed.
+    const w = app.awaitingFetch;
+    if (w) {
+      const day = byDate[w.date] || [];
+      const fresh = day.filter((r) => (r.updated_at || r.created_at) > w.at);
+      if (day.length && fresh.length === day.length) {
+        app.awaitingFetch = null;
+        const changed = fresh.filter((r) => r.last_changes?.count);
+        toast(changed.length
+          ? `Runs updated. ${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')}. No changes on the others.`
+          : `Runs updated ${fmtStamp(new Date().toISOString())}. No details changed.`);
+      }
+    }
     list.replaceChildren(...Object.entries(byDate).map(([date, rs]) => h('section', { class: 'date-group' },
       h('div', { class: 'date-head' }, h('h2', null, fmtDate(date)),
         rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null,
         rs.length > 1 ? h('button', { class: 'btn small', onclick: () => shareRuns(rs.map((r) => r.id), `${rs.map((r) => r.route).join(' + ')} ${fmtDate(date)}`) }, 'Text all') : null),
+      lastRefreshed(rs),
       paperSummary(rs),
       rs.map((r) => {
         const lines = r.summary?.lines || 0;
@@ -200,9 +214,14 @@ async function viewHome() {
           h('button', { class: 'main', style: 'background:none;border:0;padding:0;text-align:left', onclick: () => { location.hash = `#/r/${r.id}`; } },
             h('div', { class: 'route' }, r.route),
             h('div', { class: 'small muted' }, `${r.done || 0} of ${lines} done · ${r.summary?.copies ?? '?'} copies`),
-            when ? h('div', { class: 'small muted' }, `${how} ${new Date(when).toLocaleString('en-NZ', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`) : null,
+            when ? h('div', { class: 'small muted' }, `${how} ${fmtStamp(when)}`) : null,
+            r.last_changes ? h('div', { class: `small changes ${r.last_changes.count ? 'some' : 'none'}` },
+              r.last_changes.count ? `${r.last_changes.count} detail${r.last_changes.count === 1 ? '' : 's'} changed since the previous sheet` : 'No details changed since the previous sheet') : null,
             h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` }))),
-          h('button', { class: 'btn small', onclick: () => shareRuns([r.id], `${r.route} ${fmtDate(r.delivery_date)}`) }, 'Text link'));
+          h('button', { class: 'btn small', onclick: () => shareRuns([r.id], `${r.route} ${fmtDate(r.delivery_date)}`) }, 'Text link'),
+          r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, 'What changed'),
+            h('ul', null, r.last_changes.items.map((x) => h('li', null, x))),
+            r.last_changes.count > r.last_changes.items.length ? h('div', { class: 'small muted' }, `…and ${r.last_changes.count - r.last_changes.items.length} more`) : null) : null);
       }))));
   }
   await renderList();
@@ -214,6 +233,22 @@ async function viewHome() {
 }
 
 // Re-fetch a delivery date's sheets from RouteSmart (e.g. after a late change phoned in).
+// When this day's sheets were last loaded, and whether that was from RouteSmart.
+function lastRefreshed(rs) {
+  const latest = rs.reduce((a, r) => { const t = r.updated_at || r.created_at; return t && (!a || t > a.t) ? { t, r } : a; }, null);
+  if (!latest) return null;
+  const how = latest.r.source === 'auto' ? 'from RouteSmart' : 'by manual upload';
+  return h('div', { class: 'refreshed' }, h('span', { class: 'refreshed-label' }, 'Runs last updated'), h('b', null, fmtStamp(latest.t)), h('span', { class: 'muted' }, ` ${how}`));
+}
+
+// "Run 13: 3 details changed" / "Run 13: no details changed".
+function changeSummary(route, ch) {
+  const r = shortRoute(route);
+  if (!ch) return `${r}: loaded`;
+  return ch.count ? `${r}: ${ch.count} detail${ch.count === 1 ? '' : 's'} changed` : `${r}: no details changed`;
+}
+const fmtStamp = (iso) => new Date(iso).toLocaleString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
 // Papers to collect for a day: each run's copies by paper, plus totals.
 // Retail codes (NZHR…) are the same paper, so they count in its column;
 // the Dockets column is how many delivery dockets to bring (one per retail drop).
@@ -274,6 +309,7 @@ function openRefetch() {
         go.disabled = true; go.textContent = 'Starting…';
         try {
           await app.store.refetch(date.value);
+          app.awaitingFetch = { date: date.value, at: new Date().toISOString() };
           close();
           toast(`Getting the runs for ${fmtDate(date.value)} from RouteSmart. Give it 2 to 3 minutes; they appear here by themselves.`);
         } catch (err) {
@@ -354,11 +390,19 @@ function viewLoad() {
     saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
     try {
       const ids = [];
+      const said = [];
       for (const x of results.filter((y) => y.include)) {
         ids.push(await app.store.saveRun(x.r, x.filename, x.existing ? x.existing.id : null));
+        if (x.existing) said.push({ route: x.r.route, ch: app.store.lastChanges });
       }
       app.pendingLoad = null;
       location.hash = `#/r/${ids.join('+')}`;
+      if (said.length) {
+        const changed = said.filter((x) => x.ch?.count);
+        const msg = !changed.length ? 'Sheet replaced. No details changed.'
+          : `Sheet replaced. ${changed.map((x) => changeSummary(x.route, x.ch)).join(' · ')}${changed.length < said.length ? '. No changes on the others.' : '.'} See the Runs page for what changed.`;
+        setTimeout(() => toast(msg), 400);
+      }
     } catch (e) {
       toast(`Save failed: ${e.message}`);
       refresh();
