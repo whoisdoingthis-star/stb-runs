@@ -1,0 +1,15 @@
+import { applySequence, moveKeys, mergeOrder } from '../js/sequence.js';
+import assert from 'assert';
+const t = (n, f) => { try { f(); console.log('✓', n); } catch (e) { console.log('✗', n, e.message); process.exitCode = 1; } };
+const L = (...ks) => ks.map((k) => ({ address_key: k }));
+const keys = (ls) => ls.map((l) => l.address_key).join(',');
+t('no custom order = sheet order', () => assert.equal(keys(applySequence(L('a', 'b', 'c'), null)), 'a,b,c'));
+t('custom order applied', () => assert.equal(keys(applySequence(L('a', 'b', 'c'), ['c', 'a', 'b'])), 'c,a,b'));
+t('new address stays after its sheet neighbour', () => assert.equal(keys(applySequence(L('a', 'n', 'b', 'c'), ['c', 'a', 'b'])), 'c,a,n,b'));
+t('new address at top of sheet goes first', () => assert.equal(keys(applySequence(L('n', 'a', 'b'), ['b', 'a'])), 'n,b,a'));
+t('move one before', () => assert.deepEqual(moveKeys(['a', 'b', 'c', 'd'], ['d'], 'b', false), ['a', 'd', 'b', 'c']));
+t('move one after', () => assert.deepEqual(moveKeys(['a', 'b', 'c', 'd'], ['a'], 'c', true), ['b', 'c', 'a', 'd']));
+t('move block keeps inner order', () => assert.deepEqual(moveKeys(['a', 'b', 'c', 'd', 'e'], ['d', 'e'], 'a', false), ['d', 'e', 'a', 'b', 'c']));
+t('drop on itself is no change', () => assert.deepEqual(moveKeys(['a', 'b'], ['a'], 'a', true), ['a', 'b']));
+t('merge keeps addresses not on today\'s sheet', () => assert.deepEqual(mergeOrder(['a', 'x', 'b', 'c'], ['c', 'a', 'b']), ['c', 'a', 'x', 'b']));
+t('merge with nothing stored', () => assert.deepEqual(mergeOrder(null, ['b', 'a']), ['b', 'a']));

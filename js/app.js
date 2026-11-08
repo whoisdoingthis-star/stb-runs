@@ -1,0 +1,869 @@
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
+import { LocalStore, SupabaseStore, statusFrom, uuid, deviceLabel } from './store.js';
+import { Geo } from './geo.js';
+import { applySequence, moveKeys, mergeOrder } from './sequence.js';
+import { layoutFor, arrange } from './village.js';
+
+// ---------------------------------------------------------------- helpers
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c instanceof Node ? c : String(c));
+  return el;
+}
+const $app = () => document.getElementById('app');
+const mount = (...nodes) => { const a = $app(); a.replaceChildren(...nodes); };
+
+let toastTimer;
+function toast(msg, action) {
+  const t = document.getElementById('toast');
+  t.replaceChildren(...[h('span', null, msg), action ? h('button', { onclick: () => { action.fn(); t.hidden = true; } }, action.label) : null].filter(Boolean));
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, action ? 5000 : 3500);
+}
+
+const fmtDate = (iso, long) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-NZ',
+  long ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } : { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+const shortRoute = (route) => route.replace(/^[A-Z]+0?/, 'Run ');
+// Every publication other than NZH gets its own colour. Known ones are fixed;
+// any new publication code gets a colour from the spare set, the same every time.
+const PUB_COLORS = {
+  NZHR: ['#f59e0b', '#1c1300'], // Herald retail: amber
+  LIS: ['#7c3aed', '#fff'],     // purple
+  WW: ['#db2777', '#fff'],      // pink
+  SST: ['#2563eb', '#fff'],     // Sunday Star-Times: blue
+  SSTR: ['#0e7490', '#fff'],    // SST retail: dark teal
+  TVG: ['#ea580c', '#fff'],     // TV Guide: bright orange, high contrast (Run 8 rules)
+};
+// No greens: green means delivered.
+const SPARE = [['#c2410c', '#fff'], ['#a21caf', '#fff'], ['#4338ca', '#fff'], ['#be123c', '#fff'], ['#854d0e', '#fff'], ['#475569', '#fff']];
+function pubColor(p) {
+  if (p === 'NZH') return null;
+  if (PUB_COLORS[p]) return PUB_COLORS[p];
+  let n = 0;
+  for (const c of p) n = (n * 31 + c.charCodeAt(0)) >>> 0;
+  return SPARE[n % SPARE.length];
+}
+const partsOf = (l) => (Array.isArray(l.parts) && l.parts.length ? l.parts : [{ pub: l.pub, qty: l.qty }]);
+const FLAG_LABEL = { unrouted: 'Not routed', start: 'New', complaint: 'Complaint', stop: 'Stop?', weekday: 'Check day', combined: 'Combined' };
+
+const runLink = (ids) => `${location.origin}${location.pathname}#/r/${ids.join('+')}`;
+async function shareRuns(ids, label) {
+  const url = runLink(ids);
+  const text = `${label}: tap to open the run`;
+  if (navigator.share) {
+    try { await navigator.share({ title: label, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  location.href = `sms:?&body=${encodeURIComponent(`${text} ${url}`)}`;
+}
+
+// ---------------------------------------------------------------- app state
+
+const app = { store: null, me: null, cleanup: null, pendingLoad: null };
+
+async function boot() {
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const { createClient } = await import('../vendor/supabase.mjs');
+    app.store = new SupabaseStore(createClient, SUPABASE_URL, SUPABASE_ANON_KEY);
+  } else {
+    app.store = new LocalStore();
+  }
+  await app.store.init();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  window.addEventListener('hashchange', route);
+  await route();
+}
+
+async function route() {
+  if (app.cleanup) { app.cleanup(); app.cleanup = null; }
+  window.scrollTo(0, 0);
+  try {
+    app.me = await app.store.session();
+  } catch (e) {
+    await app.store.signOut();
+    return viewLogin(e.message);
+  }
+  if (!app.me) return viewLogin();
+  const hash = location.hash.replace(/^#/, '');
+  const m = /^\/r\/([A-Za-z0-9+]+)/.exec(hash);
+  if (m) return viewRun(m[1].split('+').filter(Boolean));
+  if (hash === '/load' && app.pendingLoad) return viewLoad();
+  return viewHome();
+}
+
+// ---------------------------------------------------------------- login
+
+function viewLogin(error) {
+  const email = h('input', { type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', required: true });
+  const msg = h('div', { class: error ? 'banner bad' : '', hidden: !error }, error || '');
+  const btn = h('button', { class: 'btn primary big', type: 'submit' }, 'Sign in');
+  const form = h('form', {
+    onsubmit: async (ev) => {
+      ev.preventDefault();
+      btn.disabled = true; btn.textContent = 'Signing in…';
+      try { await app.store.signIn(email.value.trim(), pw.value); await route(); } catch (e) {
+        msg.hidden = false; msg.className = 'banner bad'; msg.textContent = e.message;
+        btn.disabled = false; btn.textContent = 'Sign in';
+      }
+    },
+  },
+  h('label', { class: 'field' }, h('span', null, 'Email'), email),
+  h('label', { class: 'field' }, h('span', null, 'Password'), pw),
+  msg, btn);
+  mount(h('div', { class: 'login' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs'), form,
+    h('p', { class: 'muted small' }, 'You stay signed in on this phone. On iPhone, sign in once in Safari as well if you open runs from text links.')));
+}
+
+// ---------------------------------------------------------------- home
+
+async function viewHome() {
+  const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, class: 'file-input', id: 'pdf' });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles([...fileInput.files]); });
+  const list = h('div', null, h('p', { class: 'muted' }, 'Loading runs…'));
+  mount(h('div', { class: 'page' },
+    h('div', { class: 'topbar' },
+      h('div', { style: 'flex:1' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
+      app.store.mode === 'shared' ? h('div', { class: 'small muted', style: 'text-align:right' }, app.me.name, h('br'),
+        h('button', { class: 'link small', style: 'padding:0', onclick: async () => { await app.store.signOut(); route(); } }, 'Sign out')) : null),
+    app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: runs and ticks are saved on this phone only. Nothing is shared or uploaded.') : null,
+    h('label', { class: 'btn primary big', for: 'pdf' }, 'Load run sheet (PDF)'), fileInput,
+    list));
+  let runs;
+  try { runs = await app.store.listRuns(); } catch (e) {
+    list.replaceChildren(h('div', { class: 'banner bad' }, `Could not load runs: ${e.message}`));
+    return;
+  }
+  if (!runs.length) {
+    list.replaceChildren(h('div', { class: 'empty' }, 'No runs yet. Load the PDF run sheet from the carrier to start.'));
+    return;
+  }
+  const byDate = {};
+  for (const r of runs) (byDate[r.delivery_date] ||= []).push(r);
+  list.replaceChildren(...Object.entries(byDate).map(([date, rs]) => h('section', { class: 'date-group' },
+    h('div', { class: 'date-head' }, h('h2', null, fmtDate(date)),
+      rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null,
+      rs.length > 1 ? h('button', { class: 'btn small', onclick: () => shareRuns(rs.map((r) => r.id), `${rs.map((r) => r.route).join(' + ')} ${fmtDate(date)}`) }, 'Text all') : null),
+    rs.map((r) => {
+      const lines = r.summary?.lines || 0;
+      const pct = lines ? Math.round((100 * (r.done || 0)) / lines) : 0;
+      return h('div', { class: 'card run-card' },
+        h('button', { class: 'main', style: 'background:none;border:0;padding:0;text-align:left', onclick: () => { location.hash = `#/r/${r.id}`; } },
+          h('div', { class: 'route' }, r.route),
+          h('div', { class: 'small muted' }, `${r.done || 0} of ${lines} done · ${r.summary?.copies ?? '?'} copies`),
+          h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` }))),
+        h('button', { class: 'btn small', onclick: () => shareRuns([r.id], `${r.route} ${fmtDate(r.delivery_date)}`) }, 'Text link'));
+    }))));
+}
+
+// ---------------------------------------------------------------- load a PDF
+
+let pdfjsPromise;
+function pdfjs() {
+  pdfjsPromise ||= import('../vendor/pdf.min.mjs').then((lib) => {
+    lib.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href;
+    return lib;
+  });
+  return pdfjsPromise;
+}
+
+async function loadFiles(files) {
+  mount(h('div', { class: 'page' }, h('p', { class: 'boot' }, 'Reading the run sheet…')));
+  try {
+    const [{ extractPages, parseReport }, lib] = await Promise.all([import('./parser.js'), pdfjs()]);
+    const results = [];
+    const problems = [];
+    for (const f of files) {
+      const pages = await extractPages(lib, new Uint8Array(await f.arrayBuffer()));
+      const res = parseReport(pages);
+      problems.push(...res.problems.map((p) => `${f.name}: ${p}`));
+      for (const r of res.routes) results.push({ r, filename: f.name });
+    }
+    for (const item of results) {
+      try { item.existing = await app.store.findRun(item.r.route, item.r.deliveryDate); } catch { item.existing = null; }
+      item.include = item.r.ok;
+    }
+    app.pendingLoad = { results, problems };
+    if (location.hash === '#/load') viewLoad(); else location.hash = '#/load';
+  } catch (e) {
+    console.error(e);
+    toast(`Could not read that PDF: ${e.message}`);
+    viewHome();
+  }
+}
+
+// For routes with a layout (Run 8): section totals, and anything to check.
+function villageSummary(r) {
+  const layout = layoutFor(r.route);
+  if (!layout) return null;
+  const lines = r.lines.map((l) => ({ ...l, address_key: l.addressKey }));
+  const a = arrange(layout, lines);
+  const sum = a.totals.reduce((n, x) => n + x.qty, 0) + a.groups.filter((g) => !g.section).flatMap((g) => g.lines).reduce((n, l) => n + l.qty, 0);
+  const ok = a.mappedOnce && sum === r.summary.copies;
+  return h('div', { class: 'village-sum' },
+    h('div', { class: 'small' }, h('b', null, `${layout.name}: `), a.totals.map((x) => `${x.label.replace(' Apartments', '').replace(' handover', '')} ${x.qty}`).join(' · '), ` = ${sum}`),
+    h('div', { class: `small ${ok ? 'ok' : 'fail'}` }, ok ? '✓ Every sheet line placed once, in building order' : '✗ Building totals don’t add up to the sheet: check before saving'),
+    a.exceptions.length ? h('details', null, h('summary', { class: 'small' }, `${a.exceptions.length} to check (bank map)`),
+      h('ul', { class: 'warnings' }, a.exceptions.map((x) => h('li', null, x)))) : null);
+}
+
+function viewLoad() {
+  const { results, problems } = app.pendingLoad;
+  const saveBtn = h('button', { class: 'btn primary big' }, 'Save');
+  const refresh = () => {
+    const n = results.filter((x) => x.include).length;
+    saveBtn.disabled = n === 0;
+    saveBtn.textContent = n ? `Save ${n} run${n > 1 ? 's' : ''} and open` : 'Nothing selected';
+  };
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    try {
+      const ids = [];
+      for (const x of results.filter((y) => y.include)) {
+        ids.push(await app.store.saveRun(x.r, x.filename, x.existing ? x.existing.id : null));
+      }
+      app.pendingLoad = null;
+      location.hash = `#/r/${ids.join('+')}`;
+    } catch (e) {
+      toast(`Save failed: ${e.message}`);
+      refresh();
+    }
+  });
+
+  const cards = results.map((x) => {
+    const { r } = x;
+    const failed = r.checks.filter((c) => !c.ok);
+    const flagged = r.lines.filter((l) => l.flags.length);
+    const include = h('input', { type: 'checkbox', checked: x.include, onchange: (e) => { x.include = e.target.checked; refresh(); } });
+    return h('div', { class: 'card' },
+      h('div', { style: 'display:flex;align-items:baseline;gap:8px' }, h('h2', { style: 'margin:0;font-size:20px;flex:1' }, r.route),
+        h('span', { class: 'muted small' }, r.deliveryDate ? fmtDate(r.deliveryDate, true) : 'no date')),
+      h('div', { class: 'small muted', style: 'margin-top:4px' },
+        `${r.summary.lines} addresses${r.summary.sheetLines > r.summary.lines ? ` (${r.summary.sheetLines} sheet lines)` : ''} · ${r.summary.copies} copies`),
+      h('div', { class: 'pubs', style: 'margin-top:6px' }, Object.entries(r.summary.byPub).map(([p, n]) => {
+        const c = pubColor(p);
+        return h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, `${p} ${n}`);
+      })),
+      failed.length
+        ? h('ul', { class: 'checks' }, failed.map((c) => h('li', { class: 'fail' }, `✗ ${c.label}: report says ${c.expected}, sheet adds up to ${c.got}`)))
+        : h('ul', { class: 'checks' }, h('li', { class: 'ok' }, `✓ All ${r.checks.length} totals match the report`)),
+      villageSummary(r),
+      flagged.length ? h('div', { class: 'small' }, h('b', null, 'Flagged on tiles: '),
+        flagged.map((l) => `${l.number} ${l.street} (${l.flags.map((f) => FLAG_LABEL[f.type]).join(', ')})`).join('; ')) : null,
+      r.warnings.length ? h('details', { style: 'margin-top:6px' }, h('summary', { class: 'small' }, `${r.warnings.length} note${r.warnings.length > 1 ? 's' : ''} to check`),
+        h('ul', { class: 'warnings' }, r.warnings.map((w) => h('li', null, w)))) : null,
+      x.existing ? h('div', { class: 'banner warn', style: 'margin-top:10px' },
+        'Already loaded for this date. Saving replaces the sheet; ticks already made are kept.') : null,
+      h('label', { class: 'choice' }, include,
+        h('span', null, r.ok ? 'Save this run' : h('b', { class: 'fail' }, 'Totals don’t match. Save anyway?'))));
+  });
+
+  mount(h('div', { class: 'page' },
+    h('div', { class: 'topbar' }, h('button', { class: 'link', onclick: () => { app.pendingLoad = null; location.hash = '#/'; } }, '‹ Runs'), h('h1', null, 'Check the sheet')),
+    problems.length ? h('div', { class: 'banner warn' }, problems.join(' ')) : null,
+    results.length ? cards : h('div', { class: 'banner bad' }, 'No delivery lists found in that PDF. Is it the “Delivery List by Sequence” report?'),
+    h('div', { class: 'stickybar' }, h('div', { class: 'inner' }, saveBtn))));
+  refresh();
+}
+
+// ---------------------------------------------------------------- run view
+
+async function viewRun(ids) {
+  mount(h('div', { class: 'page' }, h('p', { class: 'boot' }, 'Opening run…')));
+  let data;
+  try { data = await app.store.loadRuns(ids); } catch (e) {
+    mount(h('div', { class: 'page' }, h('div', { class: 'banner bad' }, `Could not open this run: ${e.message}`),
+      h('a', { class: 'btn', href: '#/' }, 'Back to runs')));
+    return;
+  }
+  if (!data.length) {
+    mount(h('div', { class: 'page' }, h('div', { class: 'banner bad' }, 'Run not found. It may have been removed, or the link is incomplete.'),
+      h('a', { class: 'btn', href: '#/' }, 'Back to runs')));
+    return;
+  }
+  const S = {
+    data,
+    events: await app.store.loadEvents(ids),
+    show: 'all',
+    todoOnly: false,
+    query: '',
+    flash: null,
+    seq: await app.store.loadSequences([...new Set(data.map((d) => d.run.route))]),
+    useCustom: true,   // show our own order when a route has one
+    blocks: {},        // section id -> { runId, route, keys } for dragging whole streets
+    codes: {},         // route -> { section id -> door code }, for routes with a layout
+  };
+  for (const r of new Set(data.map((d) => d.run.route))) if (layoutFor(r)) S.codes[r] = await app.store.loadAccessCodes(r);
+  const hasCustom = (d) => !!S.seq[d.run.route]?.keys?.length;
+  const orderedLines = (d) => (S.useCustom ? applySequence(d.lines, S.seq[d.run.route]?.keys) : d.lines);
+  const status = () => statusFrom(S.events);
+  const label = data.map((d) => d.run.route).join(' + ');
+  const date = data[0].run.delivery_date;
+
+  // header pieces
+  // Thin bar fixed to the top: progress, elapsed time, and what helpers just did.
+  const fbFill = h('i', { class: 'fb-fill' });
+  const fbProg = h('span', { class: 'fb-prog' });
+  const fbTime = h('span', { class: 'fb-time' });
+  const fbNote = h('span', { class: 'fb-note' });
+  const floatbar = h('div', { class: 'floatbar', role: 'status', onclick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
+    fbFill, h('div', { class: 'fb-row' }, fbProg, fbTime, fbNote));
+  const withChip = h('span', { class: 'chip with', hidden: true });
+  const gpsChip = h('span', { class: 'chip' });
+  const syncChip = h('span', { class: 'chip' });
+  const orderChip = h('span', { class: 'chip order', hidden: true });
+  const body = h('div', { class: 'runbody' });
+  const search = h('input', { class: 'search', type: 'search', placeholder: 'Find address or note', enterkeyhint: 'search', autocomplete: 'off' });
+  search.addEventListener('input', () => { S.query = search.value.trim().toLowerCase(); render(); });
+  const todoBtn = h('button', { class: 'btn small toggle', 'aria-pressed': 'false', onclick: () => { S.todoOnly = !S.todoOnly; todoBtn.setAttribute('aria-pressed', String(S.todoOnly)); render(); } }, 'To do only');
+  const seg = data.length > 1 ? h('div', { class: 'seg' },
+    [['all', 'All'], ...data.map((d) => [d.run.id, shortRoute(d.run.route)])].map(([v, t]) => h('button', {
+      'aria-pressed': String(S.show === v),
+      onclick: (e) => { S.show = v; [...seg.children].forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget))); render(); },
+    }, t))) : null;
+
+  const geo = new Geo(() => { gpsChip.textContent = geo.label(); gpsChip.className = `chip ${geo.state === 'ok' ? 'good' : geo.state === 'denied' ? 'warn' : ''}`; });
+  geo.start();
+  const updateSync = (n = app.store.pendingCount()) => {
+    if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'chip'; return; }
+    syncChip.textContent = n ? `${n} to send` : 'All sent';
+    syncChip.className = `chip ${n ? 'warn' : 'good'}`;
+  };
+  updateSync();
+  const offSync = app.store.onSync(updateSync);
+
+  // One tap = one tile, or a whole bundle (e.g. Run 8 reception). A bundle
+  // records an entry for every paper in it, same time and GPS, so the audit
+  // keeps each obligation while the driver makes one handover.
+  async function tap(line) { return tapMany([line], `${line.number} ${titleCase(line.street)}`, `${line.run_id}::${line.line_key}`); }
+  async function tapMany(lines, label, flashKey) {
+    const st = status();
+    const done = !lines.every((l) => st[`${l.run_id}::${l.line_key}`]?.done);
+    const now = Date.now();
+    const fresh = geo.last && now - geo.last.t < 15000;
+    const evs = lines.map((l) => {
+      const e = {
+        id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route,
+        done, user_name: app.me.name, device_time: new Date(now).toISOString(), device: deviceLabel(),
+      };
+      if (fresh) Object.assign(e, { lat: geo.last.lat, lng: geo.last.lng, accuracy_m: geo.last.acc, fix_age_ms: now - geo.last.t });
+      return e;
+    });
+    S.events.push(...evs);
+    S.flash = done ? flashKey : null;
+    app.store.addEvents(evs, !fresh);
+    if (navigator.vibrate) navigator.vibrate(done ? 15 : [10, 40, 10]);
+    render();
+    if (done) toast(`✓ ${label}`, { label: 'Undo', fn: () => tapMany(lines, label, flashKey) });
+    if (!fresh) {
+      const fix = await geo.fixFor(now);
+      const patch = fix ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc, fix_age_ms: Math.max(0, now - fix.t) } : {};
+      app.store.patchEvents(evs.map((e) => e.id), patch);
+    }
+  }
+
+  // How a run is laid out: a route layout (Run 8 village) if it has one,
+  // otherwise street blocks in your order (or the sheet's).
+  function groupsFor(d) {
+    const layout = layoutFor(d.run.route);
+    const lines = d.lines.map((l) => ({ ...l, route: d.run.route }));
+    if (layout) return { fixed: true, ...arrange(layout, lines) };
+    const groups = [];
+    for (const l of applySequence(lines, S.useCustom ? S.seq[d.run.route]?.keys : null)) {
+      const last = groups[groups.length - 1];
+      if (last && last.street === l.street) last.lines.push(l); else groups.push({ type: 'street', street: l.street, lines: [l] });
+    }
+    return { fixed: false, groups };
+  }
+
+  function render() {
+    const st = status();
+    const isDone = (l) => !!st[`${l.run_id}::${l.line_key}`]?.done;
+    const visibleRuns = S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show);
+    const laid = visibleRuns.map((d) => ({ d, ...groupsFor(d) }));
+
+    // Progress counts stops (a tile, or one handover bundle); copies count papers.
+    let stops = 0; let stopsDone = 0; let copies = 0; let copiesDone = 0;
+    for (const { groups } of laid) {
+      for (const g of groups) {
+        if (g.type === 'bundle') { stops += 1; if (g.lines.every(isDone)) stopsDone += 1; } else { stops += g.lines.length; stopsDone += g.lines.filter(isDone).length; }
+        for (const l of g.lines) { copies += l.qty; if (isDone(l)) copiesDone += l.qty; }
+      }
+    }
+    fbProg.replaceChildren(h('b', null, `${stopsDone}/${stops}`), ` · ${copiesDone}/${copies} copies`);
+    fbFill.style.width = `${stops ? (100 * stopsDone) / stops : 0}%`;
+    S.progress = { done: stopsDone, total: stops, runIds: visibleRuns.map((d) => d.run.id) };
+    tick();
+
+    const q = S.query;
+    const match = (l) => !q || `${l.number} ${l.street} ${l.note || ''} ${l.pub}`.toLowerCase().includes(q);
+    const visible = (l) => match(l) && !(S.todoOnly && isDone(l));
+    const out = [];
+    S.blocks = {};
+    for (const { d, groups, fixed } of laid) {
+      if (visibleRuns.length > 1 || fixed) {
+        out.push(h('div', { class: 'route-divider' }, fixed ? `${d.run.route} · ${layoutFor(d.run.route).name}` : d.run.route,
+          !fixed && S.useCustom && hasCustom(d) ? ' · your order' : ''));
+      }
+      groups.forEach((g, gi) => {
+        const id = `${d.run.id}:${gi}`;
+        const nDone = g.lines.filter(isDone).length;
+        const allDone = nDone === g.lines.length;
+        if (g.type === 'bundle') {
+          if (!g.lines.some(match) || (S.todoOnly && allDone)) return;
+          out.push(h('section', { class: `street village ${allDone ? 'all-done' : ''}`, 'data-run': d.run.id, 'data-fixed': '1' },
+            sectionHead(d, g.section, `${allDone ? 1 : 0}/1 · ${g.qty} papers`),
+            bundleTile(d, g, st, allDone)));
+          return;
+        }
+        if (g.type === 'section') {
+          const banks = g.banks.map((b) => ({ ...b, shown: b.lines.filter(visible) })).filter((b) => b.shown.length);
+          if (!banks.length) return;
+          out.push(h('section', { class: `street village ${allDone ? 'all-done' : ''}`, 'data-run': d.run.id, 'data-fixed': '1' },
+            sectionHead(d, g.section, `${nDone}/${g.lines.length}`),
+            banks.map((b) => [
+              b.label ? h('h3', { class: `bank ${b.id === '?' ? 'unmapped' : ''}` }, b.label,
+                h('span', { class: 'count' }, `${b.lines.filter(isDone).length}/${b.lines.length}`)) : null,
+              h('div', { class: 'tiles' }, b.shown.map((l) => tile(l, st[`${l.run_id}::${l.line_key}`], { fixed: true }))),
+            ])));
+          return;
+        }
+        const shown = g.lines.filter(visible);
+        if (!shown.length) return;
+        if (!fixed) S.blocks[id] = { runId: d.run.id, route: d.run.route, keys: g.lines.map((l) => l.address_key), label: titleCase(g.street) };
+        const title = g.type === 'review' ? 'Needs review: not a known building' : titleCase(g.street);
+        out.push(h('section', { class: `street ${g.type === 'review' ? 'review' : ''} ${allDone ? 'all-done' : ''}`, 'data-run': d.run.id, 'data-block': fixed ? null : id, 'data-fixed': fixed ? '1' : null },
+          h('h2', null, title, h('span', { class: 'count' }, `${nDone}/${g.lines.length}`)),
+          h('div', { class: 'tiles' }, shown.map((l) => tile(l, st[`${l.run_id}::${l.line_key}`], { fixed, showStreet: g.type === 'review' })))));
+      });
+    }
+    if (!out.some((n) => n.tagName === 'SECTION')) {
+      out.push(h('div', { class: 'finished' }, q ? 'No match.' : S.todoOnly && stopsDone === stops ? 'Run complete. Nice work.' : 'Nothing to show.'));
+    }
+    body.replaceChildren(...out);
+    S.flash = null;
+    const custom = S.data.some((d) => !layoutFor(d.run.route) && hasCustom(d));
+    orderChip.hidden = !custom;
+    orderChip.textContent = S.useCustom ? 'Your order' : 'Sheet order';
+  }
+
+  // Building header for a route layout: name, access code (from behind the login), progress.
+  function sectionHead(d, section, countText) {
+    const code = S.codes[d.run.route]?.[section.id];
+    return h('h2', { class: 'building' },
+      h('span', null, section.label),
+      code ? h('span', { class: 'code', title: 'Door code' }, `🔑 ${code}`)
+        : section.bundle ? null : h('button', { class: 'code add', onclick: (e) => { e.stopPropagation(); openCodes(d); } }, '+ code'),
+      h('span', { class: 'count' }, countText));
+  }
+
+  // Edit door codes for a route's buildings. Saved behind the login, for everyone.
+  function openCodes(d) {
+    const layout = layoutFor(d.run.route);
+    if (!layout) return;
+    const cur = S.codes[d.run.route] || {};
+    const inputs = {};
+    const sections = layout.sections.filter((x) => !x.bundle);
+    const close = () => panel.remove();
+    const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
+      h('form', {
+        class: 'sheet',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const codes = Object.fromEntries(sections.map((x) => [x.id, inputs[x.id].value.trim()]));
+          try {
+            await app.store.saveAccessCodes(d.run.route, codes, app.me.name);
+            S.codes[d.run.route] = codes; close(); render(); toast('Door codes saved for everyone.');
+          } catch (err) { toast(`Couldn’t save: ${err.message}`); }
+        },
+      },
+      h('h2', null, `Door codes · ${layout.name}`),
+      h('p', { class: 'small muted' }, 'Only signed-in family can see these. Changes are logged.'),
+      sections.map((x) => h('label', { class: 'field' }, h('span', null, x.label),
+        (inputs[x.id] = h('input', { value: cur[x.id] || '', autocomplete: 'off', inputmode: 'text', placeholder: 'e.g. 1234#' })))),
+      h('div', { style: 'display:flex;gap:8px' },
+        h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'),
+        h('button', { class: 'btn primary', type: 'submit', style: 'flex:1' }, 'Save codes'))));
+    document.body.append(panel);
+  }
+
+  // One tile for a whole handover, with what's in it listed underneath.
+  function bundleTile(d, g, st, allDone) {
+    const key = `bundle:${d.run.id}:${g.section.id}`;
+    const pubs = {};
+    for (const l of g.lines) for (const pt of partsOf(l)) pubs[pt.pub] = (pubs[pt.pub] || 0) + pt.qty;
+    const last = allDone ? g.lines.map((l) => st[`${l.run_id}::${l.line_key}`]).sort((a, b) => (a.device_time < b.device_time ? 1 : -1))[0] : null;
+    const someDone = !allDone && g.lines.some((l) => st[`${l.run_id}::${l.line_key}`]?.done);
+    return h('button', {
+      class: `tile bundle ${allDone ? 'done' : ''} ${S.flash === key ? 'flash' : ''}`,
+      'aria-pressed': String(allDone), 'data-fixed': '1',
+      'aria-label': `${g.section.label}, ${g.qty} papers in one handover${allDone ? ', done' : ''}`,
+      onclick: () => { if (drag.suppressClick) return; tapMany(g.lines, `${g.section.label} (${g.qty} papers)`, key); },
+    },
+    h('div', { class: 'num' }, `${g.qty} papers`, h('span', { class: 'bundle-tag' }, 'one handover')),
+    h('div', { class: 'pubs' }, Object.entries(pubs).map(([p, n]) => pubChip(p, n))),
+    h('div', { class: 'composition' }, g.parts.map((p) => h('div', { class: 'comp' },
+      h('div', { class: 'comp-head' }, h('b', null, p.label), ` ${p.qty}`),
+      h('div', { class: 'comp-list' }, p.lines.map((l) => h('span', { class: 'who-line' },
+        l.number, l.note ? ` ${l.note}` : '', (l.flags || []).some((f) => f.type === 'unrouted') ? h('i', null, ' (not routed)') : '')))))),
+    someDone ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday' }, 'Partly ticked: tap to finish')) : null,
+    allDone ? h('div', { class: 'who' }, `${last?.user_name || ''} ${fmtTime(last.device_time)}`.trim()) : null);
+  }
+
+  // Elapsed time runs from the first tick on the runs shown (anyone's), and
+  // stops at the last tick once everything is done.
+  const fmtClock = (ms) => {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const hh = Math.floor(t / 3600); const mm = Math.floor((t % 3600) / 60); const ss = t % 60;
+    return `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  };
+  const fmtDur = (ms) => {
+    const m = Math.round(ms / 60000);
+    if (m < 1) return 'under a min';
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+  };
+  function tick() {
+    const p = S.progress;
+    if (!p) return;
+    const st = status();
+    const times = S.events.filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)).filter(Number.isFinite);
+    if (!times.length) { fbTime.textContent = 'Starts at first tick'; return; }
+    const start = Math.min(...times);
+    const complete = p.total > 0 && p.done === p.total;
+    const lastDone = Math.max(...Object.values(st).filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)), start);
+    if (complete) { fbTime.textContent = `✓ Done in ${fmtClock(lastDone - start)}`; return; }
+    let text = `⏱ ${fmtClock(Date.now() - start)}`;
+    if (p.done >= 5 && lastDone > start) {
+      const per = (lastDone - start) / (p.done - 1);
+      const rem = per * (p.total - p.done);
+      text += rem < 60000 ? ' · nearly done' : ` · ~${fmtDur(rem)} to go`;
+    }
+    fbTime.textContent = text;
+  }
+  const clock = setInterval(tick, 1000);
+
+  // A helper's tick: flash the tile and say who did what in the bar.
+  let noteTimer;
+  function showNote(text) {
+    fbNote.textContent = text;
+    floatbar.classList.add('has-note');
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { floatbar.classList.remove('has-note'); fbNote.textContent = ''; }, 6000);
+  }
+
+  function pubChip(p, n) {
+    const c = pubColor(p);
+    return h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, p, n > 1 ? h('b', null, ` ×${n}`) : null);
+  }
+
+  function tile(l, ev, opts = {}) {
+    const done = !!ev?.done;
+    const key = `${l.run_id}::${l.line_key}`;
+    const flags = l.flags || [];
+    const parts = partsOf(l);
+    const plainNZH = parts.length === 1 && parts[0].pub === 'NZH';
+    const colours = parts.map((pt) => pubColor(pt.pub)).filter(Boolean).map((c) => c[0]);
+    // A stripe down the left edge in each non-NZH publication's colour.
+    const stripe = colours.length ? h('span', {
+      class: 'stripe',
+      style: `background:${colours.length === 1 ? colours[0] : `linear-gradient(${colours.map((c, i) => `${c} ${(100 * i) / colours.length}% ${(100 * (i + 1)) / colours.length}%`).join(',')})`}`,
+    }) : null;
+    return h('button', {
+      class: `tile ${done ? 'done' : ''} ${colours.length ? 'has-pub' : ''} ${S.flash === key ? 'flash' : ''}`,
+      style: colours.length ? `--tint:${colours[0]}` : null,
+      'aria-pressed': String(done),
+      'aria-label': `${l.number} ${titleCase(l.street)}, ${parts.map((pt) => `${pt.qty} ${pt.pub}`).join(' and ')}${done ? ', done' : ''}`,
+      'data-key': key,
+      'data-run': l.run_id,
+      'data-addr': l.address_key,
+      'data-fixed': opts.fixed ? '1' : null,
+      onclick: () => { if (drag.suppressClick) return; tap(l); },
+    },
+    stripe,
+    h('div', { class: 'num' }, l.number,
+      plainNZH && l.qty > 1 ? h('span', { class: 'badge qty' }, `×${l.qty}`) : null),
+    plainNZH ? null : h('div', { class: 'pubs' }, parts.map((pt) => pubChip(pt.pub, pt.qty))),
+    S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
+    l.bankNote ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday', title: l.bankNote }, 'Check bank')) : null,
+    flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
+    l.note ? h('div', { class: 'note' }, l.note) : null,
+    done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null);
+  }
+
+  const menu = h('select', {
+    class: 'btn small menu', 'aria-label': 'More options',
+    onchange: async (e) => {
+      const v = e.target.value; e.target.value = '';
+      if (v === 'untick') {
+        const st = status();
+        const visible = (S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show)).flatMap((d) => d.lines.map((l) => ({ ...l, route: d.run.route })));
+        const done = visible.filter((l) => st[`${l.run_id}::${l.line_key}`]?.done);
+        if (!done.length) return toast('Nothing is ticked.');
+        if (!confirm(`Untick all ${done.length} completed deliveries? Everyone sharing this run will see it.`)) return;
+        for (const l of done) {
+          const ev = { id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route, done: false, user_name: app.me.name, device_time: new Date().toISOString(), device: deviceLabel() };
+          S.events.push(ev); app.store.addEvent(ev);
+        }
+        render();
+      } else if (v === 'order') {
+        if (!S.data.some(hasCustom)) return toast('This run is in sheet order. Hold a tile or street name to move it.');
+        S.useCustom = !S.useCustom; render();
+        toast(S.useCustom ? 'Showing your order.' : 'Showing the sheet’s order. Switch back to move tiles.');
+      } else if (v === 'codes') {
+        const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route));
+        if (d) openCodes(d);
+      } else if (v === 'howto') {
+        toast('Hold a tile or a street name, drag it, let go. Quick taps still tick.');
+      } else if (v === 'resetorder') {
+        const runs = (S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show)).filter(hasCustom);
+        if (!runs.length) return toast('Already in sheet order.');
+        if (!confirm(`Put ${runs.map((d) => d.run.route).join(' + ')} back in the sheet's order? This changes it for everyone, for future runs too.`)) return;
+        for (const d of runs) { S.seq[d.run.route] = null; app.store.saveSequence(d.run.route, null, app.me.name); }
+        render();
+      } else if (v === 'refresh') {
+        S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.');
+      } else if (v === 'checks') {
+        alert(S.data.map((d) => `${d.run.route}\n${(d.run.checks || []).map((c) => `${c.ok ? '✓' : '✗'} ${c.label}: ${c.got}/${c.expected}`).join('\n')}${(d.run.warnings || []).length ? `\n\nNotes:\n- ${d.run.warnings.join('\n- ')}` : ''}`).join('\n\n'));
+      }
+    },
+  }, h('option', { value: '' }, '•••'), h('option', { value: 'refresh' }, 'Refresh'), h('option', { value: 'order' }, 'Switch: your order / sheet order'),
+  h('option', { value: 'howto' }, 'How to move tiles'),
+  data.some((d) => layoutFor(d.run.route)) ? h('option', { value: 'codes' }, 'Door codes…') : null, h('option', { value: 'resetorder' }, 'Reset to sheet order…'),
+  h('option', { value: 'checks' }, 'Sheet checks'), h('option', { value: 'untick' }, 'Untick all…'));
+
+  mount(
+    floatbar,
+    h('header', { class: 'runhead' },
+      h('div', { class: 'row' },
+        h('a', { class: 'link', href: '#/', style: 'padding-left:0' }, '‹ Runs'),
+        h('h1', null, `${data.map((d) => shortRoute(d.run.route)).join(' + ')} · ${fmtDate(date)}`),
+        menu,
+        h('button', { class: 'btn small primary', onclick: () => shareRuns(ids, `${label} ${fmtDate(date)}`) }, 'Text link')),
+      h('div', { class: 'row chips' }, withChip, orderChip, gpsChip, syncChip),
+      seg ? h('div', { class: 'row' }, seg) : null,
+      h('div', { class: 'row' }, search, todoBtn)),
+    body);
+
+  // ------------------------------------------------------------ hold to move
+  // Hold a tile (or a street name) ~half a second: it lifts and follows your
+  // finger. Let go to drop it before/after the tile underneath. A quick tap
+  // still ticks; a normal swipe still scrolls.
+  const HOLD_MS = 450;
+  const drag = { timer: null, active: null, suppressClick: false, x: 0, y: 0, raf: null, target: null };
+
+  function clearMarks() {
+    body.querySelectorAll('.drop-before, .drop-after').forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+  }
+  function startDrag(el, kind, x, y) {
+    drag.timer = null;
+    // A long hold is never a tap, even if moving isn't allowed here.
+    drag.suppressClick = true;
+    clearTimeout(drag.sTimer);
+    if (!S.useCustom && S.data.some(hasCustom)) { toast('Switch back to your order (•••) to move tiles.'); return; }
+    if (S.todoOnly || S.query) { toast('Clear “To do only” and search to move tiles, so you can see where they land.'); return; }
+    if (el.closest('[data-fixed]')) { toast('This run follows its own layout rules (building order, banks), so tiles can’t be moved here.'); return; }
+    const src = kind === 'tile' ? el : el.closest('.street');
+    const runId = src.dataset.run;
+    const keys = kind === 'tile' ? [el.dataset.addr] : S.blocks[src.dataset.block].keys;
+    const r = (kind === 'tile' ? el : el).getBoundingClientRect();
+    const ghost = (kind === 'tile' ? el : el).cloneNode(true);
+    ghost.classList.add('ghost');
+    Object.assign(ghost.style, { width: `${r.width}px`, left: '0px', top: '0px' });
+    document.body.append(ghost);
+    src.classList.add('drag-src');
+    document.body.classList.add('is-dragging');
+    drag.active = { kind, runId, keys, src, ghost, offX: x - r.left, offY: y - r.top, label: kind === 'tile' ? el.querySelector('.num')?.firstChild?.textContent : S.blocks[src.dataset.block].label };
+    if (navigator.vibrate) navigator.vibrate(30);
+    moveGhost(x, y);
+    autoScroll();
+  }
+  function moveGhost(x, y) {
+    const a = drag.active;
+    drag.x = x; drag.y = y;
+    a.ghost.style.transform = `translate(${x - a.offX}px, ${y - a.offY}px) rotate(-1.5deg) scale(1.03)`;
+    clearMarks();
+    drag.target = null;
+    const under = document.elementFromPoint(x, y);
+    if (!under) return;
+    if (a.kind === 'tile') {
+      let t = under.closest('.tile');
+      let after = false;
+      if (t && t.dataset.run === a.runId && t !== a.src) {
+        const rc = t.getBoundingClientRect();
+        after = y > rc.bottom - rc.height * 0.25 || (y >= rc.top + rc.height * 0.25 && x > rc.left + rc.width / 2);
+      } else {
+        const head = under.closest('.street');
+        if (!head || head.dataset.run !== a.runId) return;
+        const tiles = [...head.querySelectorAll('.tile')].filter((n) => n !== a.src);
+        if (!tiles.length) return;
+        // over a street name: drop at the start; over the gap below the tiles: drop at the end
+        const first = tiles[0].getBoundingClientRect();
+        if (y < first.top) { t = tiles[0]; after = false; } else { t = tiles[tiles.length - 1]; after = true; }
+      }
+      t.classList.add(after ? 'drop-after' : 'drop-before');
+      drag.target = { anchor: t.dataset.addr, after };
+    } else {
+      const sec = under.closest('.street');
+      if (!sec || sec.dataset.run !== a.runId || sec === a.src) return;
+      const rc = sec.getBoundingClientRect();
+      const after = y > rc.top + rc.height / 2;
+      sec.classList.add(after ? 'drop-after' : 'drop-before');
+      const keys = S.blocks[sec.dataset.block].keys;
+      drag.target = { anchor: after ? keys[keys.length - 1] : keys[0], after };
+    }
+  }
+  function autoScroll() {
+    if (!drag.active) return;
+    const top = document.querySelector('.runhead')?.getBoundingClientRect().bottom || 0;
+    const edge = 70;
+    let dy = 0;
+    if (drag.y < top + edge) dy = -Math.ceil((top + edge - drag.y) / 6);
+    else if (drag.y > innerHeight - edge) dy = Math.ceil((drag.y - (innerHeight - edge)) / 6);
+    if (dy) { window.scrollBy(0, dy); moveGhost(drag.x, drag.y); }
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+  function endDrag(drop) {
+    const a = drag.active;
+    if (!a) return;
+    cancelAnimationFrame(drag.raf);
+    a.ghost.remove();
+    a.src.classList.remove('drag-src');
+    document.body.classList.remove('is-dragging');
+    clearMarks();
+    drag.active = null;
+    drag.suppressClick = true;
+    setTimeout(() => { drag.suppressClick = false; }, 350);
+    const tgt = drag.target;
+    drag.target = null;
+    if (!drop || !tgt) { render(); return; }
+    const d = S.data.find((x) => x.run.id === a.runId);
+    const route = d.run.route;
+    const before = S.seq[route] || null;
+    const current = orderedLines(d).map((l) => l.address_key);
+    const next = moveKeys(current, a.keys, tgt.anchor, tgt.after);
+    if (next.join() === current.join()) { render(); return; }
+    const merged = mergeOrder(before?.keys, next);
+    S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString() };
+    S.useCustom = true;
+    app.store.saveSequence(route, merged, app.me.name);
+    render();
+    toast(`Moved ${a.label || 'it'}. Saved for future ${shortRoute(route)} runs.`, {
+      label: 'Undo',
+      fn: () => { S.seq[route] = before; app.store.saveSequence(route, before?.keys || null, app.me.name); render(); },
+    });
+  }
+  body.addEventListener('pointerdown', (e) => {
+    if (e.button > 0 || drag.active) return;
+    const tileEl = e.target.closest('.tile');
+    const headEl = tileEl ? null : e.target.closest('.street h2');
+    if (!tileEl && !headEl) return;
+    drag.x = e.clientX; drag.y = e.clientY;
+    drag.sx = e.clientX; drag.sy = e.clientY;
+    clearTimeout(drag.timer);
+    drag.timer = setTimeout(() => startDrag(tileEl || headEl, tileEl ? 'tile' : 'block', drag.x, drag.y), HOLD_MS);
+  });
+  const onMove = (e) => {
+    if (drag.active) { moveGhost(e.clientX, e.clientY); return; }
+    if (drag.timer && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10) { clearTimeout(drag.timer); drag.timer = null; }
+    drag.x = e.clientX; drag.y = e.clientY;
+  };
+  const onUp = () => {
+    clearTimeout(drag.timer); drag.timer = null;
+    if (drag.active) { endDrag(true); return; }
+    if (drag.suppressClick) { clearTimeout(drag.sTimer); drag.sTimer = setTimeout(() => { drag.suppressClick = false; }, 350); }
+  };
+  const onCancel = () => { clearTimeout(drag.timer); drag.timer = null; endDrag(false); };
+  // Once a tile is lifted, stop the page scrolling under the finger.
+  const blockScroll = (e) => { if (drag.active) e.preventDefault(); };
+  const noMenu = (e) => { if (e.target.closest?.('.tile, .street h2')) e.preventDefault(); };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onCancel);
+  document.addEventListener('touchmove', blockScroll, { passive: false });
+  body.addEventListener('contextmenu', noMenu);
+
+  render();
+  try {
+    if (!localStorage.getItem('stb.hint.move')) {
+      localStorage.setItem('stb.hint.move', '1');
+      setTimeout(() => toast('Tip: hold a tile or street name to move it.'), 800);
+    }
+  } catch { /* no storage */ }
+
+  // Live updates: other phones on the same run (helpers jumping in).
+  const findLine = (runId, key) => S.data.find((d) => d.run.id === runId)?.lines.find((l) => l.line_key === key);
+  const unsub = app.store.subscribe(ids, app.me, {
+    routes: Object.keys(S.seq),
+    event: (ev) => {
+      if (S.events.some((e) => e.id === ev.id)) return;
+      S.events.push(ev);
+      const l = findLine(ev.run_id, ev.line_key);
+      if (l) {
+        const lay = layoutFor(l.route || S.data.find((d) => d.run.id === ev.run_id)?.run.route);
+        const bundle = lay?.sections.find((sec) => sec.bundle && sec.streets.includes(l.street));
+        if (ev.done) S.flash = bundle ? `bundle:${ev.run_id}:${bundle.id}` : `${ev.run_id}::${ev.line_key}`;
+        showNote(`${ev.user_name || 'Someone'} ${ev.done ? '✓' : 'unticked'} ${l.number} ${titleCase(l.street)}`);
+      }
+      if (!drag.active) render();
+    },
+    presence: (names) => {
+      withChip.hidden = !names.length;
+      withChip.textContent = names.length === 1 ? `With ${names[0]}` : `With ${names.length} others`;
+      withChip.title = names.join(', ');
+    },
+    seq: (route, v) => {
+      if (drag.active) return;
+      S.seq[route] = v;
+      render();
+      showNote(v ? `${v.by || 'Someone'} changed the order` : 'Order reset to the sheet');
+    },
+    reconnect: () => refresh(),
+  });
+  async function refresh() {
+    if (document.visibilityState !== 'visible' || drag.active) return;
+    S.events = await app.store.loadEvents(ids);
+    S.seq = await app.store.loadSequences(Object.keys(S.seq));
+    if (!drag.active) render();
+  }
+  document.addEventListener('visibilitychange', refresh);
+  window.addEventListener('online', refresh);
+  window.addEventListener('pagehide', unsub); // closing the app: drop off "who's on this run" straight away
+  const poll = app.store.mode === 'shared' ? setInterval(refresh, 30000) : null;
+
+  // keep the screen awake while a run is open
+  let lock = null;
+  const wake = async () => { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); } catch { /* not allowed */ } };
+  wake();
+  document.addEventListener('visibilitychange', wake);
+
+  app.cleanup = () => {
+    endDrag(false);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onCancel);
+    document.removeEventListener('touchmove', blockScroll);
+    geo.stop(); unsub(); offSync(); clearInterval(poll); clearInterval(clock); clearTimeout(noteTimer);
+    window.removeEventListener('online', refresh);
+    window.removeEventListener('pagehide', unsub);
+    document.removeEventListener('visibilitychange', refresh);
+    document.removeEventListener('visibilitychange', wake);
+    if (lock) lock.release().catch(() => {});
+  };
+}
+
+const titleCase = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+
+boot().catch((e) => {
+  console.error(e);
+  mount(h('div', { class: 'page' }, h('div', { class: 'banner bad' }, `Something went wrong starting the app: ${e.message}`)));
+});

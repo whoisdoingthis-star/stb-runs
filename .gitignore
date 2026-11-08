@@ -1,0 +1,5 @@
+node_modules/
+build/
+test/*.png
+fetcher/node_modules/
+fetcher/out/

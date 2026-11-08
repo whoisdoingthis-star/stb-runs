@@ -1,0 +1,11 @@
+{
+  "name": "stb-run-sheet-fetcher",
+  "private": true,
+  "type": "module",
+  "description": "Evening fetch of tomorrow's RouteSmart run sheets into the STB Runs app",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "pdfjs-dist": "^5.4.0",
+    "playwright": "^1.56.0"
+  }
+}

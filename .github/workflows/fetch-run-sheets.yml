@@ -1,0 +1,68 @@
+name: Fetch tomorrow's run sheets
+
+# Every 15 minutes from 06:05 to 08:50 UTC = 19:05-21:50 in NZ summer (NZDT)
+# and 18:05-20:50 in NZ winter (NZST). The script itself only acts between
+# 19:00 and 22:00 NZ time and stops once tomorrow's runs are loaded, so most
+# of these runs finish in seconds.
+on:
+  schedule:
+    - cron: '5,20,35,50 6-8 * * *'
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Delivery date to fetch (YYYY-MM-DD). Blank = tomorrow.'
+        required: false
+      dry_run:
+        description: 'Dry run (download and check, but do not save)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: fetch-run-sheets
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fetcher
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TARGET_DATE: ${{ inputs.target_date }}
+      FORCE: ${{ github.event_name == 'workflow_dispatch' }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+
+      - name: Is a fetch needed?
+        id: check
+        run: node fetch-run-sheets.mjs
+        env:
+          CHECK_ONLY: 'true'
+
+      - name: Install the hidden browser
+        if: steps.check.outputs.needed == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Fetch and load the run sheets
+        if: steps.check.outputs.needed == 'true'
+        run: node fetch-run-sheets.mjs
+        env:
+          ROUTESMART_USERNAME: ${{ secrets.ROUTESMART_USERNAME }}
+          ROUTESMART_PASSWORD: ${{ secrets.ROUTESMART_PASSWORD }}
+
+      - name: Keep a screenshot if sign-in failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshot
+          path: fetcher/out/
+          if-no-files-found: ignore
+          retention-days: 7
