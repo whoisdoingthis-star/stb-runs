@@ -78,7 +78,16 @@ async function boot() {
   }
   await app.store.init();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
+    // A new version took over: reload straight away on the Runs list, or offer it mid-run.
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      if (!location.hash.startsWith('#/r/')) location.reload();
+      else toast('A new version of the app is ready.', { label: 'Reload', fn: () => location.reload() });
+    });
   }
   window.addEventListener('hashchange', route);
   await route();
