@@ -131,20 +131,22 @@ async function downloadPdf(day) {
       await signedIn();
     }
     log('Signed in to RouteSmart');
+    // After sign-in the site moves from /login to its home page. Let that finish
+    // before asking for the report, or the request is cut off mid-navigation.
+    await page.waitForURL((u) => !/\/login/i.test(u.pathname), { timeout: 30000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
 
     const body = { WorkspaceID: WORKSPACE, ServiceDay: `${day.dow}_DRAW`, Routes: ROUTES.join(','), Reports: REPORTS, Collate: false };
     // Make the request from inside the signed-in page, exactly as the site does.
-    const res = await page.evaluate(async (b) => {
-      const token = JSON.parse(sessionStorage.getItem('userInfo')).accessToken;
-      const r = await fetch('/api/reports/Reports', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf', 'Content-Type': 'application/json' },
-        body: JSON.stringify(b),
-      });
-      const buf = new Uint8Array(await r.arrayBuffer());
-      let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-      return { status: r.status, type: r.headers.get('content-type'), b64: btoa(bin) };
-    }, body);
+    // If the page is still changing, wait and try again (up to 3 times).
+    let res;
+    for (let attempt = 1; ; attempt++) {
+      try { res = await requestReport(page, body); break; } catch (e) {
+        if (attempt >= 3 || !/context was destroyed|navigation|Target closed/i.test(e.message)) throw e;
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(2000);
+      }
+    }
     const pdf = Buffer.from(res.b64, 'base64');
     if (res.status !== 200 || pdf.subarray(0, 5).toString() !== '%PDF-') {
       throw new Error(`Report request returned ${res.status} ${res.type}, not a PDF${pdf.length < 500 ? `: ${pdf.toString().slice(0, 300)}` : ''}`);
@@ -158,6 +160,20 @@ async function downloadPdf(day) {
   } finally {
     await browser.close();
   }
+}
+
+function requestReport(page, body) {
+  return page.evaluate(async (b) => {
+      const token = JSON.parse(sessionStorage.getItem('userInfo')).accessToken;
+      const r = await fetch('/api/reports/Reports', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf', 'Content-Type': 'application/json' },
+        body: JSON.stringify(b),
+      });
+      const buf = new Uint8Array(await r.arrayBuffer());
+      let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      return { status: r.status, type: r.headers.get('content-type'), b64: btoa(bin) };
+  }, body);
 }
 
 // ---------------------------------------------------------------- main
