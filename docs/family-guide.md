@@ -17,11 +17,11 @@ iPhone: links opened from Messages open in Safari, which keeps its own sign-in, 
 These are remembered on that phone only.
 
 ## The Runs page
-- Each run is a big card: **Run 6**, how many stops, papers and dockets. Tap it to **Start** (or **Continue**).
+- Each run is a big card: **Run 6**, how many stops, items (papers and magazines) and dockets. Tap it to **Start** (or **Continue**).
 - **Pick** on each card is what to collect at the depot, from the report: e.g. **NZH** 1 bundle of 140 + 5 loose (includes 15 for retail), **WD** 2 loose. Shop copies are counted in with the NZH; the note says how many are for shops.
 - **Open all** opens every run for that day together.
 - The line under the date says when the sheets were last updated, and whether anything changed since the previous sheet ("Run 13: 2 details changed"). Tap **What changed on Run 13** to see the list.
-- **Papers to collect** (tap to open): how many of each paper every run needs, how many **delivery dockets** to bring (one for each shop), and the **depot pick** for every run in one list.
+- **To collect** (tap to open): how many of each paper or magazine every run needs, how many **delivery dockets** to bring (one for each shop), and the **depot pick** for every run in one list.
 - **⚙ Settings**: text size, colours, tiles, **Get Runs from RouteSmart** (use it if a change is phoned in), **Upload a run sheet**, change password, sign out.
 - Older days are folded away under **Earlier days**.
 

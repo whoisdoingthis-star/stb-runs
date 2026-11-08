@@ -304,7 +304,7 @@ async function viewHome() {
             h('button', { class: `run-tile ${done && done >= stops ? 'finished' : ''}`, onclick: () => { location.hash = `#/r/${r.id}`; } },
               h('div', { class: 'rt-main' },
                 h('div', { class: 'rt-name' }, shortRoute(r.route)),
-                h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} papers${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
+                h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} items${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
                 pickList(r).length ? h('div', { class: 'rt-pick' }, h('span', { class: 'rt-pick-label' }, 'Pick'),
                   pickList(r).map((x) => pickItem(x))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
@@ -313,7 +313,7 @@ async function viewHome() {
             r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, `What changed on ${shortRoute(r.route)}`),
               h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))) : null);
         }),
-        h('details', { class: 'papers' }, h('summary', null, `Papers to collect: ${rs.reduce((t, r) => t + (r.summary?.copies || 0), 0)} papers`,
+        h('details', { class: 'papers' }, h('summary', null, `To collect: ${rs.reduce((t, r) => t + (r.summary?.copies || 0), 0)} items`,
           rs.some((r) => r.summary?.dockets) ? `, ${rs.reduce((t, r) => t + (r.summary?.dockets || 0), 0)} dockets` : ''), paperSummary(rs)));
     };
     list.replaceChildren(...[
@@ -458,7 +458,7 @@ function paperSummary(rs) {
     return h('th', null, h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, p));
   };
   return h('div', { class: 'card paper-sum' },
-    h('div', { class: 'paper-sum-title' }, 'Papers to collect'),
+    h('div', { class: 'paper-sum-title' }, 'Items to collect'),
     h('table', null,
       h('thead', null, h('tr', null, h('th', null, 'Run'), pubs.map(head), h('th', null, 'Total'), anyRetail ? h('th', { class: 'dk' }, 'Dockets') : null)),
       h('tbody', null, runs.map((r) => h('tr', null,
@@ -606,7 +606,7 @@ function viewLoad() {
       h('div', { style: 'display:flex;align-items:baseline;gap:8px' }, h('h2', { style: 'margin:0;font-size:20px;flex:1' }, r.route),
         h('span', { class: 'muted small' }, r.deliveryDate ? fmtDate(r.deliveryDate, true) : 'no date')),
       h('div', { class: 'small muted', style: 'margin-top:4px' },
-        `${r.summary.lines} addresses${r.summary.sheetLines > r.summary.lines ? ` (${r.summary.sheetLines} sheet lines)` : ''} · ${r.summary.copies} copies`),
+        `${r.summary.lines} addresses${r.summary.sheetLines > r.summary.lines ? ` (${r.summary.sheetLines} sheet lines)` : ''} · ${r.summary.copies} items`),
       h('div', { class: 'pubs', style: 'margin-top:6px' }, Object.entries(r.summary.byPub).map(([p, n]) => {
         const c = pubColor(p);
         return h('span', { class: `pub ${c ? '' : 'nzh'}`, style: c ? `background:${c[0]};color:${c[1]}` : null }, `${p} ${n}`);
@@ -861,7 +861,7 @@ async function viewRun(ids) {
         for (const l of g.lines) { copies += l.qty; if (isDone(l)) copiesDone += l.qty; }
       }
     }
-    fbProg.replaceChildren(h('b', null, `${stopsDone}/${stops}`), ` · ${copiesDone}/${copies} copies`);
+    fbProg.replaceChildren(h('b', null, `${stopsDone}/${stops}`), ` · ${copiesDone}/${copies} items`);
     fbFill.style.width = `${stops ? (100 * stopsDone) / stops : 0}%`;
     S.progress = { done: stopsDone, total: stops, runIds: visibleRuns.map((d) => d.run.id) };
     tick();
@@ -883,7 +883,7 @@ async function viewRun(ids) {
         if (g.type === 'bundle') {
           if (!g.lines.some(match) || (S.todoOnly && allDone)) return;
           out.push(h('section', { class: `street village ${allDone ? 'all-done' : ''}`, 'data-run': d.run.id, 'data-fixed': '1' },
-            sectionHead(d, g.section, `${allDone ? 1 : 0}/1 · ${g.qty} papers`),
+            sectionHead(d, g.section, `${allDone ? 1 : 0}/1 · ${g.qty} items`),
             bundleTile(d, g, st, allDone)));
           return;
         }
@@ -973,10 +973,10 @@ async function viewRun(ids) {
     return h('button', {
       class: `tile bundle ${allDone ? 'done' : ''} ${S.flash === key ? 'flash' : ''}`,
       'aria-pressed': String(allDone), 'data-fixed': '1', 'data-key': key, 'data-label': g.section.label,
-      'aria-label': `${g.section.label}, ${g.qty} papers in one handover${allDone ? ', done' : ''}`,
-      onclick: () => { if (drag.suppressClick) return; tapMany(g.lines, `${g.section.label} (${g.qty} papers)`, key); },
+      'aria-label': `${g.section.label}, ${g.qty} items in one handover${allDone ? ', done' : ''}`,
+      onclick: () => { if (drag.suppressClick) return; tapMany(g.lines, `${g.section.label} (${g.qty} items)`, key); },
     },
-    h('div', { class: 'num' }, `${g.qty} papers`, h('span', { class: 'bundle-tag' }, 'one handover')),
+    h('div', { class: 'num' }, `${g.qty} items`, h('span', { class: 'bundle-tag' }, 'one handover')),
     h('div', { class: 'pubs' }, Object.entries(pubs).map(([p, n]) => pubChip(p, n))),
     h('div', { class: 'composition' }, g.parts.map((p) => h('div', { class: 'comp' },
       h('div', { class: 'comp-head' }, h('b', null, p.label), ` ${p.qty}`),

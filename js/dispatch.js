@@ -218,7 +218,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     return h('div', { class: 'dz-grid' },
       card(`Sheets · ${fmtDate(date, true)}`,
         rs.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
-          h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Papers'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'))),
+          h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'))),
           h('tbody', null, rs.map((r) => h('tr', null,
             h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
             h('td', null, r.summary?.lines ?? '?'),
@@ -239,7 +239,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
             h('div', { class: 'bar' }, h('i', { style: `width:${n ? Math.round((100 * d) / n) : 0}%` })), h('span', { class: 'dz-prog-n' }, `${d}/${n}`));
         }),
         h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–')),
-      card('Papers to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–')),
+      card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–')),
       card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
         : h('p', { class: 'muted' }, 'No delivery photos yet.')));
   }
@@ -325,7 +325,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
         return h('section', { class: 'dz-card' }, h('h2', null, fmtDate(date, true)),
           h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
-            h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Papers'), h('th', null, 'Totals'), h('th', null, 'Notes'), h('th', null, 'Loaded'), h('th', null, 'What changed'))),
+            h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Notes'), h('th', null, 'Loaded'), h('th', null, 'What changed'))),
             h('tbody', null, rs.map((r) => h('tr', null,
               h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
               h('td', null, r.summary?.lines ?? '?'),

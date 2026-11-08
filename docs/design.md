@@ -40,7 +40,7 @@ How screens in STB look and behave, so new features fit in instead of each addin
 | **Bottom bar** (`.actionbar`) | Run screen | Last tick with Undo and 📷; next stop with Next ↓. 48px buttons. Stays until the next action |
 | **Tile** (`.tile`) | Run screen | House number first and large, unit underneath ("Unit 2C", "Suite 1"), chips, notes (3 lines max in two-across), flags. 2px `--edge` border, 3px in big text. States: normal, `.next`, `.done`, kind colours |
 | **Street banner** | Run screen | Full-width `--brand` band, bold capitals, count on the right; green when finished |
-| **Run card** (`.run-tile`) | Home | Whole card is the button: Run N, stops · papers · dockets, progress if started, Start / Continue / View |
+| **Run card** (`.run-tile`) | Home | Whole card is the button: Run N, stops · items · dockets, progress if started, Start / Continue / View |
 | **Sheet** (`openSheet`) | Menus, settings, forms | Slides up from the bottom, title and ✕, Escape closes. Choices as segmented rows (`choiceRow`), actions as full-width rows (`menuItem`), destructive ones last and red |
 | **Toast** | Anywhere | Short confirmations only, one or two lines, never essential, cleared when the screen changes |
 | **Dashboard card** (`.dz-card`) | Dispatch | Title in capitals, one job per card. Tables scroll inside the card |

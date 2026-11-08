@@ -16,14 +16,17 @@ where it came from. Code references point at where the rule is implemented.
 Before a run is saved, the parser checks its totals against the delivery list's own totals and the Key Report's DRAW for each publication. A run that doesn't add up is **never loaded automatically**; the evening fetch fails and says why, and a manual upload asks "Save anyway?". — `js/parser.js`, `fetcher/fetch-run-sheets.mjs`
 
 ## Publications
+**Totals are "items", not "papers"** (Mike, 9 Nov 2026): a run's total mixes newspapers and magazines (WD is Woman's Day), so the app says "115 items", and each publication is listed by name.
+
 | Code | What it is |
 |---|---|
 | NZH | NZ Herald |
 | **NZHR** | **The same NZ Herald, delivered to a retailer (shop). Needs a delivery docket.** (Mike, 8 Nov 2026) |
 | Any code ending in **R** | Treated the same way: that paper to a retailer, plus a docket (e.g. SSTR = SST to a shop). (Assumed from the NZHR rule, 8 Nov 2026) |
-| WD, LIS, WW, SST, TVG… | Other publications |
+| WD | Woman's Day (a magazine) (Mike, 9 Nov 2026) |
+| LIS, WW, SST, TVG… | Other publications |
 
-- **Papers to collect** counts retail copies in their paper's column (NZHR counts as NZH) and shows a **Dockets** column: one docket per retail address, not per copy. — `js/app.js` `paperSummary`, `js/parser.js` `summary.dockets`
+- **Items to collect** counts retail copies in their paper's column (NZHR counts as NZH) and shows a **Dockets** column: one docket per retail address, not per copy. — `js/app.js` `paperSummary`, `js/parser.js` `summary.dockets`
 - Tiles show retail papers as **NZH ×n + DOCKET**.
 
 ## Depot pick: bundles and loose copies

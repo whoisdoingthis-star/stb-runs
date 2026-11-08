@@ -3,10 +3,10 @@
 The dispatch dashboard is where routes are planned: the register of every address we deliver to, the places the vehicle stops, where the work is done on foot, and the rules that apply there. It is for people with **App + Dispatch** access, and is its own site: **whoisdoingthis-star.github.io/stb-runs/dispatch/**. On a laptop a dispatcher lands there when opening the app; on a phone, use **Dispatch dashboard ›** on the Runs page or ⚙ Settings. **‹ Driver app** (bottom of the sidebar) goes back.
 
 ## Overview (the landing page)
-- **Sheets** for today (or the next delivery day loaded): each run's stops, papers, whether the totals match RouteSmart, when it was updated and from where, and how many details changed. **Get Runs from RouteSmart** and **Upload a sheet** are here.
+- **Sheets** for today (or the next delivery day loaded): each run's stops, items, whether the totals match RouteSmart, when it was updated and from where, and how many details changed. **Get Runs from RouteSmart** and **Upload a sheet** are here.
 - **Needs attention**: totals that don't match, changes since the previous sheet, complaints, addresses not tied to a location, new addresses on this sheet, service locations not yet validated. Most lines link straight to the fix.
 - **Progress**: each run's ticks so far and the last tick (live on delivery mornings).
-- **Papers to collect** and **Recent photos**.
+- **Items to collect** and **Recent photos**.
 
 ## Complaints
 - The **Overview** lists the complaints on today's sheet with a one-line summary: what happened and when ("Missed delivery on Sat 7 Nov"), the delivery record (who ticked it and when, with 📷 if there's a photo, or "Before the app"), and the customer's history ("2nd of 2 from this address · previous Fri 2 Oct").
