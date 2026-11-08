@@ -679,6 +679,12 @@ async function viewRun(ids) {
   const gpsChip = h('span', { class: 'st' });
   const syncChip = h('span', { class: 'st' });
   const orderChip = h('span', { class: 'st', hidden: true });
+  // Order switch, right in the run: the family's re-sequenced order or the sheet's original
+  // (the sheet's order is always kept; switching changes only what this phone shows).
+  const orderSeg = h('div', { class: 'seg order-seg', role: 'group', 'aria-label': 'Delivery order' },
+    h('button', { 'data-v': 'mine', onclick: () => { S.useCustom = true; render(); } }, '↕ Our order'),
+    h('button', { 'data-v': 'sheet', onclick: () => { S.useCustom = false; render(); } }, '📄 Sheet order'));
+  const orderRow = h('div', { class: 'rh-row', hidden: true }, orderSeg);
   const body = h('div', { class: 'runbody' });
   const search = h('input', { class: 'search', type: 'search', placeholder: 'Find a number, street or note', enterkeyhint: 'search', autocomplete: 'off' });
   search.addEventListener('input', () => { S.query = search.value.trim().toLowerCase(); render(); });
@@ -919,8 +925,9 @@ async function viewRun(ids) {
     drawBar(q ? null : next);
     S.flash = null;
     const custom = S.data.some((d) => !layoutFor(d.run.route) && hasCustom(d));
-    orderChip.hidden = !custom;
-    orderChip.textContent = S.useCustom ? 'your order' : 'sheet order';
+    orderChip.hidden = true;
+    orderRow.hidden = !custom;
+    for (const b of orderSeg.children) b.setAttribute('aria-pressed', String((b.dataset.v === 'mine') === S.useCustom));
   }
 
   // Building header for a route layout: name, access code (from behind the login), progress.
@@ -1079,7 +1086,7 @@ async function viewRun(ids) {
       (close) => h('div', { class: 'menu-group' },
         choiceRow('Show', [['all', 'All stops'], ['todo', 'To do only']], S.todoOnly ? 'todo' : 'all', (v) => { S.todoOnly = v === 'todo'; render(); }),
         S.data.some((d) => !layoutFor(d.run.route) && hasCustom(d))
-          ? choiceRow('Order', [['mine', 'Your order'], ['sheet', 'Sheet order']], S.useCustom ? 'mine' : 'sheet', (v) => { S.useCustom = v === 'mine'; render(); }) : null,
+          ? choiceRow('Order', [['mine', 'Our order'], ['sheet', 'Sheet order']], S.useCustom ? 'mine' : 'sheet', (v) => { S.useCustom = v === 'mine'; render(); }) : null,
         bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => { setPref('stb-layout', v); render(); }),
         choiceRow('Text', [['normal', 'Normal'], ['big', 'Big']], bigOn() ? 'big' : 'normal', (v) => { if ((v === 'big') !== bigOn()) { toggleBig(); render(); close(); openMenu(); } }),
         choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); })),
@@ -1127,6 +1134,7 @@ async function viewRun(ids) {
         h('button', { class: 'icon-btn', 'aria-label': 'Run options', onclick: openMenu }, '⋯')),
       floatbar,
       seg ? h('div', { class: 'rh-row' }, seg) : null,
+      orderRow,
       searchRow,
       fbFill),
     body,
@@ -1147,7 +1155,7 @@ async function viewRun(ids) {
     // A long hold is never a tap, even if moving isn't allowed here.
     drag.suppressClick = true;
     clearTimeout(drag.sTimer);
-    if (!S.useCustom && S.data.some(hasCustom)) { toast('Switch back to your order (•••) to move tiles.'); return; }
+    if (!S.useCustom && S.data.some(hasCustom)) { toast('Switch to “Our order” at the top to move tiles.'); return; }
     if (S.todoOnly || S.query) { toast('Show all stops and close search (⋯ menu) to move tiles, so you can see where they land.'); return; }
     if (el.closest('[data-fixed]')) { toast('This run follows its own layout rules (building order, banks), so tiles can’t be moved here.'); return; }
     const src = kind === 'tile' ? el : el.closest('.street');

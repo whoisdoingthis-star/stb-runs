@@ -536,3 +536,6 @@ html.big .rt-pick { font-size: 18px; }
 .pick-table td { text-align: left !important; vertical-align: top; }
 .pick-note { color: var(--muted); font-size: 12px; font-weight: 600; }
 html.big .pick-note { font-size: 16px; }
+.order-seg { flex: 1; }
+.order-seg button { min-height: 40px; font-size: 15px; }
+html.big .order-seg button { min-height: 48px; font-size: 18px; }

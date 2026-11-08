@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Our order / Sheet order switch** right under the run header (once a run has been re-ordered), to flip between the family's order and the sheet's original at any time. Only changes what that phone shows.
 - Totals now say **items** instead of papers or copies ("115 items"), since runs mix newspapers and magazines (WD is Woman's Day). "Papers to collect" is now **Items to collect**.
 - **Depot pick** on each run card and in Papers to collect (and the dispatch Overview): bundles and loose copies per paper, straight from the key report, e.g. "NZH 1 bundle of 140 + 5 loose (includes 15 for retail)". Retail copies (NZHR) are combined with NZH, as the depot bundles them together.
 - **Complaints register** (dispatch): every complaint from every key report is kept once, with the delivery record (who ticked it, when, photos) and the customer's history (how many complaints, previous date). The **Overview** summarises today's complaints; the new **Complaints** page shows patterns by kind, run, who ticked it, and repeat addresses, and lets you mark each open, disputed, accepted or closed with notes. The parser now records each complaint's kind, date, paper and subscription. (`complaints`, `complaint_register`)

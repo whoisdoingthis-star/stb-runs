@@ -71,6 +71,8 @@ Some customers report non-delivery when the paper was delivered. Practice: photo
 ## Delivery order
 - The sheet's order is the starting point. A driver can hold and drag tiles or whole streets; the new order is saved per route for everyone and re-applied to future sheets. New addresses go next to their neighbour from the sheet. — `js/sequence.js`
 - Tiles are read left to right, then down. (Mike, 8 Nov 2026)
+- The sheet's original order is always kept. When a run has a custom order, an **Our order / Sheet order** switch sits under the run header so a driver can flip between them at any time; it changes only that phone's view. (Mike, 9 Nov 2026)
+- Later: **smart sequencing** that learns each driver's preferred order from when and where they tick ([roadmap](roadmap.md)). (Mike, 9 Nov 2026)
 - GPS on each tap is for working out a better order later, **not** proof of delivery. (Mike, 7 Nov 2026)
 
 ## Which day "Get Runs" means

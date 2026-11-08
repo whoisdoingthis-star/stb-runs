@@ -13,8 +13,9 @@ All four phases of the [UX review](ux-review.md): night mode by default, the run
 2. **Navigate** (bottom right on a run): send the next 3 operating locations to Google Maps (or the next one to Waze), from the driver's position. Works with Android split screen (STB on top, Maps below); iPhone switches between apps. A compact "next stops" view for half a screen. Discussed 8 Nov 2026: navigation goes stop to stop, never letterbox to letterbox.
 3. **Run 8 from data**: move Run 8's building order and mailbox banks from code (`js/village.js`) into groups, operating and service locations on the dashboard, so they're edited without code.
 4. **Map planning**: lasso addresses on the map and drop them on a stop (the map currently selects by clicking dots).
-5. **Suggested stops**: use tap GPS and timing (walking vs driving gaps) to suggest operating locations and which addresses belong to each.
-6. **Live operations**: allocate runs to drivers, a live map of progress, complaints and photos reviewed in one place.
+5. **Smart sequencing** (Mike, 9 Nov 2026): learn each driver's preferred order from the time and place of their ticks, and offer "Lisa's order" alongside Our order and Sheet order. Needs a few weeks of ticks per run; orders would be stored per person as well as per route.
+6. **Suggested stops**: use tap GPS and timing (walking vs driving gaps) to suggest operating locations and which addresses belong to each.
+7. **Live operations**: allocate runs to drivers, a live map of progress, complaints and photos reviewed in one place.
 
 ## Before relying on it
 - Rotate the Supabase secret key and change the RouteSmart password ([decision 0011](decisions/0011-known-security-shortcuts.md)).
