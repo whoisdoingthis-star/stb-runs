@@ -27,7 +27,7 @@ Before a run is saved, the parser checks its totals against the delivery list's 
 - Tiles show retail papers as **NZH ×n + DOCKET**.
 
 ## Depot pick: bundles and loose copies
-(Mike, 9 Nov 2026.) Papers come from the depot in bundles (e.g. NZH in bundles of 100 or 140). The Key Report states, per run and publication, `Bundles: N with S`, `ODD` (loose copies) and `DRAW` (the total). The app shows that as the run's **pick**: "NZH 1 bundle of 100 + 5 loose", on each run card and in the Papers to collect panel (also on the dispatch Overview). The report's figures are used as they are, per publication code (NZH and NZHR are listed separately, as the report does); if the ODD figure is missing, loose = draw − bundles × size. — `js/app.js` `pickList`
+(Mike, 9 Nov 2026.) Papers come from the depot in bundles (e.g. NZH in bundles of 100 or 140). The Key Report states, per run and publication, `Bundles: N with S`, `ODD` (loose copies) and `DRAW` (the total). The app shows that as the run's **pick**: "NZH 1 bundle of 100 + 5 loose", on each run card and in the Papers to collect panel (also on the dispatch Overview). **Retail copies are combined with their paper** (Mike, 9 Nov 2026: the depot bundles NZH and NZHR together): the pick shows one NZH line with the combined total in whole bundles of the bundle size plus the rest loose, and a note "(includes 13 for retail)". Other papers use the report's figures as they are; if the ODD figure is missing, loose = draw − bundles × size. — `js/app.js` `pickList`
 
 ## Tile colours (Mike, 8 Nov 2026)
 | Tile | Rule |

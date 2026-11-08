@@ -306,7 +306,7 @@ async function viewHome() {
                 h('div', { class: 'rt-name' }, shortRoute(r.route)),
                 h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} papers${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
                 pickList(r).length ? h('div', { class: 'rt-pick' }, h('span', { class: 'rt-pick-label' }, 'Pick'),
-                  pickList(r).map((x) => h('span', { class: 'rt-pick-item' }, h('b', null, x.pub), ` ${pickText(x)}`))) : null,
+                  pickList(r).map((x) => pickItem(x))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
                 done ? h('div', { class: 'rt-sub' }, done >= stops ? '✓ Finished' : `${done} of ${stops} done`) : null),
               h('span', { class: 'rt-go' }, done ? (done >= stops ? 'View' : 'Continue') : 'Start')),
@@ -395,23 +395,34 @@ async function stampPhoto(file, lines) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not process the photo'))), 'image/jpeg', 0.82));
 }
 
-// What to pick up at the depot for a run, straight from the key report's
+// What to pick up at the depot for a run, from the key report's
 // "Bundles: 1 with 100 · ODD: 5 · DRAW: 105" lines: whole bundles plus loose copies.
+// Retail copies (NZHR) are the same paper and are bundled with it at the depot (Mike, 9 Nov 2026),
+// so they're combined: bundles = whole multiples of the bundle size, the rest loose.
 function pickList(r) {
   const pubs = r.key_report?.pubs || {};
-  return Object.entries(pubs)
-    .map(([pub, x]) => {
-      const m = /(\d+)\s*with\s*(\d+)/i.exec(String(x.bundles || ''));
-      const bundles = m ? Number(m[1]) : 0;
-      const size = m ? Number(m[2]) : null;
-      const draw = Number(x.draw) || 0;
-      const loose = Number.isFinite(Number(x.odd)) && x.odd != null ? Number(x.odd) : Math.max(0, draw - bundles * (size || 0));
-      return { pub, bundles, size, loose, draw };
-    })
-    .filter((x) => x.draw > 0)
-    .sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
+  const rows = Object.entries(pubs).map(([pub, x]) => {
+    const m = /(\d+)\s*with\s*(\d+)/i.exec(String(x.bundles || ''));
+    const draw = Number(x.draw) || 0;
+    const bundles = m ? Number(m[1]) : 0;
+    const size = m ? Number(m[2]) : null;
+    const loose = x.odd != null && Number.isFinite(Number(x.odd)) ? Number(x.odd) : Math.max(0, draw - bundles * (size || 0));
+    return { pub, base: basePub(pub), retail: isRetailPub(pub), bundles, size, loose, draw };
+  }).filter((x) => x.draw > 0);
+  const out = [];
+  for (const base of [...new Set(rows.map((x) => x.base))]) {
+    const g = rows.filter((x) => x.base === base);
+    if (g.length === 1 && !g[0].retail) { out.push({ ...g[0], pub: base, retailQty: 0 }); continue; }
+    const draw = g.reduce((t, x) => t + x.draw, 0);
+    const size = g.find((x) => !x.retail)?.size || g.find((x) => x.size)?.size || null;
+    const bundles = size ? Math.floor(draw / size) : g.reduce((t, x) => t + x.bundles, 0);
+    out.push({ pub: base, bundles, size, loose: size ? draw - bundles * size : g.reduce((t, x) => t + x.loose, 0), draw, retailQty: g.filter((x) => x.retail).reduce((t, x) => t + x.draw, 0) });
+  }
+  return out.sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
 }
 const pickText = (x) => [x.bundles ? `${x.bundles} bundle${x.bundles === 1 ? '' : 's'}${x.size ? ` of ${x.size}` : ''}` : null, x.loose ? `${x.loose} loose` : null].filter(Boolean).join(' + ');
+const pickItem = (x, cls) => h(cls === 'div' ? 'div' : 'span', { class: cls === 'div' ? '' : 'rt-pick-item' }, h('b', null, x.pub), ` ${pickText(x)}`,
+  x.retailQty ? h('small', { class: 'pick-note' }, ` (includes ${x.retailQty} for retail)`) : null);
 
 // "Run 13: 3 details changed" / "Run 13: no details changed".
 function changeSummary(route, ch) {
@@ -461,7 +472,7 @@ function paperSummary(rs) {
       h('div', { class: 'paper-sum-title' }, 'Depot pick (bundles + loose)'),
       h('table', null, h('tbody', null, runs.map((r) => h('tr', null,
         h('td', null, r.route.replace(/^HOWICK0?/, 'Run ')),
-        h('td', null, pickList(r).map((x) => h('div', null, h('b', null, x.pub), ` ${pickText(x)}`)))))))) : null,
+        h('td', null, pickList(r).map((x) => pickItem(x, 'div')))))))) : null,
     h('div', { class: 'small muted' }, `${runs.reduce((t, r) => t + (r.summary?.lines || 0), 0)} addresses across ${runs.length} run${runs.length === 1 ? '' : 's'}`,
       anyRetail ? `. NZH includes ${runs.reduce((t, r) => t + retailCopies(r), 0)} retail copies (NZHR); each shop also gets a delivery docket.` : ''));
 }

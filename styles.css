@@ -534,3 +534,5 @@ html.big #toast { font-size: 20px; }
 html.big .rt-pick { font-size: 18px; }
 .pick-table { margin: 10px 0 6px; }
 .pick-table td { text-align: left !important; vertical-align: top; }
+.pick-note { color: var(--muted); font-size: 12px; font-weight: 600; }
+html.big .pick-note { font-size: 16px; }
