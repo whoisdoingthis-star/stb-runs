@@ -20,6 +20,23 @@ function h(tag, props, ...kids) {
 const $app = () => document.getElementById('app');
 const mount = (...nodes) => { const a = $app(); a.replaceChildren(...nodes); };
 
+// "Big & clear" view: much bigger text and tiles, one address per row, stronger
+// contrast. Remembered per phone; on by default for Mum's login.
+const BIG_KEY = 'stb-big';
+function bigOn() {
+  let v = null;
+  try { v = localStorage.getItem(BIG_KEY); } catch { /* private mode */ }
+  if (v != null) return v === '1';
+  return /moana|mum/i.test(app.me?.name || '');
+}
+function applyBig() { document.documentElement.classList.toggle('big', bigOn()); }
+function toggleBig() {
+  const next = !bigOn();
+  try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+  applyBig();
+  return next;
+}
+
 let toastTimer;
 function toast(msg, action) {
   const t = document.getElementById('toast');
@@ -95,6 +112,7 @@ async function boot() {
 
 async function route() {
   if (app.cleanup) { app.cleanup(); app.cleanup = null; }
+  applyBig();
   window.scrollTo(0, 0);
   try {
     app.me = await app.store.session();
@@ -148,6 +166,7 @@ async function viewHome() {
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: runs and ticks are saved on this phone only. Nothing is shared or uploaded.') : null,
     app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs') : null,
     h('label', { class: app.store.mode === 'shared' ? 'btn big' : 'btn primary big', style: app.store.mode === 'shared' ? 'margin-top:8px' : null, for: 'pdf' }, 'Manually upload runsheet'), fileInput,
+    h('button', { class: 'btn big-toggle', style: 'margin-top:8px', 'aria-pressed': String(bigOn()), onclick: (e) => { const on = toggleBig(); e.currentTarget.setAttribute('aria-pressed', String(on)); e.currentTarget.textContent = on ? 'Big text: ON (tap for normal)' : 'Make text bigger'; } }, bigOn() ? 'Big text: ON (tap for normal)' : 'Make text bigger'),
     list));
 
   async function renderList() {
@@ -658,7 +677,8 @@ async function viewRun(ids) {
     flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
     ...flags.filter((f) => f.type === 'complaint' && f.text).map((f) => h('div', { class: 'flag-detail' }, f.text.replace(/^Complaint:\s*/, ''))),
     l.note ? h('div', { class: 'note' }, l.note) : null,
-    done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null);
+    done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null,
+    done ? h('div', { class: 'done-word' }, 'DONE') : null);
   }
 
   const menu = h('select', {
@@ -683,6 +703,8 @@ async function viewRun(ids) {
       } else if (v === 'codes') {
         const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route));
         if (d) openCodes(d);
+      } else if (v === 'big') {
+        const on = toggleBig(); render(); toast(on ? 'Big text on.' : 'Normal text.');
       } else if (v === 'howto') {
         toast('Hold a tile or a street name, drag it, let go. Quick taps still tick.');
       } else if (v === 'resetorder') {
@@ -697,7 +719,7 @@ async function viewRun(ids) {
         alert(S.data.map((d) => `${d.run.route}\n${(d.run.checks || []).map((c) => `${c.ok ? '✓' : '✗'} ${c.label}: ${c.got}/${c.expected}`).join('\n')}${(d.run.warnings || []).length ? `\n\nNotes:\n- ${d.run.warnings.join('\n- ')}` : ''}`).join('\n\n'));
       }
     },
-  }, h('option', { value: '' }, '•••'), h('option', { value: 'refresh' }, 'Refresh'), h('option', { value: 'order' }, 'Switch: your order / sheet order'),
+  }, h('option', { value: '' }, '•••'), h('option', { value: 'big' }, bigOn() ? 'Normal text size' : 'Make text bigger'), h('option', { value: 'refresh' }, 'Refresh'), h('option', { value: 'order' }, 'Switch: your order / sheet order'),
   h('option', { value: 'howto' }, 'How to move tiles'),
   data.some((d) => layoutFor(d.run.route)) ? h('option', { value: 'codes' }, 'Door codes…') : null, h('option', { value: 'resetorder' }, 'Reset to sheet order…'),
   h('option', { value: 'checks' }, 'Sheet checks'), h('option', { value: 'untick' }, 'Untick all…'));

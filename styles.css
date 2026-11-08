@@ -216,3 +216,53 @@ h3.bank .count { font-weight: 500; }
 .sheet { background: var(--card); width: 100%; max-width: 520px; border-radius: 18px 18px 0 0; padding: 18px 16px calc(18px + var(--safe-bottom)); }
 .sheet h2 { margin: 0 0 4px; font-size: 19px; }
 .flag-detail { font-size: 12px; line-height: 1.3; color: var(--bad); font-weight: 600; margin-top: 2px; }
+
+/* ---------- Big & clear view (per phone; ••• → Make text bigger) ---------- */
+.big-toggle { width: 100%; font-size: 16px; }
+.big-toggle[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.done-word { display: none; }
+html.big { --muted: #3b3833; --line: #b9b4a8; }
+html.big body { font-size: 20px; }
+html.big .small, html.big .banner, html.big .field span { font-size: 17px; }
+html.big .topbar h1 { font-size: 30px; }
+html.big .brand { font-size: 15px; }
+html.big .btn { min-height: 56px; font-size: 19px; border-width: 2px; }
+html.big .btn.big { min-height: 72px; font-size: 24px; }
+html.big .btn.small { min-height: 48px; font-size: 17px; }
+html.big .big-toggle { font-size: 19px; }
+html.big .run-card .route { font-size: 26px; }
+html.big .date-head h2 { font-size: 20px; color: var(--ink); }
+html.big .bar { height: 12px; }
+html.big .runhead h1 { font-size: 22px; }
+html.big .stats { font-size: 18px; }
+html.big .chip { font-size: 15px; padding: 6px 10px; }
+html.big .seg button { min-height: 48px; font-size: 18px; }
+html.big .search { font-size: 20px; padding: 12px 14px; }
+html.big .route-divider { font-size: 17px; color: var(--ink); }
+html.big .street { margin-top: 22px; }
+html.big .street h2 { font-size: 24px; margin-bottom: 10px; }
+html.big .street h2 .count { font-size: 18px; }
+html.big .tiles { grid-template-columns: 1fr; gap: 12px; }
+html.big .tile { min-height: 96px; padding: 14px 16px 12px; border-width: 3px; border-color: #8f897c; gap: 6px; }
+html.big .tile.has-pub { padding-left: 24px; }
+html.big .stripe { width: 12px; }
+html.big .tile .num { font-size: 44px; }
+html.big .tile .num .side { font-size: 16px; }
+html.big .tile .street-name, html.big .tile .note { font-size: 18px; color: var(--ink); }
+html.big .pub, html.big .badge { font-size: 18px; padding: 4px 10px; }
+html.big .flag { font-size: 15px; padding: 4px 8px; }
+html.big .flag-detail { font-size: 18px; }
+html.big .tile .who { font-size: 16px; }
+/* Done is unmistakable: solid green, white text, a big tick and the word DONE */
+html.big .tile.done, html.big .tile.has-pub.done { background: #15803d; border-color: #14532d; color: #fff; }
+html.big .tile.done .num::after { color: #fff; font-size: 44px; }
+html.big .tile.done .street-name, html.big .tile.done .note, html.big .tile.done .who { color: #e7fbe9; }
+html.big .tile.done .done-word { display: block; position: absolute; right: 16px; bottom: 12px; font-size: 22px; font-weight: 900; letter-spacing: .08em; }
+html.big .fb-row { height: 44px; font-size: 19px; }
+html.big .fb-row b, html.big .fb-prog { font-weight: 800; }
+html.big .runhead { padding-top: calc(52px + var(--safe-top)); }
+html.big #toast { font-size: 19px; }
+html.big .code { font-size: 17px; }
+html.big h3.bank { font-size: 17px; color: var(--ink); }
+html.big .comp-head { font-size: 18px; }
+html.big .comp-list { font-size: 16px; }
