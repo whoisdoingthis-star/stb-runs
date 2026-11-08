@@ -286,8 +286,14 @@ drop policy if exists photos_add on public.photos;
 create policy photos_add on public.photos for insert to authenticated with check (public.is_member());
 drop policy if exists photo_watch_rw on public.photo_watch;
 create policy photo_watch_rw on public.photo_watch for all to authenticated using (public.is_member()) with check (public.is_member());
-insert into storage.buckets (id, name, public) values ('delivery-photos', 'delivery-photos', false) on conflict (id) do nothing;
-drop policy if exists delivery_photos_read on storage.objects;
-create policy delivery_photos_read on storage.objects for select to authenticated using (bucket_id = 'delivery-photos' and public.is_member());
-drop policy if exists delivery_photos_add on storage.objects;
-create policy delivery_photos_add on storage.objects for insert to authenticated with check (bucket_id = 'delivery-photos' and public.is_member());
+-- Private bucket for delivery photos; only family members can add or view them.
+do $$
+begin
+  if exists (select 1 from information_schema.schemata where schema_name = 'storage') then
+    insert into storage.buckets (id, name, public) values ('delivery-photos', 'delivery-photos', false) on conflict (id) do nothing;
+    drop policy if exists delivery_photos_read on storage.objects;
+    create policy delivery_photos_read on storage.objects for select to authenticated using (bucket_id = 'delivery-photos' and public.is_member());
+    drop policy if exists delivery_photos_add on storage.objects;
+    create policy delivery_photos_add on storage.objects for insert to authenticated with check (bucket_id = 'delivery-photos' and public.is_member());
+  end if;
+end $$;

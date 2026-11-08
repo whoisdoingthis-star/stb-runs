@@ -9,7 +9,7 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.goto('http://localhost:8765/')
-    page.wait_for_selector('text=Load run sheet')
+    page.wait_for_selector('text=Manually upload runsheet')
     page.screenshot(path='test/01-home.png')
     page.set_input_files('#pdf', PDF)
     page.wait_for_selector('text=Check the sheet', timeout=20000)

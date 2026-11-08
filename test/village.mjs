@@ -1,5 +1,5 @@
 // Run 8 acceptance tests (AT-01..AT-10 from the Run 8 rules doc), run against real sheets.
-import * as pdfjs from '/opt/npm-tools/node_modules/pdfjs-dist/legacy/build/pdf.mjs';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import fs from 'fs';
 import assert from 'assert';
 import { extractPages, parseReport } from '../js/parser.js';
