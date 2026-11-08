@@ -305,6 +305,8 @@ async function viewHome() {
               h('div', { class: 'rt-main' },
                 h('div', { class: 'rt-name' }, shortRoute(r.route)),
                 h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} papers${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
+                pickList(r).length ? h('div', { class: 'rt-pick' }, h('span', { class: 'rt-pick-label' }, 'Pick'),
+                  pickList(r).map((x) => h('span', { class: 'rt-pick-item' }, h('b', null, x.pub), ` ${pickText(x)}`))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
                 done ? h('div', { class: 'rt-sub' }, done >= stops ? '✓ Finished' : `${done} of ${stops} done`) : null),
               h('span', { class: 'rt-go' }, done ? (done >= stops ? 'View' : 'Continue') : 'Start')),
@@ -393,6 +395,24 @@ async function stampPhoto(file, lines) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not process the photo'))), 'image/jpeg', 0.82));
 }
 
+// What to pick up at the depot for a run, straight from the key report's
+// "Bundles: 1 with 100 · ODD: 5 · DRAW: 105" lines: whole bundles plus loose copies.
+function pickList(r) {
+  const pubs = r.key_report?.pubs || {};
+  return Object.entries(pubs)
+    .map(([pub, x]) => {
+      const m = /(\d+)\s*with\s*(\d+)/i.exec(String(x.bundles || ''));
+      const bundles = m ? Number(m[1]) : 0;
+      const size = m ? Number(m[2]) : null;
+      const draw = Number(x.draw) || 0;
+      const loose = Number.isFinite(Number(x.odd)) && x.odd != null ? Number(x.odd) : Math.max(0, draw - bundles * (size || 0));
+      return { pub, bundles, size, loose, draw };
+    })
+    .filter((x) => x.draw > 0)
+    .sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
+}
+const pickText = (x) => [x.bundles ? `${x.bundles} bundle${x.bundles === 1 ? '' : 's'}${x.size ? ` of ${x.size}` : ''}` : null, x.loose ? `${x.loose} loose` : null].filter(Boolean).join(' + ');
+
 // "Run 13: 3 details changed" / "Run 13: no details changed".
 function changeSummary(route, ch) {
   const r = shortRoute(route);
@@ -437,6 +457,11 @@ function paperSummary(rs) {
         anyRetail ? h('td', { class: `dk ${retailCopies(r) ? '' : 'zero'}` }, dk(r)) : null))),
       h('tfoot', null, h('tr', null, h('td', null, 'All runs'), pubs.map((p) => h('td', null, total(p))), h('td', { class: 'tot' }, grand),
         anyRetail ? h('td', { class: 'dk' }, dkTotal) : null))),
+    runs.some((r) => pickList(r).length) ? h('div', { class: 'pick-table' },
+      h('div', { class: 'paper-sum-title' }, 'Depot pick (bundles + loose)'),
+      h('table', null, h('tbody', null, runs.map((r) => h('tr', null,
+        h('td', null, r.route.replace(/^HOWICK0?/, 'Run ')),
+        h('td', null, pickList(r).map((x) => h('div', null, h('b', null, x.pub), ` ${pickText(x)}`)))))))) : null,
     h('div', { class: 'small muted' }, `${runs.reduce((t, r) => t + (r.summary?.lines || 0), 0)} addresses across ${runs.length} run${runs.length === 1 ? '' : 's'}`,
       anyRetail ? `. NZH includes ${runs.reduce((t, r) => t + retailCopies(r), 0)} retail copies (NZHR); each shop also gets a delivery docket.` : ''));
 }

@@ -26,6 +26,9 @@ Before a run is saved, the parser checks its totals against the delivery list's 
 - **Papers to collect** counts retail copies in their paper's column (NZHR counts as NZH) and shows a **Dockets** column: one docket per retail address, not per copy. — `js/app.js` `paperSummary`, `js/parser.js` `summary.dockets`
 - Tiles show retail papers as **NZH ×n + DOCKET**.
 
+## Depot pick: bundles and loose copies
+(Mike, 9 Nov 2026.) Papers come from the depot in bundles (e.g. NZH in bundles of 100 or 140). The Key Report states, per run and publication, `Bundles: N with S`, `ODD` (loose copies) and `DRAW` (the total). The app shows that as the run's **pick**: "NZH 1 bundle of 100 + 5 loose", on each run card and in the Papers to collect panel (also on the dispatch Overview). The report's figures are used as they are, per publication code (NZH and NZHR are listed separately, as the report does); if the ODD figure is missing, loose = draw − bundles × size. — `js/app.js` `pickList`
+
 ## Tile colours (Mike, 8 Nov 2026)
 | Tile | Rule |
 |---|---|

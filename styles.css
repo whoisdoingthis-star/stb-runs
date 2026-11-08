@@ -526,3 +526,11 @@ html.big #toast { font-size: 20px; }
 .dz-table td.num { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
 .dz-table tr.muted-row td { opacity: .6; }
 .dz-attn .link, .dz-card > .link { padding: 0; text-align: left; }
+
+/* depot pick: bundles + loose per publication, from the key report */
+.rt-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 6px; font-size: var(--t-s); }
+.rt-pick-label { font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.rt-pick-item b { font-weight: 900; }
+html.big .rt-pick { font-size: 18px; }
+.pick-table { margin: 10px 0 6px; }
+.pick-table td { text-align: left !important; vertical-align: top; }

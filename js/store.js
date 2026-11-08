@@ -275,7 +275,7 @@ export class SupabaseStore extends Base {
 
   async listRuns() {
     const { data, error } = await this.sb.from('runs')
-      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source, last_changes')
+      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source, last_changes, key_report')
       .order('delivery_date', { ascending: false }).order('route').limit(60);
     if (error) { const c = LS.get('stb.runlist', []); if (c.length) return c; throw error; }
     const ids = data.map((r) => r.id);

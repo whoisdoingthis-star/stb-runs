@@ -62,7 +62,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     ]);
     D.addresses = must(a); D.groups = must(g); D.ops = must(o); D.svcs = must(s); D.policies = must(p); D.members = must(m);
     D.addresses.sort(addrCompare);
-    D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes').order('delivery_date', { ascending: false }).order('route').limit(80));
+    D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes, key_report').order('delivery_date', { ascending: false }).order('route').limit(80));
     const focus = focusDate();
     const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
     D.register = (await sb.from('complaint_register').select('*').order('reported_on', { ascending: false }).limit(1000)).data || [];
