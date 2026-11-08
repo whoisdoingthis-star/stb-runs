@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Fix (dispatch):** after **Assign**, the ticked addresses stayed ticked, so the next assignment also moved the previous batch (all 66 Run 8 addresses ended up on Reception). Ticks now clear after every bulk action, and the bar warns about ticked addresses hidden by filters. Run 8's assignments were restored from the change history to each address's first assignment (Amon 11, Hulme 12, Monaco 16, Austin 4, Reception 23).
 - **Dispatch dashboard** (for App + Dispatch access): the **address register** (every address from every run sheet, added automatically, with learned GPS), **locations** (groups → operating locations where the vehicle stops → service locations where the work is done, set on a map and validated), **policies** (entry point, access notes, time windows, speed limits, restrictions, by day), and **users** (add people, App only or App + Dispatch, temporary passwords, switch off). Drivers' screens are unchanged. (`addresses`, `location_groups`, `operating_locations`, `service_locations`, `location_policies`, `dispatch_history`; `members.role`, `members.active`; Edge Function `admin-users`)
 - **Change password** on the Runs page.
 - **Moving tiles a long way**: while holding a tile or street, drag it to the top or bottom of the screen and the list scrolls by itself (it stopped working upwards once you had scrolled down). No more dropping it at the top and picking it up again.

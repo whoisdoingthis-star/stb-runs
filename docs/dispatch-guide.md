@@ -8,7 +8,7 @@ The words used here are defined in [Business rules: locations](business-rules.md
 Every address that has ever appeared on a run sheet, added automatically as sheets load. Nothing to type.
 - **Filters**: by run, by status (not assigned / assigned but not validated / validated / no GPS yet), or search.
 - **GPS** column: how many deliveries have been ticked there with a good GPS fix. Those positions are where the letterbox really is.
-- **Assign**: tick addresses (or the box at the top to tick all shown), choose an **operating location** and optionally a **service location**, then **Assign**. Assigning resets validation, since the new assignment hasn't been checked.
+- **Assign**: tick addresses (or the box at the top to tick all shown), choose an **operating location** and optionally a **service location**, then **Assign**. Assigning resets validation, since the new assignment hasn't been checked. The ticks clear after every Assign, Mark validated or Unassign, so each batch starts fresh; if some ticked addresses are hidden by the filters, the bar says so before you assign.
 - **Mark validated**: once someone has checked on the ground that the assignment is right.
 - Click an address to see it on the map (green = where it was delivered, blue = the stop, orange = the service location), add notes, see every policy that applies to it and where each comes from, or add a policy just for that address.
 

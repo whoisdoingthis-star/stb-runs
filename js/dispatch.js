@@ -155,6 +155,9 @@ export async function viewDispatch(ctx, tab = 'addresses') {
   };
   const refresh = async () => { await load(); render(); };
   const act = async (fn, ok) => { try { await fn(); if (ok) toast(ok); await refresh(); } catch (e) { toast(`Didn't save: ${e.message}`); } };
+  // Bulk actions on the selected addresses. The selection is cleared afterwards, so the next
+  // assignment can never sweep up addresses from the previous one (bug found 8 Nov 2026).
+  const bulkAct = (fn, ok) => act(async () => { await fn(); sel.clear(); }, ok);
 
   // ================= Addresses =================
   function renderAddresses() {
@@ -180,10 +183,12 @@ export async function viewDispatch(ctx, tab = 'addresses') {
       ...D.svcs.filter((s) => s.operating_location_id === opSel.value).map((s) => h('option', { value: s.id }, s.name))));
     const keys = () => [...sel];
     const bulk = h('div', { class: 'dz-bulk', hidden: !sel.size },
-      h('b', null, `${sel.size} selected`), opSel, svcSel,
-      h('button', { class: 'btn small primary', onclick: () => { if (!opSel.value) return toast('Choose an operating location.'); act(async () => must(await sb.from('addresses').update({ operating_location_id: opSel.value, service_location_id: svcSel.value || null, validated_at: null, validated_by: null, updated_at: now(), updated_by: by() }).in('address_key', keys())), `Assigned ${sel.size}.`); } }, 'Assign'),
-      h('button', { class: 'btn small', onclick: () => act(async () => must(await sb.from('addresses').update({ validated_at: now(), validated_by: by(), updated_at: now(), updated_by: by() }).in('address_key', keys()).not('operating_location_id', 'is', null)), 'Marked validated (assigned ones only).') }, 'Mark validated'),
-      h('button', { class: 'btn small', onclick: () => act(async () => must(await sb.from('addresses').update({ operating_location_id: null, service_location_id: null, validated_at: null, validated_by: null, updated_at: now(), updated_by: by() }).in('address_key', keys())), 'Unassigned.') }, 'Unassign'),
+      h('b', null, `${sel.size} selected`),
+      [...sel].some((k) => !shown.some((a) => a.address_key === k)) ? h('span', { class: 'bad small' }, `(${[...sel].filter((k) => !shown.some((a) => a.address_key === k)).length} not shown by the filters)`) : null,
+      opSel, svcSel,
+      h('button', { class: 'btn small primary', onclick: () => { if (!opSel.value) return toast('Choose an operating location.'); bulkAct(async () => must(await sb.from('addresses').update({ operating_location_id: opSel.value, service_location_id: svcSel.value || null, validated_at: null, validated_by: null, updated_at: now(), updated_by: by() }).in('address_key', keys())), `Assigned ${sel.size}.`); } }, 'Assign'),
+      h('button', { class: 'btn small', onclick: () => bulkAct(async () => must(await sb.from('addresses').update({ validated_at: now(), validated_by: by(), updated_at: now(), updated_by: by() }).in('address_key', keys()).not('operating_location_id', 'is', null)), 'Marked validated (assigned ones only).') }, 'Mark validated'),
+      h('button', { class: 'btn small', onclick: () => bulkAct(async () => must(await sb.from('addresses').update({ operating_location_id: null, service_location_id: null, validated_at: null, validated_by: null, updated_at: now(), updated_by: by() }).in('address_key', keys())), 'Unassigned.') }, 'Unassign'),
       h('button', { class: 'link small', onclick: () => { sel.clear(); render(); } }, 'Clear'));
 
     const allBox = h('input', { type: 'checkbox', checked: shown.length > 0 && shown.every((a) => sel.has(a.address_key)), title: 'Select all shown',
