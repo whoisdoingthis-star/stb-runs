@@ -81,6 +81,23 @@ Before midday NZ: today's runs (being delivered this morning). After midday: tom
 ## What counts as "a detail changed"
 When a sheet replaces an earlier one for the same run and day, these are compared address by address: address added, address removed, papers or quantities changed, delivery note changed. Changes to order or flags alone are not counted. — `js/rows.js` `diffLines`
 
+## Delivery outcomes
+(Governance baseline v0.5, adopted 9 Nov 2026.) A tick says the stop has been dealt with; the **outcome** says how:
+
+| Outcome | How it's recorded | Counts as |
+|---|---|---|
+| Delivered | Tap the tile | Delivered |
+| Short | Tick, then ⚠ in the bottom bar → how many were delivered | Delivered, not in full |
+| Couldn't deliver | Tick, then ⚠ → reason (gate locked, dog, no letterbox, door code, not safe, ran out, other) | Not delivered. Not closed either: Dispatch sees it under Needs attention |
+| Undone | Tap again, or Undo | Not dealt with |
+
+- Nothing is edited: the problem is a new entry after the tick, so the history shows both. A later complaint is its own record and never rewrites what was recorded at the time.
+- **DIFOTIS** (Dispatch Overview, per run, per address on the sheet): **Delivered**; **In full** = not short; **On time** = inside the address's time policies in force that day, or on the delivery day if it has none; **In spec** = no wet, damaged or wrong-paper complaint for that day.
+- Bundles (Run 8 reception) record the outcome for every paper in the handover.
+
+## Tracing a tile back to the sheet
+Every run keeps the SHA-256 fingerprint of the PDF it was read from (`runs.source_hash`), and every tile keeps each sheet line it came from: page, row, publication, quantity and the text exactly as printed. Lines are combined into one tile for the driver, never lost. (Governance baseline v0.5, adopted 9 Nov 2026)
+
 ## Locations: operating and service
 (Mike, 8 Nov 2026.) Three levels, so navigation goes where the vehicle stops and the work is planned where it's done:
 
@@ -98,6 +115,9 @@ When a sheet replaces an earlier one for the same run and day, these are compare
 
 ## Policies
 Rules attached to exactly one group, operating location, service location or address, applying to everything beneath it (an address inherits from its service location, its operating location and every group above). Kinds: **entry point** from the road (note and/or GPS), **access note**, **no service before** a time, **deliver between** two times, **speed limit**, **delivery restriction**. Optional days of the week (none = every day); can be switched off without deleting. (Mike, 8 Nov 2026)
+
+- **Dates:** each policy can have a start and an end date. Ended and not-yet-started policies stay for the record but are not in force; drivers will only see policies in force. (Governance baseline v0.5, adopted 9 Nov 2026)
+- **No hidden precedence:** two policies of the same kind that set different values, cover at least one address in common and overlap in days and dates are **refused**, wherever they sit (5:30 on the village and 6:00 on one building is a clash, not "the building wins"). Change one, switch one off, or give them different days or dates. A second rule of the same kind on the same target is also refused. Notes and restrictions add up and never clash. If a clash appears later (an address moved under a stop with a different rule) Dispatch lists it under Needs attention. — `sql/schema.sql` `policies_clash`
 
 ## People and access
 - **App only** (`driver`): runs, ticks, photos, reordering.

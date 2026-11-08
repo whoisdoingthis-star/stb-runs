@@ -6,7 +6,14 @@ export function runRow(r, filename) {
     route: r.route, delivery_date: r.deliveryDate, weekday_name: r.weekdayName, data_processed: r.dataProcessed,
     report_requested: r.reportRequested, source_filename: filename, summary: r.summary, checks: r.checks,
     warnings: r.warnings, key_report: r.keyReport,
+    ...(r.sourceHash ? { source_hash: r.sourceHash } : {}),
   };
+}
+
+/** SHA-256 of the PDF's bytes, as hex: the sheet's fingerprint (runs.source_hash). */
+export async function sha256Hex(bytes) {
+  const d = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export function lineRows(runId, r) {

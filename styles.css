@@ -539,3 +539,21 @@ html.big .pick-note { font-size: 16px; }
 .order-seg { flex: 1; }
 .order-seg button { min-height: 40px; font-size: 15px; }
 html.big .order-seg button { min-height: 48px; font-size: 18px; }
+
+/* Couldn't deliver / short (decision 0014): dealt with, but not a clean delivery. */
+.tile.done.futile, .tile.done.futile.has-pub { background: var(--bad-bg); border-color: var(--bad); }
+.tile.done.futile .num::after { content: "✕"; color: var(--bad); }
+.tile.done.short, .tile.done.short.has-pub { background: var(--warn-bg); border-color: var(--warn); }
+.tile.done.short .num::after { content: "!"; color: var(--warn); }
+.tile .outcome { font-size: 13px; font-weight: 800; line-height: 1.25; }
+.tile.futile .outcome { color: var(--bad); }
+.tile.short .outcome { color: var(--warn); }
+html.big .tile.done.futile, html.big .tile.done.futile.has-pub { background: #7f1d1d; border-color: #450a0a; color: #fff; }
+html.big .tile.done.short, html.big .tile.done.short.has-pub { background: #92400e; border-color: #451a03; color: #fff; }
+html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { color: #fff; font-size: 18px; }
+html.big .tile.done.futile .num::after, html.big .tile.done.short .num::after { color: #fff; }
+.qty-seg { flex-wrap: wrap; }
+.qty-seg button { min-width: 48px; min-height: 48px; font-size: 18px; }
+.menu-head { font-weight: 700; color: var(--muted); margin: 8px 0 4px; font-size: var(--t-s, 14px); }
+.tile.futile .who { color: var(--bad); }
+.tile.short .who { color: var(--warn); }

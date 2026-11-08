@@ -8,6 +8,9 @@ Roles (App only / App + Dispatch) and user management; the address register fill
 ## Done: UX overhaul (9 Nov 2026)
 All four phases of the [UX review](ux-review.md): night mode by default, the run screen (NEXT stop, bottom bar, one menu), the Today home and settings, dispatch as its own site with an Overview, and the [design guide](design.md).
 
+## Done: governance baseline v0.5 adopted (9 Nov 2026)
+Policy dates and clash refusal, couldn't deliver / short, DIFOTIS, sheet fingerprints and line provenance, numbered requirements, glossary, append-only decision records, Run 8 banks in Dispatch ([decision 0014](decisions/0014-governance-baseline.md)).
+
 ## Next
 1. **Drivers see the plan**: the run grouped by operating location ("Park at Monaco car park") with its service locations, and the policies that apply (entry point, time windows, speed limits, access notes) shown on the stop.
 2. **Navigate** (bottom right on a run): send the next 3 operating locations to Google Maps (or the next one to Waze), from the driver's position. Works with Android split screen (STB on top, Maps below); iPhone switches between apps. A compact "next stops" view for half a screen. Discussed 8 Nov 2026: navigation goes stop to stop, never letterbox to letterbox.
@@ -16,6 +19,8 @@ All four phases of the [UX review](ux-review.md): night mode by default, the run
 5. **Smart sequencing** (Mike, 9 Nov 2026): learn each driver's preferred order from the time and place of their ticks, and offer "Lisa's order" alongside Our order and Sheet order. Needs a few weeks of ticks per run; orders would be stored per person as well as per route.
 6. **Suggested stops**: use tap GPS and timing (walking vs driving gaps) to suggest operating locations and which addresses belong to each.
 7. **Live operations**: allocate runs to drivers, a live map of progress, complaints and photos reviewed in one place.
+
+Later, from the governance baseline (for STB proper): several companies on one system (tenants), published route versions that freeze once a run starts, vehicle limits and optimisation.
 
 ## Before relying on it
 - Rotate the Supabase secret key and change the RouteSmart password ([decision 0011](decisions/0011-known-security-shortcuts.md)).

@@ -95,3 +95,34 @@ check('a dispatcher can mark a complaint disputed', (await db.query(`select stat
 await db.exec(`reset role; update members set active=true where email='lisa@example.com'; update auth.ctx set email='lisa@example.com'; set role authenticated;`);
 await db.query(`update complaints set status='closed'`);
 check('a driver cannot change complaint status', (await db.query(`select count(*)::int n from complaints where status='closed'`)).rows[0].n === 0);
+
+// ---- governance baseline: policy dates and clashes, delivery outcomes ----
+await as('mike@example.com');
+await db.query(`update addresses set operating_location_id=$1, service_location_id=$2 where address_key='K|A|1'`, [o, s]);
+const addPol = (row) => db.query(`insert into location_policies(${Object.keys(row).join(',')}) values (${Object.keys(row).map((_, i) => `$${i + 1}`).join(',')}) returning id`, Object.values(row));
+const refused = async (row) => { try { await addPol(row); return null; } catch (e) { return e.message; } };
+const p1 = (await addPol({ group_id: g, kind: 'not_before', time_from: '05:30' })).rows[0].id;
+let msg = await refused({ group_id: g, kind: 'not_before', time_from: '06:00' });
+check('a second "no service before" on the same group is refused', /clashes with an existing policy: No service before 05:30 on Bruce McLaren Village/.test(msg || ''), msg);
+msg = await refused({ address_key: 'K|A|1', kind: 'not_before', time_from: '06:00' });
+check('a different rule on an address inside the group is refused (no hidden precedence)', !!msg && /05:30/.test(msg), msg);
+check('the same rule on that address is not a clash', !(await refused({ address_key: 'K|A|1', kind: 'not_before', time_from: '05:30' })));
+check('notes never clash', !(await refused({ group_id: g, kind: 'access_note', note: 'Gate code at reception' })) && !(await refused({ group_id: g, kind: 'access_note', note: 'Watch for residents walking' })));
+check('different days do not clash', !(await refused({ operating_location_id: o, kind: 'speed_limit', speed_kmh: 10, days: ['Sat'] })) && !(await refused({ operating_location_id: o, kind: 'speed_limit', speed_kmh: 20, days: ['Mon', 'Tue'] })));
+await db.query(`update location_policies set valid_to='2026-11-30' where kind='not_before'`);
+check('non-overlapping dates do not clash', !(await refused({ group_id: g, kind: 'not_before', time_from: '06:00', valid_from: '2026-12-01' })));
+msg = await refused({ group_id: g, kind: 'time_window', time_from: '06:00', time_to: '05:00', valid_from: '2026-12-02', valid_to: '2026-12-01' });
+check('an end date before the start date is refused', /end date is before/.test(msg || ''));
+await db.query(`update location_policies set active=false where id=$1`, [p1]);
+check('a switched-off policy is not current', !(await db.query(`select 1 from current_policies where id=$1`, [p1])).rows.length);
+check('no clashes left over', (await db.query(`select count(*)::int n from policy_clashes`)).rows[0].n === 0);
+// tap outcomes: a tick, then "couldn't deliver" as a new entry; history kept
+await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_name) values (gen_random_uuid(),$1,'K|B|2','K|B|2','HOWICK10',true,'2026-11-08T17:00:00Z','Mike')`, [run2]);
+await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_name,outcome,reason,qty_delivered) values (gen_random_uuid(),$1,'K|B|2','K|B|2','HOWICK10',true,'2026-11-08T17:00:05Z','Mike','futile','Gate locked',0)`, [run2]);
+let ls = (await db.query(`select outcome, reason, done from line_status where run_id=$1 and line_key='K|B|2'`, [run2])).rows[0];
+check('latest entry is the outcome: couldn\'t deliver, gate locked', ls.outcome === 'futile' && ls.reason === 'Gate locked' && ls.done === true);
+check('the original tick is still in the history', (await db.query(`select count(*)::int n from tap_events where line_key='K|B|2'`)).rows[0].n === 2);
+check('older ticks read as delivered', (await db.query(`select outcome from line_status where run_id=$1 and line_key='K|A|1|NZH'`, [id])).rows[0].outcome === 'delivered');
+blocked = false; try { await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,outcome) values (gen_random_uuid(),$1,'x','x','x',true,now(),'lost')`, [run2]); } catch { blocked = true; }
+check('unknown outcomes are refused', blocked);
+check('runs keep a sheet fingerprint', (await db.query(`select source_hash from runs limit 1`)).fields.some((f) => f.name === 'source_hash'));

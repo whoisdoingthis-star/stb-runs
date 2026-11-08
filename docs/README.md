@@ -3,7 +3,9 @@
 | Page | For |
 |---|---|
 | [Family guide](family-guide.md) | Using the app |
-| [Business rules](business-rules.md) | How the sheets are read and shown; locations, policies, access |
+| [Business rules](business-rules.md) | How the sheets are read and shown; outcomes, locations, policies, access |
+| [Glossary](glossary.md) | What the words mean, and the governance baseline's names for them |
+| [Requirements](requirements.md) | Numbered requirements and the tests that prove them |
 | [Dispatch guide](dispatch-guide.md) | Using the dispatch dashboard |
 | [Roadmap](roadmap.md) | What's next |
 | [Design guide](design.md) | How screens look and behave |

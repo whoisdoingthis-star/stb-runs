@@ -44,7 +44,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     return;
   }
   const sb = app.store.sb;
-  const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [], runs: [], status: [], complaints: [], photos: [], register: [] };
+  const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [], runs: [], status: [], complaints: [], photos: [], register: [], lines: [], clashes: [] };
   const sel = new Set();             // selected address keys
   const F = { route: '', status: 'all', q: '' };
   let current = null;                // { type: 'group'|'op'|'svc'|'address', id }
@@ -67,13 +67,15 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
     D.register = (await sb.from('complaint_register').select('*').order('reported_on', { ascending: false }).limit(1000)).data || [];
     const [st, cl, ph, hi] = await Promise.all([
-      ids.length ? sb.from('line_status').select('run_id, line_key, done, user_name, device_time').in('run_id', ids) : { data: [] },
-      ids.length ? sb.from('run_lines').select('run_id, number, street, flags').in('run_id', ids) : { data: [] },
+      ids.length ? sb.from('line_status').select('run_id, line_key, done, outcome, reason, qty_delivered, user_name, device_time').in('run_id', ids) : { data: [] },
+      ids.length ? sb.from('run_lines').select('run_id, line_key, address_key, number, street, qty, flags').in('run_id', ids) : { data: [] },
       sb.from('photos').select('route, address_key, taken_at, user_name').order('taken_at', { ascending: false }).limit(10),
       tab === 'history' ? sb.from('dispatch_history').select('*').order('at', { ascending: false }).limit(250) : { data: D.history },
     ]);
     D.status = st.data || [];
-    D.complaints = (cl.data || []).filter((l) => (l.flags || []).some((f) => f.type === 'complaint'));
+    D.lines = cl.data || [];
+    D.complaints = D.lines.filter((l) => (l.flags || []).some((f) => f.type === 'complaint'));
+    D.clashes = (await sb.from('policy_clashes').select('*')).data || [];
     D.photos = ph.data || [];
     D.history = hi.data || [];
   }
@@ -101,7 +103,14 @@ export async function viewDispatch(ctx, tab = 'overview') {
     : p.operating_location_id ? `${opById(p.operating_location_id)?.name} (stop)`
       : p.service_location_id ? `${svcById(p.service_location_id)?.name} (service)`
         : addrLabel(D.addresses.find((a) => a.address_key === p.address_key) || { number: '?', street: p.address_key });
-  const policyText = (p) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+  const shortDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+  // Current, not started yet, or ended (ended ones stay for the record but drivers won't see them).
+  const policyState = (p) => !p.active ? 'off' : p.valid_from && p.valid_from > today ? 'future' : p.valid_to && p.valid_to < today ? 'ended' : 'current';
+  const policyDates = (p) => p.valid_from && p.valid_to ? ` · ${shortDay(p.valid_from)} to ${shortDay(p.valid_to)}`
+    : p.valid_from ? ` · from ${shortDay(p.valid_from)}` : p.valid_to ? ` · until ${shortDay(p.valid_to)}` : '';
+  const policyText = (p) => policyBody(p) + policyDates(p) + ({ future: ' (not started)', ended: ' (ended)', off: ' (off)' }[policyState(p)] || '');
+  const policyBody = (p) => {
     const days = p.days?.length ? ` · ${p.days.join(', ')}` : '';
     const t = (x) => (x || '').slice(0, 5);
     switch (p.kind) {
@@ -195,6 +204,46 @@ export async function viewDispatch(ctx, tab = 'overview') {
   // (act/bulkAct return promises, so a toast with Undo can follow the refresh)
 
   // ================= Overview (landing) =================
+  // Delivered In Full, On Time, In Specification (docs/business-rules.md#delivery-outcomes).
+  // Counted per address on the sheet, as at the time of service; later complaints about
+  // wet or wrong papers count against In spec, but never rewrite who ticked what.
+  function difotis(rs, date) {
+    const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : '–');
+    const rows = rs.map((r) => {
+      const lines = D.lines.filter((l) => l.run_id === r.id);
+      const st = Object.fromEntries(D.status.filter((x) => x.run_id === r.id).map((x) => [x.line_key, x]));
+      let delivered = 0; let full = 0; let onTime = 0; let spec = 0; let futile = 0;
+      for (const l of lines) {
+        const e = st[l.line_key];
+        if (!e?.done) continue;
+        if (e.outcome === 'futile') { futile++; continue; }
+        delivered++;
+        if (e.outcome !== 'short') full++;
+        if (deliveredOnTime(l, e, date)) onTime++;
+        const bad = D.register.some((c) => c.address_key === l.address_key && c.happened_on === date && ['WET', 'DAMAGED', 'WRONG'].includes(c.kind));
+        if (!bad) spec++;
+      }
+      return { r, n: lines.length, delivered, full, onTime, spec, futile };
+    });
+    return h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
+      h('thead', null, h('tr', null, ['Run', 'Delivered', 'In full', 'On time', 'In spec', 'Not delivered'].map((t) => h('th', null, t)))),
+      h('tbody', null, rows.map((x) => h('tr', null, h('td', null, shortRoute(x.r.route)),
+        h('td', null, `${x.delivered}/${x.n}`), h('td', null, pct(x.full, x.delivered)), h('td', null, pct(x.onTime, x.delivered)),
+        h('td', null, pct(x.spec, x.delivered)), h('td', { class: x.futile ? 'bad' : '' }, String(x.futile)))))),
+      h('p', { class: 'small muted' }, 'In full = no short delivery. On time = within the address\u2019s time policies if it has any, otherwise on the delivery day. In spec = no wet, damaged or wrong-paper complaint for that day. Not delivered = ticked as couldn\u2019t deliver.'));
+  }
+  // On time: inside any current time policy for that address and weekday; with none, on the delivery day.
+  function deliveredOnTime(l, e, date) {
+    const local = new Date(e.device_time);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(local);
+    if (day !== date) return false;
+    const hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Pacific/Auckland', hour: '2-digit', minute: '2-digit', hour12: false }).format(local);
+    const wd = new Date(`${date}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short' }).slice(0, 3);
+    const a = D.addresses.find((x) => x.address_key === l.address_key);
+    const rules = (a ? policiesFor({ address: a }) : []).filter((p) => policyState(p) === 'current' && (!p.days?.length || p.days.includes(wd)) && ['not_before', 'time_window'].includes(p.kind));
+    return rules.every((p) => hm >= (p.time_from || '').slice(0, 5) && (p.kind !== 'time_window' || hm <= (p.time_to || '').slice(0, 5)));
+  }
+
   function renderOverview() {
     const date = focusDate();
     const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
@@ -206,11 +255,15 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const changed = rs.filter((r) => r.last_changes?.count);
     const failed = rs.filter((r) => (r.checks || []).some((c) => !c.ok));
     const todays = D.register.filter((c) => c.last_seen_on === date || c.reported_on === date);
+    const lineOf = (x) => D.lines.find((l) => l.run_id === x.run_id && l.line_key === x.line_key);
+    const futile = D.status.filter((x) => x.outcome === 'futile').map((x) => ({ ...x, line: lineOf(x) }));
     const card = (title, ...kids) => h('section', { class: `dz-card ${title.startsWith('Sheets') ? 'wide' : ''}` }, h('h2', null, title), ...kids);
     const attention = [
       failed.length ? h('li', { class: 'bad' }, `Totals don't match on ${failed.map((r) => shortRoute(r.route)).join(', ')}`) : null,
       changed.length ? h('li', null, `${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')} since the previous sheet`) : null,
       todays.length ? h('li', null, h('button', { class: 'link', onclick: () => go('complaints', null) }, `${todays.length} complaint${todays.length === 1 ? '' : 's'} on this sheet (see below)`)) : null,
+      D.clashes.length ? h('li', { class: 'bad' }, h('button', { class: 'link', onclick: () => go('policies', null) }, `${D.clashes.length} pair${D.clashes.length === 1 ? '' : 's'} of policies disagree`)) : null,
+      futile.length ? h('li', { class: 'bad' }, `Not delivered: ${futile.map((x) => `${x.line ? `${x.line.number} ${titleCase(x.line.street)}` : '?'} (${x.reason || '?'}, ${x.user_name || '?'})`).join(', ')}`) : null,
       unassigned.length ? h('li', null, h('button', { class: 'link', onclick: () => { F.status = 'unassigned'; F.route = ''; go('addresses', null); } }, `${unassigned.length} addresses not tied to a location`)) : null,
       newOnes.length ? h('li', null, `${newOnes.length} new address${newOnes.length === 1 ? '' : 'es'} on this sheet: ${newOnes.slice(0, 6).map(addrLabel).join(', ')}${newOnes.length > 6 ? '…' : ''}`) : null,
       notValidated.length ? h('li', null, h('button', { class: 'link', onclick: () => go('locations', null) }, `${notValidated.length} service location${notValidated.length === 1 ? '' : 's'} not validated on the ground`)) : null,
@@ -239,6 +292,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
             h('div', { class: 'bar' }, h('i', { style: `width:${n ? Math.round((100 * d) / n) : 0}%` })), h('span', { class: 'dz-prog-n' }, `${d}/${n}`));
         }),
         h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–')),
+      rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null,
       card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–')),
       card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
         : h('p', { class: 'muted' }, 'No delivery photos yet.')));
@@ -253,6 +307,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
   // Who ticked that delivery, as evidence (or the lack of it).
   function deliveredLine(c) {
     if (!c.happened_on) return 'Date of the problem not given';
+    if (c.delivered_by && c.delivered_outcome === 'futile') return `Not delivered: ${c.delivered_reason || 'no reason given'} (${c.delivered_by}, ${new Date(c.delivered_at).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })})`;
+    if (c.delivered_by && c.delivered_outcome === 'short') return `Short delivery by ${c.delivered_by}`;
     if (c.delivered_by) return `${c.delivered ? 'Ticked' : 'Unticked'} by ${c.delivered_by} at ${new Date(c.delivered_at).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}${c.photos_that_day ? ` · 📷 ${c.photos_that_day}` : ''}`;
     return c.happened_on < '2026-11-09' ? 'Before the app (no tick record)' : 'No tick recorded that day';
   }
@@ -599,7 +655,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
 
   // ================= Policies =================
   function policyItem(p) {
-    return h('li', { class: p.active ? '' : 'muted' }, policyText(p),
+    return h('li', { class: policyState(p) === 'current' ? '' : 'muted' }, policyText(p),
       h('button', { class: 'link small', onclick: () => act(async () => must(await sb.from('location_policies').update({ active: !p.active, updated_at: now(), updated_by: by() }).eq('id', p.id)), p.active ? 'Switched off.' : 'Switched on.') }, p.active ? 'Switch off' : 'Switch on'),
       h('button', { class: 'link small danger', onclick: () => { if (confirm('Delete this policy?')) act(async () => must(await sb.from('location_policies').delete().eq('id', p.id)), 'Deleted.'); } }, 'Delete'));
   }
@@ -611,6 +667,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const speed = h('input', { type: 'number', min: 5, max: 100, step: 5, placeholder: 'km/h' });
     const lat = h('input', { type: 'number', step: 'any', placeholder: 'Lat' }), lng = h('input', { type: 'number', step: 'any', placeholder: 'Lng' });
     const days = DAYS.map((d) => h('label', { class: 'dz-day' }, h('input', { type: 'checkbox', value: d }), d));
+    const vFrom = h('input', { type: 'date', 'aria-label': 'Starts' }), vTo = h('input', { type: 'date', 'aria-label': 'Ends' });
     const show = () => {
       const k = kind.value;
       from.hidden = !['not_before', 'time_window'].includes(k); to.hidden = k !== 'time_window';
@@ -620,9 +677,12 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const form = h('details', { class: 'dz-polform' }, h('summary', null, '+ Add a policy'),
       h('div', { class: 'dz-polgrid' }, kind, note, from, to, speed, lat, lng),
       h('div', { class: 'dz-days' }, h('span', { class: 'small muted' }, 'Days (none = every day): '), days),
+      h('div', { class: 'dz-days' }, h('span', { class: 'small muted' }, 'Starts (blank = now): '), vFrom, h('span', { class: 'small muted' }, ' Ends (blank = no end): '), vTo),
       h('button', { class: 'btn small primary', onclick: () => act(async () => {
         const k = kind.value;
-        const row = { ...scope, kind: k, note: note.value || null, days: days.map((d) => d.firstChild).filter((c) => c.checked).map((c) => c.value), updated_by: by() };
+        const row = { ...scope, kind: k, note: note.value || null, days: days.map((d) => d.firstChild).filter((c) => c.checked).map((c) => c.value), updated_by: by(),
+          valid_from: vFrom.value || null, valid_to: vTo.value || null };
+        if (row.valid_from && row.valid_to && row.valid_to < row.valid_from) throw new Error('The end date is before the start date');
         if (k === 'not_before' || k === 'time_window') { if (!from.value) throw new Error('Set the time'); row.time_from = from.value; }
         if (k === 'time_window') { if (!to.value) throw new Error('Set both times'); row.time_to = to.value; }
         if (k === 'speed_limit') { if (!speed.value) throw new Error('Set the speed'); row.speed_kmh = Number(speed.value); }
@@ -636,10 +696,11 @@ export async function viewDispatch(ctx, tab = 'overview') {
   function renderPolicies() {
     const all = [...D.policies].sort((a, b) => policyTarget(a).localeCompare(policyTarget(b)));
     return h('section', { class: 'dz-main' },
-      h('p', { class: 'small muted' }, 'Policies attach to a group, an operating location, a service location or one address, and apply to everything under it. Add them from the Locations tab (or an address). Kinds: entry point from the road, access notes, no service before a time, deliver between two times, speed limits, delivery restrictions.'),
+      h('p', { class: 'small muted' }, 'Policies attach to a group, an operating location, a service location or one address, and apply to everything under it. Add them from the Locations tab (or an address). Kinds: entry point from the road, access notes, no service before a time, deliver between two times, speed limits, delivery restrictions. Each can have a start and end date; ended ones are kept for the record. Two rules that disagree (say 5:30 on the village and 6:00 on one building, same days and dates) are refused: nothing is quietly overruled.'),
+      D.clashes.length ? h('div', { class: 'banner bad' }, h('b', null, 'These policies disagree: '), D.clashes.map((c) => `${c.policy} vs ${c.other}`).join(' · '), '. Usually because an address moved under a different stop. Switch one off or give them different dates.') : null,
       all.length ? h('table', { class: 'dz-table' },
         h('thead', null, h('tr', null, h('th', null, 'Applies to'), h('th', null, 'Policy'), h('th', null, ''))),
-        h('tbody', null, all.map((p) => h('tr', { class: p.active ? '' : 'muted' }, h('td', null, policyTarget(p)), h('td', null, policyText(p)), h('td', null, [...policyItem(p).querySelectorAll('button')]))))) : h('p', { class: 'muted' }, 'No policies yet.'));
+        h('tbody', null, all.map((p) => h('tr', { class: policyState(p) === 'current' ? '' : 'muted' }, h('td', null, policyTarget(p)), h('td', null, policyText(p)), h('td', null, [...policyItem(p).querySelectorAll('button')]))))) : h('p', { class: 'muted' }, 'No policies yet.'));
   }
 
   // ================= Users =================

@@ -4,6 +4,7 @@ import { Geo } from './geo.js';
 import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
+import { sha256Hex } from './rows.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -533,8 +534,11 @@ async function loadFiles(files) {
     const results = [];
     const problems = [];
     for (const f of files) {
-      const pages = await extractPages(lib, new Uint8Array(await f.arrayBuffer()));
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const hash = await sha256Hex(bytes.slice()).catch(() => null);
+      const pages = await extractPages(lib, bytes);
       const res = parseReport(pages);
+      res.routes.forEach((r) => { r.sourceHash = hash; });
       problems.push(...res.problems.map((p) => `${f.name}: ${p}`));
       for (const r of res.routes) results.push({ r, filename: f.name });
     }
@@ -702,13 +706,14 @@ async function viewRun(ids) {
   const abSub = h('div', { class: 'ab-sub' });
   const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, '↶ Undo');
   const abPhoto = h('button', { class: 'ab-btn', hidden: true, onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, '📷');
+  const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, '⚠');
   const abNext = h('button', { class: 'ab-btn primary', onclick: () => goNext(true) }, 'Next ↓');
   const actionbar = h('div', { class: 'actionbar', role: 'region', 'aria-label': 'Last delivery and next stop' },
-    h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abPhoto, abNext);
+    h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNext);
   function drawBar(nextEl) {
     const last = S.last;
-    abUndo.hidden = !last; abPhoto.hidden = !(last && last.lines.length === 1);
-    abMain.textContent = last ? `✓ ${last.label}` : (nextEl ? 'Next stop' : '');
+    abUndo.hidden = !last; abProblem.hidden = !last; abPhoto.hidden = !(last && last.lines.length === 1);
+    abMain.textContent = last ? `${last.problem ? '⚠' : '✓'} ${last.problem ? `${last.problem}: ` : ''}${last.label}` : (nextEl ? 'Next stop' : '');
     abSub.textContent = nextEl ? `Next: ${nextEl.getAttribute('data-label') || ''}` : (S.progress?.total ? 'All done on this screen' : '');
     abNext.hidden = !nextEl;
   }
@@ -746,7 +751,7 @@ async function viewRun(ids) {
     const evs = lines.map((l) => {
       const e = {
         id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route,
-        done, user_name: app.me.name, device_time: new Date(now).toISOString(), device: deviceLabel(),
+        done, outcome: done ? 'delivered' : 'undone', user_name: app.me.name, device_time: new Date(now).toISOString(), device: deviceLabel(),
       };
       if (fresh) Object.assign(e, { lat: geo.last.lat, lng: geo.last.lng, accuracy_m: geo.last.acc, fix_age_ms: now - geo.last.t });
       return e;
@@ -764,6 +769,39 @@ async function viewRun(ids) {
       const patch = fix ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc, fix_age_ms: Math.max(0, now - fix.t) } : {};
       app.store.patchEvents(evs.map((e) => e.id), patch);
     }
+  }
+
+  // ---- couldn't deliver / short ----------------------------------------
+  // Tick the stop as usual, then ⚠ in the bottom bar. The tick stays in the
+  // history; the problem is a new entry after it (decision 0014).
+  const PROBLEMS = ['Gate locked', 'Dog', 'No letterbox / can\u2019t find it', 'Door code didn\u2019t work', 'Not safe', 'Ran out of papers'];
+  function recordOutcome(last, outcome, reason, qty) {
+    const now = new Date().toISOString();
+    const fix = geo.last && Date.now() - geo.last.t < 60000 ? geo.last : null;
+    const evs = last.lines.map((l) => ({
+      id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route,
+      done: true, outcome, reason: reason || null, qty_delivered: outcome === 'futile' ? 0 : qty ?? null,
+      user_name: app.me.name, device_time: now, device: deviceLabel(),
+      ...(fix ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc, fix_age_ms: Date.now() - fix.t } : {}),
+    }));
+    S.events.push(...evs);
+    app.store.addEvents(evs, false);
+    S.last = { ...last, problem: outcome === 'futile' ? 'Not delivered' : outcome === 'short' ? `Short ${qty}/${qtyOf(last.lines)}` : null };
+    if (outcome === 'delivered') S.last.problem = null;
+    render();
+  }
+  const qtyOf = (lines) => lines.reduce((n, l) => n + partsOf(l).reduce((m, p) => m + p.qty, 0), 0);
+  function openProblem(last) {
+    const total = qtyOf(last.lines);
+    openSheet(`Problem at ${last.label}`,
+      h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'Saved with the time and GPS, so Dispatch can answer a complaint.'),
+      (close) => h('div', { class: 'menu-group' }, h('div', { class: 'menu-head' }, 'Couldn\u2019t deliver'),
+        ...PROBLEMS.map((r) => menuItem(r, () => { close(); recordOutcome(last, 'futile', r); toast(`Saved: not delivered (${r}).`); })),
+        menuItem('Other reason…', () => { const r = prompt('What stopped the delivery?'); if (!r) return; close(); recordOutcome(last, 'futile', r.trim()); toast('Saved: not delivered.'); })),
+      total > 1 ? (close) => h('div', { class: 'menu-group' }, h('div', { class: 'menu-head' }, `Delivered fewer than ${total}`),
+        h('div', { class: 'seg qty-seg' }, Array.from({ length: Math.min(total - 1, 20) }, (_, i) => i + 1).map((n) =>
+          h('button', { onclick: () => { close(); recordOutcome(last, 'short', 'Short', n); toast(`Saved: ${n} of ${total} delivered.`); } }, String(n))))) : null,
+      last.problem ? (close) => h('div', { class: 'menu-group' }, menuItem('It was delivered after all', () => { close(); recordOutcome(last, 'delivered', null, total); toast('Saved: delivered.'); })) : null);
   }
 
   // ---- delivery photos -------------------------------------------------
@@ -1042,6 +1080,7 @@ async function viewRun(ids) {
 
   function tile(l, ev, opts = {}) {
     const done = !!ev?.done;
+    const outcome = done ? ev.outcome || 'delivered' : null;
     const key = `${l.run_id}::${l.line_key}`;
     const flags = l.flags || [];
     const parts = partsOf(l);
@@ -1049,9 +1088,9 @@ async function viewRun(ids) {
     const kind = tileKind(parts);
     const stripe = kind ? h('span', { class: 'stripe' }) : null;
     return h('button', {
-      class: `tile ${done ? 'done' : ''} ${kind ? `has-pub kind-${kind}` : ''} ${S.flash === key ? 'flash' : ''}`,
+      class: `tile ${done ? 'done' : ''} ${outcome === 'futile' ? 'futile' : outcome === 'short' ? 'short' : ''} ${kind ? `has-pub kind-${kind}` : ''} ${S.flash === key ? 'flash' : ''}`,
       'aria-pressed': String(done),
-      'aria-label': `${addrText(l)}, ${parts.map((pt) => `${pt.qty} ${pt.pub}`).join(' and ')}${done ? ', done' : ''}`,
+      'aria-label': `${addrText(l)}, ${parts.map((pt) => `${pt.qty} ${pt.pub}`).join(' and ')}${outcome === 'futile' ? `, not delivered: ${ev.reason || ''}` : outcome === 'short' ? `, short: ${ev.qty_delivered} delivered` : done ? ', done' : ''}`,
       'data-key': key,
       'data-run': l.run_id,
       'data-addr': l.address_key,
@@ -1074,8 +1113,10 @@ async function viewRun(ids) {
       'aria-label': `Take a delivery photo at ${l.number} ${titleCase(l.street)}`,
       onclick: (e) => { e.stopPropagation(); e.preventDefault(); if (drag.suppressClick) return; takePhoto(l); },
     }, photosOf(l).length ? `📷 Photo taken (${photosOf(l).length})` : '📷 Take photo') : null,
+    outcome === 'futile' ? h('div', { class: 'outcome' }, `Not delivered: ${ev.reason || 'no reason given'}`) : null,
+    outcome === 'short' ? h('div', { class: 'outcome' }, `Short: ${ev.qty_delivered} of ${l.qty} delivered`) : null,
     done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null,
-    done ? h('div', { class: 'done-word' }, 'DONE') : null);
+    done ? h('div', { class: 'done-word' }, outcome === 'futile' ? 'NOT DELIVERED' : outcome === 'short' ? 'SHORT' : 'DONE') : null);
   }
 
   // ---- the ⋯ menu: everything that isn't ticking lives here
@@ -1116,7 +1157,7 @@ async function viewRun(ids) {
           if (!done.length) return toast('Nothing is ticked.');
           if (!confirm(`Untick all ${done.length} completed deliveries? Everyone sharing this run will see it.`)) return;
           for (const l of done) {
-            const ev = { id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route, done: false, user_name: app.me.name, device_time: new Date().toISOString(), device: deviceLabel() };
+            const ev = { id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route, done: false, outcome: 'undone', user_name: app.me.name, device_time: new Date().toISOString(), device: deviceLabel() };
             S.events.push(ev); app.store.addEvent(ev);
           }
           S.last = null; render();
@@ -1310,7 +1351,7 @@ async function viewRun(ids) {
         const lay = layoutFor(l.route || S.data.find((d) => d.run.id === ev.run_id)?.run.route);
         const bundle = lay?.sections.find((sec) => sec.bundle && sec.streets.includes(l.street));
         if (ev.done) S.flash = bundle ? `bundle:${ev.run_id}:${bundle.id}` : `${ev.run_id}::${ev.line_key}`;
-        showNote(`${ev.user_name || 'Someone'} ${ev.done ? '✓' : 'unticked'} ${l.number} ${titleCase(l.street)}`);
+        showNote(`${ev.user_name || 'Someone'} ${ev.outcome === 'futile' ? `couldn't deliver (${ev.reason || '?'}):` : ev.outcome === 'short' ? `short (${ev.qty_delivered}):` : ev.done ? '✓' : 'unticked'} ${l.number} ${titleCase(l.street)}`);
       }
       if (!drag.active) render();
     },

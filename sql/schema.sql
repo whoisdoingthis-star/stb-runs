@@ -95,12 +95,30 @@ create table if not exists public.tap_events (
 create index if not exists tap_events_run_idx on public.tap_events (run_id, device_time);
 create index if not exists tap_events_address_idx on public.tap_events (address_key);
 
+-- ---- Delivery outcomes. A tap still says done (the driver has dealt with the stop);
+-- outcome says how. Nothing is overwritten: a problem is a new entry after the tick.
+--   delivered  normal tick (older entries have no outcome and mean this)
+--   short      delivered fewer than the sheet says (qty_delivered of qty)
+--   futile     went there, couldn't deliver (reason: gate locked, dog…)
+--   undone     untick
+alter table public.tap_events add column if not exists outcome text;
+alter table public.tap_events add column if not exists reason text;
+alter table public.tap_events add column if not exists qty_delivered int;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'tap_events_outcome_check') then
+    alter table public.tap_events add constraint tap_events_outcome_check
+      check (outcome is null or outcome in ('delivered', 'short', 'futile', 'undone'));
+  end if;
+end $$;
+
 -- Current state of each line: its latest tap.
 create or replace view public.line_status with (security_invoker = true) as
 select distinct on (run_id, line_key)
-  run_id, line_key, done, user_name, device_time, lat, lng, accuracy_m
+  run_id, line_key, done, user_name, device_time, lat, lng, accuracy_m,
+  coalesce(outcome, case when done then 'delivered' else 'undone' end) as outcome, reason, qty_delivered
 from public.tap_events
 order by run_id, line_key, device_time desc, server_time desc;
+
 
 -- Where each letterbox actually is, from good GPS fixes on completed taps.
 -- Groundwork for learned sequencing.
@@ -619,10 +637,13 @@ select c.*,
            and (p.taken_at at time zone 'Pacific/Auckland')::date = c.happened_on) as photos_that_day,
        count(*) over (partition by c.address_key) as customer_complaints,
        row_number() over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as customer_complaint_no,
-       lag(coalesce(c.happened_on, c.reported_on)) over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as previous_complaint_on
+       lag(coalesce(c.happened_on, c.reported_on)) over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as previous_complaint_on,
+       d.outcome    as delivered_outcome,
+       d.reason     as delivered_reason
 from public.complaints c
 left join lateral (
-  select t.user_name, t.device_time, t.done, t.accuracy_m
+  select t.user_name, t.device_time, t.done, t.accuracy_m,
+         coalesce(t.outcome, case when t.done then 'delivered' else 'undone' end) as outcome, t.reason
   from public.tap_events t join public.runs r on r.id = t.run_id
   where t.address_key = c.address_key and r.delivery_date = c.happened_on
   order by t.device_time desc limit 1
@@ -637,3 +658,110 @@ do $$ begin
   execute 'drop trigger if exists complaints_log on public.complaints';
   execute 'create trigger complaints_log after update on public.complaints for each row execute function public.log_dispatch_change()';
 end $$;
+
+-- ===============================================================
+-- Governance baseline v0.5 (docs/decisions/0014-governance-baseline.md).
+-- ===============================================================
+
+-- ---- Sheet fingerprint: which exact PDF a run came from (SHA-256 of its bytes).
+alter table public.runs add column if not exists source_hash text;
+
+-- ---- Policies have dates, and clashing policies are refused (never resolved by a hidden
+-- "most specific wins"). Two active policies clash when they are the same kind, set
+-- different values, cover at least one address in common, and overlap in days and dates.
+-- Notes and restrictions add up, so they never clash.
+alter table public.location_policies add column if not exists valid_from date;
+alter table public.location_policies add column if not exists valid_to date;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'location_policies_dates_check') then
+    alter table public.location_policies add constraint location_policies_dates_check
+      check (valid_to is null or valid_from is null or valid_to >= valid_from);
+  end if;
+end $$;
+
+-- Every address a policy target covers: the address, or everything under a service
+-- location, an operating location, or a group and its sub-groups.
+create or replace function public.policy_addresses(g uuid, o uuid, s uuid, a text)
+returns table (address_key text)
+language sql stable security definer set search_path = public as $$
+  with recursive tree(id) as (
+    select g where g is not null
+    union
+    select lg.id from public.location_groups lg join tree t on lg.parent_id = t.id
+  )
+  select a where a is not null
+  union select ad.address_key from public.addresses ad where s is not null and ad.service_location_id = s
+  union select ad.address_key from public.addresses ad
+        where o is not null and (ad.operating_location_id = o
+          or ad.service_location_id in (select sl.id from public.service_locations sl where sl.operating_location_id = o))
+  union select ad.address_key from public.addresses ad
+        join public.operating_locations op on op.id = ad.operating_location_id
+        join tree t on t.id = op.group_id;
+$$;
+
+create or replace function public.policies_clash(p public.location_policies, q public.location_policies)
+returns boolean language sql stable security definer set search_path = public as $$
+  select p.id <> q.id and p.active and q.active and p.kind = q.kind
+    and p.kind in ('entry_point', 'not_before', 'time_window', 'speed_limit')
+    and (cardinality(p.days) = 0 or cardinality(q.days) = 0 or p.days && q.days)
+    and daterange(coalesce(p.valid_from, '-infinity'::date), coalesce(p.valid_to, 'infinity'::date), '[]')
+     && daterange(coalesce(q.valid_from, '-infinity'::date), coalesce(q.valid_to, 'infinity'::date), '[]')
+    and (
+      -- the same target: any second rule of these kinds is a clash, even with the same value
+      (p.group_id is not distinct from q.group_id and p.operating_location_id is not distinct from q.operating_location_id
+        and p.service_location_id is not distinct from q.service_location_id and p.address_key is not distinct from q.address_key)
+      or (
+        -- different levels: a clash when the values differ and they share an address
+        (p.time_from, p.time_to, p.speed_kmh, p.lat, p.lng, coalesce(p.note, ''))
+          is distinct from (q.time_from, q.time_to, q.speed_kmh, q.lat, q.lng, coalesce(q.note, ''))
+        and exists (
+          select 1 from public.policy_addresses(p.group_id, p.operating_location_id, p.service_location_id, p.address_key) x
+          join public.policy_addresses(q.group_id, q.operating_location_id, q.service_location_id, q.address_key) y using (address_key))
+      ));
+$$;
+
+create or replace function public.policy_label(p public.location_policies) returns text
+language sql stable security definer set search_path = public as $$
+  select case p.kind
+      when 'not_before' then 'No service before ' || to_char(p.time_from, 'HH24:MI')
+      when 'time_window' then 'Deliver between ' || to_char(p.time_from, 'HH24:MI') || ' and ' || to_char(p.time_to, 'HH24:MI')
+      when 'speed_limit' then 'Speed limit ' || p.speed_kmh || ' km/h'
+      when 'entry_point' then 'Entry point' || coalesce(': ' || p.note, '')
+      else p.kind end
+    || ' on ' || coalesce(
+      (select name || ' (group)' from public.location_groups where id = p.group_id),
+      (select name || ' (stop)' from public.operating_locations where id = p.operating_location_id),
+      (select name || ' (service location)' from public.service_locations where id = p.service_location_id),
+      (select number || ' ' || initcap(street) from public.addresses where address_key = p.address_key),
+      '?');
+$$;
+
+create or replace function public.location_policies_no_clash() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare other public.location_policies;
+begin
+  if new.valid_to < new.valid_from then raise exception 'The end date is before the start date.' using errcode = 'P0001'; end if;
+  if not new.active then return new; end if;
+  select * into other from public.location_policies q where public.policies_clash(new, q) limit 1;
+  if found then
+    raise exception 'This clashes with an existing policy: %. Switch that one off, give the two different dates or days, or change it instead.',
+      public.policy_label(other) using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists location_policies_no_clash on public.location_policies;
+create trigger location_policies_no_clash before insert or update on public.location_policies
+  for each row execute function public.location_policies_no_clash();
+
+-- Clashes that appear later (an address moved under a stop with a different rule).
+create or replace view public.policy_clashes with (security_invoker = true) as
+select p.id as policy_id, q.id as other_id, public.policy_label(p) as policy, public.policy_label(q) as other
+from public.location_policies p join public.location_policies q on p.id < q.id
+where public.policies_clash(p, q);
+
+-- Policies in force on a day (drivers will see these; expired ones stay for the record).
+create or replace view public.current_policies with (security_invoker = true) as
+select * from public.location_policies
+where active
+  and (valid_from is null or valid_from <= (now() at time zone 'Pacific/Auckland')::date)
+  and (valid_to is null or valid_to >= (now() at time zone 'Pacific/Auckland')::date);

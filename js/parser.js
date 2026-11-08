@@ -298,6 +298,7 @@ function parseDeliveryPage(page, out) {
         qty: Number(qty),
         note,
         page: page.number,
+        raw: text, // the sheet line exactly as printed, for tracing a tile back to the PDF
       });
       continue;
     }
@@ -367,7 +368,7 @@ function finishRoute(r, kr) {
   const kept = [];
   for (const ln of r.lines) {
     ln.addressKey = addressKey(r.route, ln.street, ln.number);
-    const src = { seq: ln.seq, page: ln.page, pub: ln.pub, qty: ln.qty };
+    const src = { seq: ln.seq, page: ln.page, pub: ln.pub, qty: ln.qty, raw: ln.raw, ...(ln.note ? { note: ln.note } : {}) };
     let tile = byAddress.get(ln.addressKey);
     if (!tile) {
       tile = { ...ln, parts: [], sources: [], note: '' };

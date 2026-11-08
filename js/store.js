@@ -352,7 +352,7 @@ export class SupabaseStore extends Base {
   async loadEvents(ids) {
     try {
       const { data, error } = await this.sb.from('tap_events')
-        .select('id, run_id, line_key, done, user_name, device_time, server_time, accuracy_m')
+        .select('id, run_id, line_key, done, outcome, reason, qty_delivered, user_name, device_time, server_time, accuracy_m')
         .in('run_id', ids).order('device_time');
       if (error) throw error;
       ids.forEach((id) => this.cacheEvents(id, data.filter((e) => e.run_id === id)));

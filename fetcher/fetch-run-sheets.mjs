@@ -25,7 +25,7 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appJs = (f) => path.join(here, '..', 'js', f);
 const { extractPages, parseReport } = await import(appJs('parser.js'));
-const { runRow, lineRows, changeRecord } = await import(appJs('rows.js'));
+const { runRow, lineRows, changeRecord, sha256Hex } = await import(appJs('rows.js'));
 
 const env = (k, d = '') => (process.env[k] ?? d).toString().trim();
 const BASE = env('RS_BASE_URL', 'https://optimize.routesmart.com');
@@ -203,7 +203,10 @@ if (flag('CHECK_ONLY')) finish(0, 'A fetch is needed');
 try {
   const pdf = env('PDF_FILE') ? fs.readFileSync(env('PDF_FILE')) : await downloadPdf(day);
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const sourceHash = await sha256Hex(new Uint8Array(pdf));
   const parsed = parseReport(await extractPages(pdfjs, new Uint8Array(pdf)));
+  parsed.routes.forEach((r) => { r.sourceHash = sourceHash; });
+  log(`Sheet fingerprint ${sourceHash.slice(0, 12)}…`);
   const filename = `RouteSmart-${day.iso}.pdf`;
 
   const byRoute = Object.fromEntries(parsed.routes.map((r) => [r.route, r]));

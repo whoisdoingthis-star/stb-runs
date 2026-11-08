@@ -5,6 +5,12 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Couldn't deliver / short** (from the STB governance baseline): tick as usual, then **⚠** in the bottom bar for the reason (gate locked, dog, no letterbox, door code, not safe, ran out, other) or how many were left. The tile turns red or amber, other phones see it, and the original tick stays in the history. (`tap_events.outcome`, `reason`, `qty_delivered`)
+- **Dispatch: delivery score (DIFOTIS)** per run on the Overview (delivered, in full, on time, in spec, couldn't deliver); couldn't-deliver stops listed under Needs attention; complaints show if that day's delivery was a couldn't-deliver.
+- **Policies have dates** (start, end) and **can't contradict each other**: a clashing policy is refused with the one it clashes with, at any level, instead of one quietly winning. Clashes that appear later are flagged. (`location_policies.valid_from`, `valid_to`; views `policy_clashes`, `current_policies`)
+- **Sheet fingerprint and line tracing**: each run keeps the SHA-256 of the PDF it came from, and every tile keeps the page, row and printed text of each sheet line behind it. (`runs.source_hash`)
+- **Run 8 banks in Dispatch**: Hulme Bank 1/2 and Monaco Bank 1/2 are service locations with their units tied to them, from the 8 Nov photos.
+- Docs: [requirements](docs/requirements.md) with IDs traced to tests, a [glossary](docs/glossary.md) of the baseline's terms, [decision 0014](docs/decisions/0014-governance-baseline.md); CI now checks requirement evidence and that decision records are never rewritten. The baseline's "Run 11" is Run 8.
 - **Our order / Sheet order switch** right under the run header (once a run has been re-ordered), to flip between the family's order and the sheet's original at any time. Only changes what that phone shows.
 - Totals now say **items** instead of papers or copies ("115 items"), since runs mix newspapers and magazines (WD is Woman's Day). "Papers to collect" is now **Items to collect**.
 - **Depot pick** on each run card and in Papers to collect (and the dispatch Overview): bundles and loose copies per paper, straight from the key report, e.g. "NZH 1 bundle of 140 + 5 loose (includes 15 for retail)". Retail copies (NZHR) are combined with NZH, as the depot bundles them together.

@@ -34,6 +34,18 @@ for (const t of new Set(tables)) if (!model.includes(`\`${t}\``)) fail(`docs/dat
 // 3. The changelog has somewhere to put the next change.
 if (!/^## Unreleased/m.test(fs.readFileSync('CHANGELOG.md', 'utf8'))) fail('CHANGELOG.md: no "## Unreleased" section');
 
+// 3b. Requirements: unique IDs, and every test named as evidence still exists.
+{
+  const req = fs.readFileSync('docs/requirements.md', 'utf8');
+  const ids = [...req.matchAll(/^\| ((?:RB|STB)-\d{3}) \|/gm)].map((m) => m[1]);
+  const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+  if (dup.length) fail(`docs/requirements.md: duplicate IDs ${[...new Set(dup)].join(', ')}`);
+  for (const m of req.matchAll(/`(test\/[\w.-]+): ([^`]+)`/g)) {
+    if (!fs.existsSync(m[1])) { fail(`docs/requirements.md: ${m[1]} does not exist`); continue; }
+    if (!fs.readFileSync(m[1], 'utf8').includes(m[2])) fail(`docs/requirements.md: no test "${m[2]}" in ${m[1]}`);
+  }
+}
+
 // 4. Nothing that looks like a secret is committed (the repository is public).
 const SECRET = [
   [/sb_secret_[A-Za-z0-9_-]{10,}/, 'Supabase secret key'],
@@ -54,6 +66,16 @@ if (di > 0) {
   const range = /^0+$/.test(base || '') ? head : `${base}..${head}`;
   const changed = git(/^0+$/.test(base || '') ? `show --name-only --format= ${head}` : `diff --name-only ${range}`).split('\n').filter(Boolean);
   const messages = git(/^0+$/.test(base || '') ? `log -1 --format=%B ${head}` : `log --format=%B ${range}`);
+  // Decision records are append-only: only an existing record's Status line may change.
+  if (!/^0+$/.test(base || '') && !messages.includes('[decision-fix]')) {
+    const touched = git(`diff --name-status ${range} -- docs/decisions`).split('\n').filter(Boolean)
+      .map((l) => l.split('\t')).filter(([st, f]) => /^[MD]/.test(st) && /\/\d{4}-/.test(f));
+    for (const [st, f] of touched) {
+      if (st.startsWith('D')) { fail(`${f}: decision records are never deleted; supersede it with a new one`); continue; }
+      const lines = git(`diff -U0 ${range} -- ${f}`).split('\n').filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+      if (lines.some((l) => !/^[+-]\s*- \*\*Status:\*\*/.test(l))) fail(`${f}: an accepted decision was rewritten. Write a new record that supersedes it (only the Status line may change), or add [decision-fix] to the commit message for a typo.`);
+    }
+  }
   const code = changed.filter((f) => /^(js\/|sql\/|fetcher\/(?!node_modules)|supabase\/|\.github\/workflows\/)/.test(f) || ['index.html', 'styles.css', 'sw.js', 'config.js', 'manifest.webmanifest'].includes(f));
   const docs = changed.filter((f) => f.startsWith('docs/') || f === 'CHANGELOG.md' || f === 'README.md');
   if (code.length && !docs.length && !messages.includes('[no-docs]')) {

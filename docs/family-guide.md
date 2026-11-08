@@ -27,7 +27,8 @@ These are remembered on that phone only.
 
 ## Doing a run
 - The **purple NEXT tile** is your next stop. Tap it when delivered: it turns green with your name and the time, and the next one lights up (the list scrolls to it if it's off screen).
-- The **bar at the bottom** shows what you just ticked with **↶ Undo** and **📷**, and the next stop with **Next ↓** (jumps to it). It stays until your next tick, so there's no rush.
+- The **bar at the bottom** shows what you just ticked with **↶ Undo**, **⚠** and **📷**, and the next stop with **Next ↓** (jumps to it). It stays until your next tick, so there's no rush.
+- **Couldn't deliver, or not enough papers?** Tick the address as normal, then tap **⚠** in the bottom bar and pick the reason (gate locked, dog, no letterbox, door code didn't work, not safe, ran out) or how many you left. The tile turns **red** (not delivered) or **amber** (short) and Dispatch sees it straight away. Changed your mind? Tap ⚠ again and choose *It was delivered after all*, or Undo.
 - **Street names** are banners in capitals with a count (0/5); the banner turns green when the street is done.
 - The top shows the run, the date, small status dots (GPS, whether ticks have been sent, who else is on the run), progress, and a clock from the first tick. Tap the progress line to jump back to the top.
 - **🔍** finds a number, street or note. **⋯** has everything else: To do only, your order or the sheet's, tiles, text, colours, text a link to the run, door codes, refresh, sheet checks, and (in red, at the bottom) putting the run back in sheet order or unticking everything.

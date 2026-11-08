@@ -20,8 +20,12 @@ checked automatically like the code. These rules apply to every change, whoever
    [docs/run8-village.md](docs/run8-village.md), with the date and who said it.
 4. **Decisions get a record.** A choice someone might later question (a design
    trade-off, a tool, a security shortcut) gets a short file in
-   [docs/decisions/](docs/decisions/), numbered, never deleted. If it is
-   reversed, write a new one that supersedes it.
+   [docs/decisions/](docs/decisions/), numbered, never deleted, never
+   rewritten (only its Status line may change). If it is reversed, write a new
+   one that supersedes it.
+4b. **Requirements have IDs.** A new requirement gets the next ID in
+   [docs/requirements.md](docs/requirements.md) with the test that proves it;
+   IDs are never reused. Naming the test after its ID (`RB-011 …`) helps.
 5. **The database is defined in one place.** Every database change goes into
    `sql/schema.sql` (re-runnable: `if not exists`, `drop policy if exists`) in
    the same commit, and [docs/data-model.md](docs/data-model.md) is updated.
@@ -44,6 +48,8 @@ checked automatically like the code. These rules apply to every change, whoever
 | Tests (`npm test`) | Parser, sequencing, Run 8 layout, change detection or database security tests fail |
 | Docs links | A relative link in any Markdown file points at a file that does not exist |
 | Data model | A table in `sql/schema.sql` is not described in `docs/data-model.md` |
+| Requirements | An ID is used twice, or a test named as evidence in `docs/requirements.md` no longer exists |
+| Decisions | An existing record in `docs/decisions/` is deleted or rewritten beyond its Status line (`[decision-fix]` in the commit message allows a typo fix) |
 | Changelog | `CHANGELOG.md` has no *Unreleased* section |
 | Docs gate | Code changed (`js/`, `sql/`, `fetcher/`, `supabase/`, `index.html`, `styles.css`, `sw.js`, workflows) but neither `docs/` nor `CHANGELOG.md` did |
 | Version bump | Files the phones load changed but `VERSION` in `sw.js` did not |

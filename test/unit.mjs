@@ -31,6 +31,7 @@ const res = parseReport([page]).routes[0];
 t('TIMES stays in the note, not a street', () => { assert.deepEqual([...new Set(res.lines.map((l) => l.street))], ['UXBRIDGE ROAD']); assert.match(res.lines[0].note, /all TIMES$/); });
 t('Weekday conflict flagged but kept', () => assert.ok(res.lines.find((l) => l.number === '99A').flags.some((f) => f.type === 'weekday')));
 t('Two rows at 25 combined into one tile of 4', () => { const k = res.lines.filter((l) => l.number === '25'); assert.equal(k.length, 1); assert.equal(k[0].qty, 4); assert.equal(k[0].sources.length, 2); assert.deepEqual(k[0].parts, [{ pub: 'NZH', qty: 4, lines: 2 }]); assert.ok(k[0].flags.some((f) => f.type === 'combined')); });
+t('RB-001 every sheet line is traceable: page, row and the raw text', () => { const k = res.lines.find((l) => l.number === '25'); assert.deepEqual(k.sources.map((x) => [x.page, x.qty]), [[k.sources[0].page, 1], [k.sources[0].page, 3]]); assert.ok(k.sources.every((x) => /^25\b/.test(x.raw) && Number.isInteger(x.seq)), JSON.stringify(k.sources)); });
 t('Totals reconcile', () => assert.ok(res.checks.every((c) => c.ok), JSON.stringify(res.checks)));
 t('Column side', () => { assert.equal(res.lines[0].column, 'indent'); assert.equal(res.lines[1].column, 'left'); });
 t('Different publications at one address share a tile, NZH first', () => { const k = res.lines.filter((l) => l.number === '7'); assert.equal(k.length, 1); assert.deepEqual(k[0].parts.map((p) => p.pub), ['NZH', 'WW']); assert.equal(k[0].qty, 2); assert.equal(k[0].lineKey, 'HOWICK|UXBRIDGE ROAD|7'); });

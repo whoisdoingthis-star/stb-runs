@@ -34,6 +34,18 @@ with sync_playwright() as p:
     check('progress counts it', page.inner_text('.fb-prog').startswith('1/'), page.inner_text('.fb-prog'))
     page.click('.actionbar >> text=Undo'); page.wait_for_timeout(300)
     check('undo unticks', page.locator('.tile.done').count() == 0 and page.inner_text('.fb-prog').startswith('0/'))
+    # couldn't deliver: tick, then the warning button in the bottom bar; the tick stays in the history
+    key = page.locator('.tile.next').get_attribute('data-key')
+    page.locator('.tile.next').click(); page.wait_for_timeout(200)
+    page.click('[aria-label="Problem with this delivery"]'); page.wait_for_selector('.sheet')
+    page.click('.sheet >> text=Gate locked'); page.wait_for_timeout(300)
+    tl = page.locator(f'.tile[data-key="{key}"]')
+    check("couldn't deliver shows on the tile", 'futile' in (tl.get_attribute('class') or '') and 'Gate locked' in tl.inner_text(), tl.inner_text().replace('\n', ' | '))
+    evs = page.evaluate("Object.keys(localStorage).filter(k=>k.startsWith('stb.')).flatMap(k=>{try{const v=JSON.parse(localStorage.getItem(k));return Array.isArray(v)?v:[]}catch{return []}}).filter(e=>e&&e.outcome)")
+    outs = sorted(e['outcome'] for e in evs if f"{e['run_id']}::{e['line_key']}" == key)
+    check('tick and problem both kept', outs[:2] == ['delivered', 'futile'] or 'futile' in outs and 'delivered' in outs, str(outs))
+    page.click('.actionbar >> text=Undo'); page.wait_for_timeout(300)
+    check('undo clears it', page.locator('.tile.done').count() == 0)
     check('units read naturally', all('/' not in t for t in page.locator('.tile .num').all_inner_texts()))
     # menu: To do only, layout, colours
     page.click('[aria-label="Run options"]'); page.wait_for_selector('.sheet')

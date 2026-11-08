@@ -5,7 +5,9 @@ The dispatch dashboard is where routes are planned: the register of every addres
 ## Overview (the landing page)
 - **Sheets** for today (or the next delivery day loaded): each run's stops, items, whether the totals match RouteSmart, when it was updated and from where, and how many details changed. **Get Runs from RouteSmart** and **Upload a sheet** are here.
 - **Needs attention**: totals that don't match, changes since the previous sheet, complaints, addresses not tied to a location, new addresses on this sheet, service locations not yet validated. Most lines link straight to the fix.
+- **Needs attention** also lists every **couldn't deliver** (address, reason, who) and any **policies that disagree**.
 - **Progress**: each run's ticks so far and the last tick (live on delivery mornings).
+- **Delivery score (DIFOTIS)** per run: delivered, in full (not short), on time (inside the address's time policies, or on the day), in spec (no wet, damaged or wrong-paper complaint for that day), and couldn't deliver. See [business rules](business-rules.md#delivery-outcomes).
 - **Items to collect** and **Recent photos**.
 
 ## Complaints
@@ -51,7 +53,9 @@ Rules attached to a group, an operating location, a service location or one addr
 | Speed limit | 10 km/h inside the village |
 | Delivery restriction | "Not in the letterbox: leave at the door" |
 
-Each can be limited to certain days (none ticked = every day) and switched off without deleting it. The **Policies** tab lists them all.
+Each can be limited to certain days (none ticked = every day) and to **dates** (a start, an end, or both: a summer gate time, a road closure), and switched off without deleting it. Ended and not-yet-started ones are greyed but kept. The **Policies** tab lists them all.
+
+**Policies can't contradict each other.** If you add "no service before 6:00" to a Monaco building while the village says 5:30 on the same days and dates, it is refused with the policy it clashes with. Change one, switch one off, or give them different days or dates. Notes and restrictions can stack freely. If moving an address creates a clash, a red banner on Policies (and a line in Needs attention) lists it.
 
 *Today policies are recorded and shown on the dashboard. Showing them on the drivers' run screens, and navigating stop to stop, is the next step ([roadmap](roadmap.md)).*
 
