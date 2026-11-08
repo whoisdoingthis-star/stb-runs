@@ -520,3 +520,9 @@ html.big .run-tile { min-height: 110px; border-width: 3px; }
 #toast { width: min(520px, calc(100% - 24px)); justify-content: space-between; font-size: 16px; padding: 12px 10px 12px 16px; }
 #toast > span { flex: 1; min-width: 0; }
 html.big #toast { font-size: 20px; }
+.dz-complaints { margin: 0 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.dz-count.bad { background: var(--bad); color: #fff; }
+.dz-patterns { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 16px; }
+.dz-table td.num { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dz-table tr.muted-row td { opacity: .6; }
+.dz-attn .link, .dz-card > .link { padding: 0; text-align: left; }

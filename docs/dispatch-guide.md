@@ -8,6 +8,13 @@ The dispatch dashboard is where routes are planned: the register of every addres
 - **Progress**: each run's ticks so far and the last tick (live on delivery mornings).
 - **Papers to collect** and **Recent photos**.
 
+## Complaints
+- The **Overview** lists the complaints on today's sheet with a one-line summary: what happened and when ("Missed delivery on Sat 7 Nov"), the delivery record (who ticked it and when, with 📷 if there's a photo, or "Before the app"), and the customer's history ("2nd of 2 from this address · previous Fri 2 Oct").
+- The **Complaints** page is the full register: every complaint from every sheet, kept once. Filter by period, run, kind, status, or search an address, driver or note.
+- **Patterns** across the top: complaints by kind, by run, by who ticked the delivery, and **repeat addresses**.
+- Set each complaint's **status**: Open, Disputed (we delivered), Accepted (our miss), Closed, and add notes (e.g. "Photo sent to the owner on WhatsApp").
+- A pattern is a prompt to look closer, not proof: see [Business rules: complaints register](business-rules.md#complaints-register).
+
 ## Runs & sheets
 Every loaded day: per run, the totals check, the sheet's notes, when and how it was loaded, and what changed (tap to expand). Open any run from here.
 

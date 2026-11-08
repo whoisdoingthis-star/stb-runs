@@ -42,6 +42,16 @@ No other greens are used anywhere: green always means delivered. — `js/app.js`
 - **Starts/Restarts** show as **NEW**; **Stops** still on the delivery list show as **STOP?** and are kept, with a warning to check.
 - A complaint, start or stop with no matching tile becomes a warning on the load screen.
 
+## Complaints register
+(Mike, 9 Nov 2026.) Complaints are kept as a register to spot repeat problems, customers who complain often, and patterns by run or by who delivered. — `sql/schema.sql` (`complaints`, `complaint_register`), dispatch **Complaints** page
+- **Filled automatically** whenever a sheet loads: each complaint on the Key Report that matches a tile becomes one entry, identified by address, paper, kind and the date it happened. The same complaint listed on several sheets stays one entry (first and last sheet are recorded).
+- **Recorded:** address and run, kind (missed, wet, damaged, late, wrong paper), the date it happened (from the report's DDMM), paper and subscription, the report's description.
+- **Delivery record:** who ticked that address on that date, at what time, with the GPS accuracy and any photos that day. Complaints about deliveries before the app (before 9 Nov 2026) show "Before the app".
+- **Customer history:** how many complaints this address has made, which number this one is, and the date of the previous one.
+- **Status**, set by a dispatcher: **open**, **disputed** (we delivered: the tick, GPS and photo back it up), **accepted** (our miss), **closed**, with notes. Changes are logged.
+- **Patterns** on the Complaints page: counts by kind, by run, by who ticked the delivery, and repeat addresses, over the last 30/90/365 days or all time.
+- **"Who ticked it" is a record, not a verdict.** A tick with good GPS and a photo is evidence the paper was delivered; a pattern for one person or run is a prompt to look closer, not proof.
+
 ## Delivery-day notes
 A delivery instruction that names days ("FRI only", "Mon-Fri", "No Sat") is checked against the delivery day. If they conflict the tile is marked **CHECK DAY** and kept on the run: the driver decides. — `js/parser.js` `weekdayConflict`
 

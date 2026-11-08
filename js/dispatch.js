@@ -44,7 +44,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     return;
   }
   const sb = app.store.sb;
-  const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [], runs: [], status: [], complaints: [], photos: [] };
+  const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [], runs: [], status: [], complaints: [], photos: [], register: [] };
   const sel = new Set();             // selected address keys
   const F = { route: '', status: 'all', q: '' };
   let current = null;                // { type: 'group'|'op'|'svc'|'address', id }
@@ -65,6 +65,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes').order('delivery_date', { ascending: false }).order('route').limit(80));
     const focus = focusDate();
     const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
+    D.register = (await sb.from('complaint_register').select('*').order('reported_on', { ascending: false }).limit(1000)).data || [];
     const [st, cl, ph, hi] = await Promise.all([
       ids.length ? sb.from('line_status').select('run_id, line_key, done, user_name, device_time').in('run_id', ids) : { data: [] },
       ids.length ? sb.from('run_lines').select('run_id, number, street, flags').in('run_id', ids) : { data: [] },
@@ -158,7 +159,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   // ---- layout
-  const tabs = [['overview', 'Overview'], ['runs', 'Runs & sheets'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'History']];
+  const tabs = [['overview', 'Overview'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'History']];
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
   const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
@@ -181,9 +182,10 @@ export async function viewDispatch(ctx, tab = 'overview') {
   const render = () => {
     maps.splice(0).forEach((m) => m.remove());
     nav.replaceChildren(...tabs.map(([k, label]) => h('a', { href: `#/dispatch/${k}`, class: k === tab ? 'on' : '', onclick: (e) => { e.preventDefault(); go(k, null); } }, label,
-      k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null)));
+      k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null,
+      k === 'complaints' && D.register.some((c) => c.status === 'open') ? h('span', { class: 'dz-count bad' }, D.register.filter((c) => c.status === 'open').length) : null)));
     body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
-      ({ overview: renderOverview, runs: renderRuns, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
+      ({ overview: renderOverview, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
   const act = async (fn, ok) => { try { await fn(); if (ok) toast(ok); await refresh(); } catch (e) { toast(`Didn't save: ${e.message}`); } };
@@ -203,11 +205,12 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const notValidated = D.svcs.filter((x) => !x.validated_at);
     const changed = rs.filter((r) => r.last_changes?.count);
     const failed = rs.filter((r) => (r.checks || []).some((c) => !c.ok));
+    const todays = D.register.filter((c) => c.last_seen_on === date || c.reported_on === date);
     const card = (title, ...kids) => h('section', { class: `dz-card ${title.startsWith('Sheets') ? 'wide' : ''}` }, h('h2', null, title), ...kids);
     const attention = [
       failed.length ? h('li', { class: 'bad' }, `Totals don't match on ${failed.map((r) => shortRoute(r.route)).join(', ')}`) : null,
       changed.length ? h('li', null, `${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')} since the previous sheet`) : null,
-      D.complaints.length ? h('li', null, `${D.complaints.length} complaint${D.complaints.length === 1 ? '' : 's'}: ${D.complaints.map((l) => `${l.number} ${titleCase(l.street)}`).join(', ')}`) : null,
+      todays.length ? h('li', null, h('button', { class: 'link', onclick: () => go('complaints', null) }, `${todays.length} complaint${todays.length === 1 ? '' : 's'} on this sheet (see below)`)) : null,
       unassigned.length ? h('li', null, h('button', { class: 'link', onclick: () => { F.status = 'unassigned'; F.route = ''; go('addresses', null); } }, `${unassigned.length} addresses not tied to a location`)) : null,
       newOnes.length ? h('li', null, `${newOnes.length} new address${newOnes.length === 1 ? '' : 'es'} on this sheet: ${newOnes.slice(0, 6).map(addrLabel).join(', ')}${newOnes.length > 6 ? '…' : ''}`) : null,
       notValidated.length ? h('li', null, h('button', { class: 'link', onclick: () => go('locations', null) }, `${notValidated.length} service location${notValidated.length === 1 ? '' : 's'} not validated on the ground`)) : null,
@@ -227,6 +230,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
           h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
           h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…'))),
       card('Needs attention', attention.length ? h('ul', { class: 'dz-attn' }, attention) : h('p', { class: 'ok' }, '✓ Nothing waiting.')),
+      todays.length ? card(`Complaints on this sheet (${todays.length})`, h('ul', { class: 'dz-complaints' }, todays.map(complaintSummary)),
+        h('button', { class: 'link', onclick: () => go('complaints', null) }, 'All complaints and patterns ›')) : null,
       card('Progress',
         rs.length ? h('div', null, rs.map((r) => {
           const n = r.summary?.lines || 0; const d = doneBy(r.id);
@@ -237,6 +242,76 @@ export async function viewDispatch(ctx, tab = 'overview') {
       card('Papers to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–')),
       card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
         : h('p', { class: 'muted' }, 'No delivery photos yet.')));
+  }
+
+  // ================= Complaints =================
+  const KIND = { MISSED: 'Missed', WET: 'Wet', DAMAGED: 'Damaged', LATE: 'Late', WRONG: 'Wrong paper' };
+  const STATUS = [['open', 'Open'], ['disputed', 'Disputed (we delivered)'], ['accepted', 'Accepted (our miss)'], ['closed', 'Closed']];
+  const cAddr = (c) => `${c.number} ${titleCase(c.street || '')}`;
+  const dayFmt = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : '?');
+  const nth = (n) => `${n}${[, 'st', 'nd', 'rd'][(n % 100 >> 3 ^ 1) && n % 10] || 'th'}`;
+  // Who ticked that delivery, as evidence (or the lack of it).
+  function deliveredLine(c) {
+    if (!c.happened_on) return 'Date of the problem not given';
+    if (c.delivered_by) return `${c.delivered ? 'Ticked' : 'Unticked'} by ${c.delivered_by} at ${new Date(c.delivered_at).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}${c.photos_that_day ? ` · 📷 ${c.photos_that_day}` : ''}`;
+    return c.happened_on < '2026-11-09' ? 'Before the app (no tick record)' : 'No tick recorded that day';
+  }
+  function historyLine(c) {
+    return c.customer_complaints > 1 ? `${nth(c.customer_complaint_no)} of ${c.customer_complaints} from this address${c.previous_complaint_on ? ` · previous ${dayFmt(c.previous_complaint_on)}` : ''}` : 'First complaint from this address';
+  }
+  function complaintSummary(c) {
+    return h('li', null, h('b', null, `${cAddr(c)} (${shortRoute(c.route || '')})`), `: ${c.description || KIND[c.kind] || 'Complaint'}`,
+      h('div', { class: 'small muted' }, `${deliveredLine(c)} · ${historyLine(c)}${c.status !== 'open' ? ` · ${STATUS.find(([v]) => v === c.status)[1]}` : ''}`));
+  }
+
+  function renderComplaints() {
+    const R = D.register;
+    const CF = (F.c ||= { route: '', status: '', kind: '', q: '', days: '90' });
+    const since = CF.days ? new Date(Date.now() - Number(CF.days) * 864e5).toISOString().slice(0, 10) : '';
+    const shown = R.filter((c) => (!CF.route || c.route === CF.route) && (!CF.status || c.status === CF.status) && (!CF.kind || c.kind === CF.kind)
+      && (!since || (c.happened_on || c.reported_on) >= since)
+      && (!CF.q || `${c.number} ${c.street} ${c.notes || ''} ${c.delivered_by || ''}`.toLowerCase().includes(CF.q.toLowerCase())));
+    const sel = (key, opts, blank) => { const x = h('select', { onchange: (e) => { CF[key] = e.target.value; render(); } }, h('option', { value: '' }, blank), opts.map(([v, t]) => h('option', { value: v }, t))); x.value = CF[key]; return x; };
+    const q = h('input', { type: 'search', placeholder: 'Address, driver or note', value: CF.q });
+    q.addEventListener('input', () => { CF.q = q.value; clearTimeout(q.t); q.t = setTimeout(() => { render(); const s2 = body.querySelector('.dz-filters input[type=search]'); s2?.focus(); s2?.setSelectionRange(CF.q.length, CF.q.length); }, 250); });
+
+    // Patterns: counts by kind, run, who ticked, and repeat addresses (within the filters).
+    const tally = (f) => Object.entries(shown.reduce((m, c) => { const k = f(c); if (k) m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);
+    const repeat = Object.values(shown.reduce((m, c) => { (m[c.address_key] ||= { c, n: 0, last: '' }).n += 1; const d = c.happened_on || c.reported_on; if (d > m[c.address_key].last) m[c.address_key].last = d; return m; }, {}))
+      .filter((x) => x.n > 1).sort((a, b) => b.n - a.n);
+    const pat = (title, rows, fmt = (k) => k) => h('div', { class: 'dz-card' }, h('h2', null, title),
+      rows.length ? h('table', { class: 'dz-table' }, h('tbody', null, rows.slice(0, 8).map(([k, n]) => h('tr', null, h('td', null, fmt(k)), h('td', { class: 'num' }, n))))) : h('p', { class: 'small muted' }, 'None.'));
+
+    const statusSel = (c) => { const x = h('select', { onchange: (e) => act(async () => must(await sb.from('complaints').update({ status: e.target.value, updated_at: now(), updated_by: by() }).eq('id', c.id)), 'Saved.') }, STATUS.map(([v, t]) => h('option', { value: v }, t))); x.value = c.status; return x; };
+    const noteBtn = (c) => h('button', { class: 'link small', onclick: () => { const n = prompt(`Notes for ${cAddr(c)}, ${dayFmt(c.happened_on)}`, c.notes || ''); if (n !== null) act(async () => must(await sb.from('complaints').update({ notes: n || null, updated_at: now(), updated_by: by() }).eq('id', c.id)), 'Saved.'); } }, c.notes ? '✎' : '+ note');
+
+    return h('div', null,
+      h('p', { class: 'small muted' }, 'Every complaint from the RouteSmart key reports, kept once, with who ticked that delivery and the address\'s complaint history. Mark each as disputed (we delivered: the tick, GPS and photo back it up), accepted, or closed.'),
+      h('div', { class: 'dz-filters' },
+        sel('days', [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year']], 'All time'),
+        sel('route', [...new Set(R.map((c) => c.route).filter(Boolean))].sort().map((r) => [r, shortRoute(r)]), 'All runs'),
+        sel('kind', [...new Set(R.map((c) => c.kind).filter(Boolean))].map((k) => [k, KIND[k] || k]), 'All kinds'),
+        sel('status', STATUS, 'Any status'), q),
+      h('div', { class: 'dz-grid dz-patterns' },
+        pat(`Complaints (${shown.length})`, tally((c) => KIND[c.kind] || c.kind || 'Other')),
+        pat('By run', tally((c) => c.route), shortRoute),
+        pat('By who ticked it', tally((c) => (c.happened_on ? (c.delivered_by || (c.happened_on < '2026-11-09' ? 'Before the app' : 'No tick recorded')) : null))),
+        h('div', { class: 'dz-card' }, h('h2', null, 'Repeat addresses'), repeat.length
+          ? h('table', { class: 'dz-table' }, h('tbody', null, repeat.slice(0, 8).map((x) => h('tr', null, h('td', null, cAddr(x.c)), h('td', { class: 'num' }, x.n), h('td', { class: 'small muted' }, `last ${dayFmt(x.last)}`)))))
+          : h('p', { class: 'small muted' }, 'No address has complained more than once.'))),
+      shown.length ? h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' },
+        h('thead', null, h('tr', null, ['On sheet', 'About', 'Address', 'Run', 'What', 'Delivery record', 'Customer history', 'Status', 'Notes'].map((t) => h('th', null, t)))),
+        h('tbody', null, shown.map((c) => h('tr', { class: c.status === 'open' ? '' : 'muted-row' },
+          h('td', null, dayFmt(c.reported_on)),
+          h('td', null, dayFmt(c.happened_on)),
+          h('td', null, h('b', null, cAddr(c))),
+          h('td', null, shortRoute(c.route || '')),
+          h('td', null, `${KIND[c.kind] || c.kind || '?'} · ${c.publication || ''}${c.service ? ` · ${c.service.replace(/^WKLY(\d)$/, '$1-day')}` : ''}`),
+          h('td', null, deliveredLine(c)),
+          h('td', { class: c.customer_complaints > 1 ? 'warn' : '' }, historyLine(c)),
+          h('td', null, statusSel(c)),
+          h('td', null, c.notes ? h('span', { class: 'small' }, c.notes, ' ') : null, noteBtn(c)))))))
+        : h('p', { class: 'muted' }, 'No complaints match.'));
   }
 
   // ================= Runs & sheets =================

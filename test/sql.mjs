@@ -70,3 +70,28 @@ check('the last dispatcher cannot be removed', blocked);
 await db.query(`update members set active=false where email='lisa@example.com'`);
 await as('lisa@example.com');
 check('a deactivated member sees nothing', (await db.query('select count(*)::int n from runs')).rows[0].n === 0);
+
+// ---- complaints register ----
+await db.exec(`reset role; update auth.ctx set email='mike@example.com'; set role authenticated;`);
+const r9 = (await db.query(`insert into runs(route, delivery_date) values ('HOWICK13','2026-11-09') returning id`)).rows[0].id;
+const r10 = (await db.query(`insert into runs(route, delivery_date) values ('HOWICK13','2026-11-10') returning id`)).rows[0].id;
+const r7 = (await db.query(`insert into runs(route, delivery_date) values ('HOWICK13','2026-11-07') returning id`)).rows[0].id;
+// Lisa ticked 70 Broomfields on Sat 7 Nov
+await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_name,lat,lng,accuracy_m) values (gen_random_uuid(),$1,'K|BROOMFIELDS ROAD|70','K|BROOMFIELDS ROAD|70','HOWICK13',true,'2026-11-07T17:42:00Z','Lisa',-36.9,174.9,6)`, [r7]);
+const flag = (on, raw) => JSON.stringify([{ type: 'complaint', text: `Missed delivery on Sat ${on.slice(8) * 1} Nov (NZH, 7-day subscriber)`, kind: 'MISSED', on, pub: 'NZH', service: 'WKLY7', raw }]);
+for (const rid of [r9, r10]) await db.query(`insert into run_lines(run_id,line_key,seq,block,street,number,pub,qty,address_key,flags) values ($1,'K|BROOMFIELDS ROAD|70',1,1,'BROOMFIELDS ROAD','70','NZH',1,'K|BROOMFIELDS ROAD|70',$2)`, [rid, flag('2026-11-07', '0711')]);
+let creg = (await db.query(`select * from complaint_register`)).rows;
+check('a complaint on two sheets is registered once', creg.length === 1 && creg[0].reported_on.toISOString().slice(0, 10) === '2026-11-09');
+check('it knows who ticked that delivery', creg[0].delivered_by === 'Lisa' && creg[0].delivered === true);
+// a later complaint from the same customer, loaded the old way (text only)
+const r12 = (await db.query(`insert into runs(route, delivery_date) values ('HOWICK13','2026-11-12') returning id`)).rows[0].id;
+await db.query(`insert into run_lines(run_id,line_key,seq,block,street,number,pub,qty,address_key,flags) values ($1,'K|BROOMFIELDS ROAD|70',1,1,'BROOMFIELDS ROAD','70','NZH',1,'K|BROOMFIELDS ROAD|70','[{"type":"complaint","text":"Missed delivery on Wed 11 Nov (NZH, 7-day subscriber)"}]')`, [r12]);
+creg = (await db.query(`select happened_on::text, kind, publication, customer_complaints::int, customer_complaint_no::int, previous_complaint_on::text, delivered_by from complaint_register order by happened_on`)).rows;
+check('older text-only complaints are understood', creg.length === 2 && creg[1].happened_on === '2026-11-11' && creg[1].kind === 'MISSED' && creg[1].publication === 'NZH', JSON.stringify(creg[1]));
+check('customer history: 2nd complaint, previous 7 Nov', creg[1].customer_complaints === 2 && creg[1].customer_complaint_no === 2 && creg[1].previous_complaint_on === '2026-11-07');
+check('no tick recorded for 11 Nov', creg[1].delivered_by === null);
+await db.query(`update complaints set status='disputed', notes='Photo shows paper in box' where happened_on='2026-11-07'`);
+check('a dispatcher can mark a complaint disputed', (await db.query(`select status from complaints where happened_on='2026-11-07'`)).rows[0].status === 'disputed');
+await db.exec(`reset role; update members set active=true where email='lisa@example.com'; update auth.ctx set email='lisa@example.com'; set role authenticated;`);
+await db.query(`update complaints set status='closed'`);
+check('a driver cannot change complaint status', (await db.query(`select count(*)::int n from complaints where status='closed'`)).rows[0].n === 0);

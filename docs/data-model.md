@@ -19,15 +19,17 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `operating_locations` | Where the vehicle stops | Group, run, stop number (`seq`), GPS. |
 | `service_locations` | Where the work is done from a stop | Kind (letterbox, bank, reception, lobby, door, other), order, GPS, validation. Deleted with their operating location. |
 | `location_policies` | Rules on a group, stop, service location or address | Exactly one target. Kind, note, GPS (entry point), times, speed, days, active. |
+| `complaints` | The complaints register: one entry per complaint (address, paper, kind, date it happened) | Filled by a trigger on `run_lines` from complaint flags; first and last sheet that listed it; status (open, disputed, accepted, closed) and notes set by dispatchers. |
 | `dispatch_history` | Every change to people, locations, assignments and policies | Who, when, what (the row as JSON). Filled by triggers; the register filling itself isn't logged. |
 
 ## Views
 - `line_status`: latest tick state per tile.
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.
+- `complaint_register`: complaints with who ticked that delivery (time, GPS accuracy), photos that day, and the address's complaint count, order and previous date.
 - `address_register`: the register with learned GPS and location names, as the dashboard shows it.
 
 ## Who can change what
-Everything is readable by active members. Runs, tiles, taps, photos, custom orders and door codes can be written by any active member. Locations, policies, the register's assignments and people can only be changed by dispatchers (`is_dispatcher()`).
+Everything is readable by active members. Runs, tiles, taps, photos, custom orders and door codes can be written by any active member. Locations, policies, the register's assignments, complaint status and people can only be changed by dispatchers (`is_dispatcher()`).
 
 ## Storage buckets (private)
 - `run-sheets`: the PDFs the evening fetch downloads, kept for the record.

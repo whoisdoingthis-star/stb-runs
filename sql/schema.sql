@@ -524,3 +524,116 @@ do $$ declare t text; begin
     end if;
   end loop;
 end $$;
+
+-- ===============================================================
+-- Complaints register (docs/business-rules.md#complaints-register).
+-- Every complaint on a key report, kept once even when the same complaint is on several
+-- sheets, with who ticked that delivery (from the taps), photos that day, and the
+-- customer's (address's) complaint history. Filled automatically as sheets load.
+-- ===============================================================
+create table if not exists public.complaints (
+  id            uuid primary key default gen_random_uuid(),
+  address_key   text not null,
+  route         text,
+  number        text,
+  street        text,
+  kind          text,              -- MISSED, WET, DAMAGED, LATE, WRONG… (from the key report)
+  happened_on   date,              -- the delivery the complaint is about
+  publication   text,
+  service       text,              -- e.g. WKLY7 (7-day subscriber)
+  description   text,              -- "Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)"
+  raw           text,              -- the report's comment, e.g. 0711
+  reported_on   date not null,     -- delivery day of the first sheet that listed it
+  last_seen_on  date not null,     -- delivery day of the latest sheet that listed it
+  first_run_id  text,
+  status        text not null default 'open',  -- open, disputed (we delivered), accepted (our miss), closed
+  notes         text,
+  updated_at    timestamptz not null default now(),
+  updated_by    text
+);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'complaints_status_check') then
+    alter table public.complaints add constraint complaints_status_check check (status in ('open', 'disputed', 'accepted', 'closed'));
+  end if;
+end $$;
+create unique index if not exists complaints_identity on public.complaints
+  (address_key, coalesce(publication, ''), coalesce(kind, ''), coalesce(happened_on, reported_on));
+create index if not exists complaints_address_idx on public.complaints (address_key);
+
+-- "Missed delivery on Sat 7 Nov (…)" -> the date, for complaints loaded before the parser stored it.
+create or replace function public.complaint_date_from_text(t text, ref date) returns date
+language plpgsql immutable as $$
+declare m text[]; d date;
+begin
+  m := regexp_match(coalesce(t, ''), ' on \w+ (\d{1,2}) (\w{3})');
+  if m is null then return null; end if;
+  d := to_date(m[1] || ' ' || m[2] || ' ' || extract(year from ref)::int, 'DD Mon YYYY');
+  if d > ref then d := d - interval '1 year'; end if;
+  return d;
+exception when others then return null;
+end $$;
+
+create or replace function public.register_complaints() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare f jsonb; r record; k text; d date;
+begin
+  if new.flags is null or new.flags::text not like '%complaint%' then return new; end if;
+  select id, route, delivery_date into r from public.runs where id = new.run_id;
+  if not found then return new; end if;
+  for f in select * from jsonb_array_elements(new.flags) loop
+    continue when f ->> 'type' <> 'complaint';
+    k := coalesce(f ->> 'kind', case
+      when f ->> 'text' ilike 'Missed delivery%' then 'MISSED' when f ->> 'text' ilike 'Wet paper%' then 'WET'
+      when f ->> 'text' ilike 'Damaged paper%' then 'DAMAGED' when f ->> 'text' ilike 'Late delivery%' then 'LATE'
+      when f ->> 'text' ilike 'Wrong paper%' then 'WRONG' end);
+    d := coalesce((f ->> 'on')::date, public.complaint_date_from_text(f ->> 'text', r.delivery_date));
+    insert into public.complaints as c (address_key, route, number, street, kind, happened_on, publication, service, description, raw, reported_on, last_seen_on, first_run_id)
+    values (new.address_key, r.route, new.number, new.street, k, d,
+            coalesce(f ->> 'pub', substring(f ->> 'text' from '\((\w+)[,)]')), f ->> 'service', f ->> 'text', f ->> 'raw',
+            r.delivery_date, r.delivery_date, r.id)
+    on conflict (address_key, coalesce(publication, ''), coalesce(kind, ''), coalesce(happened_on, reported_on)) do update set
+      reported_on  = least(c.reported_on, excluded.reported_on),
+      last_seen_on = greatest(c.last_seen_on, excluded.last_seen_on),
+      description  = excluded.description,
+      service      = coalesce(excluded.service, c.service);
+  end loop;
+  return new;
+end $$;
+drop trigger if exists run_lines_complaints on public.run_lines;
+create trigger run_lines_complaints after insert or update of flags on public.run_lines
+  for each row execute function public.register_complaints();
+
+-- Register complaints already on loaded sheets (safe to repeat: it only re-saves the flags).
+update public.run_lines set flags = flags where flags::text like '%complaint%';
+
+-- The register as the dashboard shows it: who ticked that delivery, photos that day,
+-- and the customer's history (count and the complaint before this one).
+create or replace view public.complaint_register with (security_invoker = true) as
+select c.*,
+       d.user_name  as delivered_by,
+       d.device_time as delivered_at,
+       d.done       as delivered,
+       d.accuracy_m as delivered_accuracy_m,
+       (select count(*) from public.photos p
+         where p.address_key = c.address_key
+           and (p.taken_at at time zone 'Pacific/Auckland')::date = c.happened_on) as photos_that_day,
+       count(*) over (partition by c.address_key) as customer_complaints,
+       row_number() over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as customer_complaint_no,
+       lag(coalesce(c.happened_on, c.reported_on)) over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as previous_complaint_on
+from public.complaints c
+left join lateral (
+  select t.user_name, t.device_time, t.done, t.accuracy_m
+  from public.tap_events t join public.runs r on r.id = t.run_id
+  where t.address_key = c.address_key and r.delivery_date = c.happened_on
+  order by t.device_time desc limit 1
+) d on true;
+
+alter table public.complaints enable row level security;
+drop policy if exists complaints_read on public.complaints;
+create policy complaints_read on public.complaints for select to authenticated using (public.is_member());
+drop policy if exists complaints_write on public.complaints;
+create policy complaints_write on public.complaints for update to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());
+do $$ begin
+  execute 'drop trigger if exists complaints_log on public.complaints';
+  execute 'create trigger complaints_log after update on public.complaints for each row execute function public.log_dispatch_change()';
+end $$;

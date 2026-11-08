@@ -190,6 +190,15 @@ export const basePub = (p) => (isRetailPub(p) ? p.slice(0, -1) : p);
 // "MISSED", "0711", "WKLY7" -> "Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)".
 // The key report's comment is the date of the problem as DDMM.
 const COMPLAINT_TYPES = { MISSED: 'Missed delivery', WET: 'Wet paper', DAMAGED: 'Damaged paper', LATE: 'Late delivery', WRONG: 'Wrong paper', DAMAGE: 'Damaged paper' };
+// The date the problem happened (from DDMM), as YYYY-MM-DD; the year is the one that puts it on or before the delivery day.
+export function complaintDate(c, deliveryDate) {
+  const m = /^(\d{2})(\d{2})$/.exec(String(c.comments || '').trim());
+  if (!m) return null;
+  const year = deliveryDate ? Number(String(deliveryDate).slice(0, 4)) : new Date().getFullYear();
+  const d = new Date(Date.UTC(year, Number(m[2]) - 1, Number(m[1])));
+  if (deliveryDate && d > new Date(`${deliveryDate}T00:00:00Z`)) d.setUTCFullYear(year - 1);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
 export function complaintText(c, deliveryDate) {
   const type = String(c.type || '').toUpperCase();
   const what = COMPLAINT_TYPES[type] || (type ? `${type[0]}${type.slice(1).toLowerCase()} complaint` : 'Complaint');
@@ -450,7 +459,9 @@ function finishRoute(r, kr) {
     for (const c of kr.complaints) {
       const hits = findLines(c.address, c.publication);
       const text = complaintText(c, r.deliveryDate);
-      if (hits.length) hits.forEach((h) => h.flags.push({ type: 'complaint', text }));
+      // Structured too, for the complaints register (docs/business-rules.md#complaints-register).
+      const info = { kind: String(c.type || '').toUpperCase() || null, on: complaintDate(c, r.deliveryDate), pub: c.publication || null, service: c.service || null, raw: String(c.comments || '').trim() || null };
+      if (hits.length) hits.forEach((h) => h.flags.push({ type: 'complaint', text, ...info }));
       else warnings.push(`Complaint for ${c.address} ${c.publication} (${c.type || ''}) has no tile on this run.`);
     }
     for (const [p, c] of Object.entries(kr.counts)) {
