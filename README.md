@@ -16,6 +16,7 @@ the full project, so the documentation lives here with the code and changes with
 | [Business rules](docs/business-rules.md) | How the sheets are read: publications, retail and dockets, complaints, colours, what counts as a change |
 | [Dispatch guide](docs/dispatch-guide.md) | The dispatch dashboard: address register, operating and service locations, policies, users |
 | [Roadmap](docs/roadmap.md) | What's planned next |
+| [Design guide](docs/design.md) | Colours, type, components and the checklist for new screens |
 | [UX review](docs/ux-review.md) | Usability review and the plan to make the app calmer and faster |
 | [Run 8: Bruce McLaren Village](docs/run8-village.md) | Run 8's own rules: building order, mailbox banks, reception handover, door codes |
 | [Architecture](docs/architecture.md) | How the pieces fit: RouteSmart → GitHub Actions → Supabase → phones |
@@ -27,7 +28,7 @@ the full project, so the documentation lives here with the code and changes with
 | [Contributing](CONTRIBUTING.md) | **The docs-as-code rules every change follows** |
 
 ## Quick facts
-- Plain static web app, no build step: `index.html`, `styles.css`, `js/`. Hosted on GitHub Pages: <https://whoisdoingthis-star.github.io/stb-runs/>
+- Plain static web app, no build step: `index.html`, `styles.css`, `js/`. Hosted on GitHub Pages: <https://whoisdoingthis-star.github.io/stb-runs/> (drivers) and <https://whoisdoingthis-star.github.io/stb-runs/dispatch/> (dispatch)
 - Data, logins and live updates: Supabase (project `stb-runs`, Sydney). Family-only: sign-ups are off and every table is locked to the members list.
 - Evening fetch: `.github/workflows/fetch-run-sheets.yml` runs `fetcher/fetch-run-sheets.mjs`.
 - In-app **Get Runs** button: Supabase Edge Function `supabase/functions/refetch` starts that same job.
@@ -52,6 +53,7 @@ the full project, so the documentation lives here with the code and changes with
 | `supabase/functions/admin-users/` | Edge Function for the dashboard's Users tab |
 | `sql/schema.sql` | The whole database, re-runnable. The source of truth for tables and security |
 | `vendor/` | pdf.js, supabase-js and Leaflet (maps), stored locally |
+| `dispatch/index.html` | Short address for the dispatch dashboard |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline and home-screen install |
 | `test/` | Automated tests (`npm test`), plus browser tests and sheet tests that need real PDFs |
 | `tools/check-docs.mjs` | Documentation checks (`npm run docs:check`) |

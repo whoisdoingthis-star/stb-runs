@@ -4,7 +4,10 @@
 const uuid = () => crypto.randomUUID();
 const T = {
   members: [{ email: 'mike@example.com', display_name: 'Mike', role: 'dispatcher', active: true }, { email: 'lisa@example.com', display_name: 'Lisa', role: 'driver', active: true }],
-  location_groups: [], operating_locations: [], service_locations: [], location_policies: [],
+  location_groups: [], operating_locations: [], service_locations: [], location_policies: [], dispatch_history: [], photos: [],
+  runs: [{ id: 'r6', route: 'HOWICK06', delivery_date: '2026-11-09', summary: { lines: 98, copies: 115, byPub: { NZH: 100, NZHR: 13, WD: 2 }, dockets: 2 }, checks: [{ ok: true, label: 'NZH' }], warnings: [], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 1, items: ['13 Ambrose Lane: NZH ×1 → NZH ×2'] } }, { id: 'r8', route: 'HOWICK08', delivery_date: '2026-11-09', summary: { lines: 66, copies: 70, byPub: { NZH: 70 } }, checks: [{ ok: true }], warnings: ['x'], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 0, items: [] } }],
+  line_status: [{ run_id: 'r6', line_key: 'a', done: true, user_name: 'Mike', device_time: '2026-11-09T05:10:00Z' }],
+  run_lines: [{ run_id: 'r6', number: '70', street: 'BROOMFIELDS ROAD', flags: [{ type: 'complaint' }] }],
   addresses: [
     { address_key: 'HOWICK|AMON|101', area: 'HOWICK', street: 'BRUCE MCLAREN VILLAGE AMON', number: '101', routes: ['HOWICK08'], first_seen: '2026-11-05', last_seen: '2026-11-09', gps_lat: -36.9001, gps_lng: 174.9301, gps_taps: 3, gps_accuracy_m: 8 },
     { address_key: 'HOWICK|UXBRIDGE ROAD|38B', area: 'HOWICK', street: 'UXBRIDGE ROAD', number: '38B', routes: ['HOWICK06'], first_seen: '2026-11-06', last_seen: '2026-11-09' },
@@ -16,7 +19,7 @@ window.calls = [];
 function from(t) {
   let op = 'select', row = null, filters = [], single = false;
   const b = {
-    select() { return b; }, order() { return b; }, single() { single = true; return b; }, maybeSingle() { single = true; return b; },
+    select() { return b; }, order() { return b; }, limit() { return b; }, single() { single = true; return b; }, maybeSingle() { single = true; return b; },
     insert(r) { op = 'insert'; row = r; return b; }, update(r) { op = 'update'; row = r; return b; }, delete() { op = 'delete'; return b; },
     eq(c, v) { filters.push((x) => x[c] === v); return b; }, ilike(c, v) { filters.push((x) => String(x[c]).toLowerCase() === v.toLowerCase()); return b; },
     in(c, vs) { filters.push((x) => vs.includes(x[c])); return b; }, not(c, _is, v) { filters.push((x) => x[c] != null); return b; },
@@ -37,11 +40,16 @@ function from(t) {
 const sb = { from, functions: { invoke: async (n, { body }) => { window.calls.push(['fn', n, body]); return { data: { ok: true }, error: null }; } } };
 const h = (tag, props, ...kids) => { const el = document.createElement(tag); for (const [k, v] of Object.entries(props || {})) { if (v == null || v === false) continue; if (k === 'class') el.className = v; else if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c instanceof Node ? c : String(c)); return el; };
 const mount = (...n) => document.getElementById('app').replaceChildren(...n);
-const toast = (m) => { window.lastToast = m; console.log('TOAST', m); };
+const toast = (m, a) => { window.lastToast = m; window.lastAction = a; console.log('TOAST', m); };
 const titleCase = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
 const shortRoute = (r) => r.replace(/^[A-Z]+0?/, 'Run ');
 const { viewDispatch } = await import('../js/dispatch.js');
 window.T = T;
-await viewDispatch({ app: { store: { mode: 'shared', sb }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute }, location.hash.slice(1) || 'addresses');
+const paperSummary = (rs) => h('div', { class: 'paper-sum' }, `papers for ${rs.length} runs`);
+const fmtStamp = (iso) => new Date(iso).toLocaleString('en-NZ');
+const fmtDate = (iso) => iso;
+const changeSummary = (r, ch) => `${shortRoute(r)}: ${ch.count} changed`;
+window.confirm = () => true;
+await viewDispatch({ app: { store: { mode: 'shared', sb }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary }, location.hash.slice(1) || 'overview');
 window.ready = true;
 </script></body></html>

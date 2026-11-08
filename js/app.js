@@ -31,6 +31,62 @@ function bigOn() {
   return /moana|mum/i.test(app.me?.name || '');
 }
 function applyBig() { document.documentElement.classList.toggle('big', bigOn()); }
+
+// Colours: Night is the default (runs start in the dark; Zaph's call, 8 Nov 2026),
+// Day, or Auto (night from 7pm to 7am NZ time). Remembered per phone.
+const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+const THEMES = [['night', 'Night'], ['day', 'Day'], ['auto', 'Auto']];
+function themeIsDark() {
+  const t = pref('stb-theme', 'night');
+  if (t === 'day') return false;
+  if (t === 'auto') {
+    const hr = Number(new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+    return hr >= 19 || hr < 7;
+  }
+  return true;
+}
+function applyTheme() {
+  const dark = themeIsDark();
+  document.documentElement.classList.toggle('dark', dark);
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0e0f11' : '#2f3337');
+}
+setInterval(applyTheme, 60000);
+// Tiles two across (read left to right, then down) or one per row. Big text is always one per row.
+const layoutIsList = () => bigOn() || pref('stb-layout', 'grid') === 'list';
+
+// A panel that slides up from the bottom, used for menus and settings.
+function openSheet(title, ...content) {
+  const close = () => { panel.remove(); document.removeEventListener('keydown', esc); };
+  const esc = (e) => { if (e.key === 'Escape') close(); };
+  const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
+    h('div', { class: 'sheet', role: 'dialog', 'aria-label': title },
+      h('div', { class: 'sheet-head' }, h('h2', null, title), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: () => close() }, '✕')),
+      ...content.map((c) => (typeof c === 'function' ? c(close) : c))));
+  document.addEventListener('keydown', esc);
+  document.body.append(panel);
+  return close;
+}
+// One row of choices in a sheet, e.g. Colours: Night | Day | Auto.
+function choiceRow(label, options, current, onPick) {
+  const row = h('div', { class: 'choice-row' }, h('span', { class: 'choice-label' }, label));
+  const seg = h('div', { class: 'seg' });
+  const draw = (cur) => seg.replaceChildren(...options.map(([v, t]) => h('button', { 'aria-pressed': String(v === cur), onclick: () => { onPick(v); draw(v); } }, t)));
+  draw(current);
+  row.append(seg);
+  return row;
+}
+const menuItem = (label, fn, opts = {}) => h('button', { class: `menu-item ${opts.danger ? 'danger' : ''}`, onclick: fn }, h('span', null, label), opts.hint ? h('small', null, opts.hint) : null);
+
+// House numbers as the driver says them: "2C/ 12" -> 12, Unit 2C; "Suite 1/ 87" -> 87, Suite 1.
+function fmtNumber(n) {
+  const m = /^(.+?)\/\s*(.+)$/.exec(String(n || '').trim());
+  if (!m) return { main: n, sub: '' };
+  const pre = m[1].trim();
+  const sub = /^(suite|level|shop|unit|flat|apt|apartment|room|villa|lot)\b/i.test(pre) ? pre.replace(/^\w/, (c) => c.toUpperCase()) : `Unit ${pre}`;
+  return { main: m[2].trim(), sub };
+}
+const addrText = (l) => { const f = fmtNumber(l.number); return `${f.main} ${titleCase(l.street)}${f.sub ? ` (${f.sub})` : ''}`; };
 function toggleBig() {
   const next = !bigOn();
   try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* ignore */ }
@@ -119,6 +175,8 @@ async function boot() {
 async function route() {
   if (app.cleanup) { app.cleanup(); app.cleanup = null; }
   applyBig();
+  applyTheme();
+  clearTimeout(toastTimer); document.getElementById('toast').hidden = true; // a message never follows you to another screen
   window.scrollTo(0, 0);
   try {
     app.me = await app.store.session();
@@ -128,11 +186,20 @@ async function route() {
   }
   if (!app.me) return viewLogin();
   const hash = location.hash.replace(/^#/, '');
+  if (!hash && app.me.role === 'dispatcher' && window.innerWidth >= 1000) { location.replace('#/dispatch'); return; }
   const m = /^\/r\/([A-Za-z0-9+]+)/.exec(hash);
   if (m) return viewRun(m[1].split('+').filter(Boolean));
   if (hash === '/load' && app.pendingLoad) return viewLoad();
   const dz = /^\/dispatch(?:\/(\w+))?/.exec(hash);
-  if (dz) return import('./dispatch.js').then((m) => m.viewDispatch({ app, h, mount, toast, titleCase, shortRoute }, dz[1] || 'addresses'));
+  if (dz) {
+    // Upload from the dashboard: same checks as the app's upload screen.
+    const pickSheets = () => {
+      const input = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, class: 'file-input' });
+      input.addEventListener('change', () => { if (input.files.length) loadFiles([...input.files]); input.remove(); });
+      document.body.append(input); input.click();
+    };
+    return import('./dispatch.js').then((m) => m.viewDispatch({ app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary }, dz[1] || 'overview'));
+  }
   return viewHome();
 }
 
@@ -162,21 +229,28 @@ function viewLogin(error) {
 
 // ---------------------------------------------------------------- home
 
+// ---------------------------------------------------------------- home: Today
+// The driver's home: today's and upcoming runs as big cards. Everything else
+// (getting sheets, uploads, text size, colours, password) is in Settings (⚙).
+const nzToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+function dayName(iso) {
+  const t = nzToday();
+  const tomorrow = new Date(Date.parse(`${t}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
+  return iso === t ? `Today · ${fmtDate(iso)}` : iso === tomorrow ? `Tomorrow · ${fmtDate(iso)}` : fmtDate(iso);
+}
+
 async function viewHome() {
   const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, class: 'file-input', id: 'pdf' });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles([...fileInput.files]); });
   const list = h('div', null, h('p', { class: 'muted' }, 'Loading runs…'));
-  mount(h('div', { class: 'page' },
-    h('div', { class: 'topbar' },
-      h('div', { style: 'flex:1' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
-      app.store.mode === 'shared' ? h('div', { class: 'small muted', style: 'text-align:right' }, app.me.name, h('br'),
-        h('button', { class: 'link small', style: 'padding:0', onclick: async () => { await app.store.signOut(); route(); } }, 'Sign out'), h('br'),
-        h('button', { class: 'link small', style: 'padding:0', onclick: () => changePassword() }, 'Change password')) : null),
-    app.me.role === 'dispatcher' ? h('a', { class: 'btn big-toggle', href: '#/dispatch', style: 'margin-bottom:10px' }, 'Dispatch dashboard') : null,
-    app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: runs and ticks are saved on this phone only. Nothing is shared or uploaded.') : null,
-    app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs') : null,
-    h('label', { class: app.store.mode === 'shared' ? 'btn big' : 'btn primary big', style: app.store.mode === 'shared' ? 'margin-top:8px' : null, for: 'pdf' }, 'Manually upload runsheet'), fileInput,
-    h('button', { class: 'btn big-toggle', style: 'margin-top:8px', 'aria-pressed': String(bigOn()), onclick: (e) => { const on = toggleBig(); e.currentTarget.setAttribute('aria-pressed', String(on)); e.currentTarget.textContent = on ? 'Big text: ON (tap for normal)' : 'Make text bigger'; } }, bigOn() ? 'Big text: ON (tap for normal)' : 'Make text bigger'),
+  mount(h('div', { class: 'page home' },
+    h('header', { class: 'home-top' },
+      h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
+      app.store.mode === 'shared' ? h('span', { class: 'who-me' }, app.me.name) : null,
+      h('button', { class: 'icon-btn settings-btn', 'aria-label': 'Settings', onclick: () => openSettings(fileInput) }, '⚙')),
+    app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: saved on this phone only.') : null,
+    app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
+    fileInput,
     list));
 
   async function renderList() {
@@ -186,7 +260,10 @@ async function viewHome() {
       return;
     }
     if (!runs.length) {
-      list.replaceChildren(h('div', { class: 'empty' }, 'No runs yet. They load themselves from RouteSmart each evening after 7pm, or load a PDF.'));
+      list.replaceChildren(h('div', { class: 'empty' },
+        h('p', null, app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.'),
+        app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs now') : null,
+        h('button', { class: `btn big ${app.store.mode === 'shared' ? '' : 'primary'}`, style: 'margin-top:8px', onclick: () => fileInput.click() }, 'Upload a run sheet (PDF)')));
       return;
     }
     const byDate = {};
@@ -204,30 +281,43 @@ async function viewHome() {
           : `Runs updated ${fmtStamp(new Date().toISOString())}. No details changed.`);
       }
     }
-    list.replaceChildren(...Object.entries(byDate).map(([date, rs]) => h('section', { class: 'date-group' },
-      h('div', { class: 'date-head' }, h('h2', null, fmtDate(date)),
-        rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null,
-        rs.length > 1 ? h('button', { class: 'btn small', onclick: () => shareRuns(rs.map((r) => r.id), `${rs.map((r) => r.route).join(' + ')} ${fmtDate(date)}`) }, 'Text all') : null),
-      lastRefreshed(rs),
-      paperSummary(rs),
-      rs.map((r) => {
-        const lines = r.summary?.lines || 0;
-        const pct = lines ? Math.round((100 * (r.done || 0)) / lines) : 0;
-        const when = r.updated_at || r.created_at;
-        const how = r.source === 'auto' ? 'Fetched' : 'Loaded';
-        return h('div', { class: 'card run-card' },
-          h('button', { class: 'main', style: 'background:none;border:0;padding:0;text-align:left', onclick: () => { location.hash = `#/r/${r.id}`; } },
-            h('div', { class: 'route' }, r.route),
-            h('div', { class: 'small muted' }, `${r.done || 0} of ${lines} done · ${r.summary?.copies ?? '?'} copies`),
-            when ? h('div', { class: 'small muted' }, `${how} ${fmtStamp(when)}`) : null,
-            r.last_changes ? h('div', { class: `small changes ${r.last_changes.count ? 'some' : 'none'}` },
-              r.last_changes.count ? `${r.last_changes.count} detail${r.last_changes.count === 1 ? '' : 's'} changed since the previous sheet` : 'No details changed since the previous sheet') : null,
-            h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` }))),
-          h('button', { class: 'btn small', onclick: () => shareRuns([r.id], `${r.route} ${fmtDate(r.delivery_date)}`) }, 'Text link'),
-          r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, 'What changed'),
-            h('ul', null, r.last_changes.items.map((x) => h('li', null, x))),
-            r.last_changes.count > r.last_changes.items.length ? h('div', { class: 'small muted' }, `…and ${r.last_changes.count - r.last_changes.items.length} more`) : null) : null);
-      }))));
+    const today = nzToday();
+    const dates = Object.keys(byDate);
+    const upcoming = dates.filter((d) => d >= today).sort();
+    const earlier = dates.filter((d) => d < today).sort().reverse();
+    const daySection = (date) => {
+      const rs = [...byDate[date]].sort((a, b) => a.route.localeCompare(b.route));
+      const changed = rs.filter((r) => r.last_changes?.count);
+      const latest = rs.reduce((m, r) => { const t = r.updated_at || r.created_at; return t > m ? t : m; }, '');
+      const auto = rs.every((r) => r.source === 'auto');
+      return h('section', { class: 'date-group' },
+        h('div', { class: 'date-head' }, h('h2', null, dayName(date)),
+          rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null),
+        latest ? h('div', { class: `updated ${changed.length ? 'some' : ''}` },
+          `Updated ${fmtStamp(latest)} ${auto ? 'from RouteSmart' : 'by upload'}`,
+          changed.length ? ` · ${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')}` : rs.some((r) => r.last_changes) ? ' · no changes' : '') : null,
+        rs.map((r) => {
+          const stops = r.summary?.lines || 0;
+          const done = r.done || 0;
+          const dockets = r.summary?.dockets || 0;
+          return h('div', { class: 'run-tile-wrap' },
+            h('button', { class: `run-tile ${done && done >= stops ? 'finished' : ''}`, onclick: () => { location.hash = `#/r/${r.id}`; } },
+              h('div', { class: 'rt-main' },
+                h('div', { class: 'rt-name' }, shortRoute(r.route)),
+                h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} papers${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
+                done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
+                done ? h('div', { class: 'rt-sub' }, done >= stops ? '✓ Finished' : `${done} of ${stops} done`) : null),
+              h('span', { class: 'rt-go' }, done ? (done >= stops ? 'View' : 'Continue') : 'Start')),
+            r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, `What changed on ${shortRoute(r.route)}`),
+              h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))) : null);
+        }),
+        h('details', { class: 'papers' }, h('summary', null, `Papers to collect: ${rs.reduce((t, r) => t + (r.summary?.copies || 0), 0)} papers`,
+          rs.some((r) => r.summary?.dockets) ? `, ${rs.reduce((t, r) => t + (r.summary?.dockets || 0), 0)} dockets` : ''), paperSummary(rs)));
+    };
+    list.replaceChildren(...[
+      ...(upcoming.length ? upcoming.map(daySection) : [h('div', { class: 'empty' }, 'No runs for today or tomorrow yet. They load themselves after 7pm.')]),
+      earlier.length ? h('details', { class: 'earlier' }, h('summary', null, `Earlier days (${earlier.length})`), earlier.map(daySection)) : null,
+    ].filter(Boolean));
   }
   await renderList();
 
@@ -235,6 +325,23 @@ async function viewHome() {
   let t;
   const unwatch = app.store.watchRuns(() => { clearTimeout(t); t = setTimeout(renderList, 1500); });
   app.cleanup = () => { unwatch(); clearTimeout(t); };
+}
+
+// Settings (⚙ on the Runs page): reading, getting sheets, account.
+function openSettings(fileInput) {
+  openSheet('Settings',
+    (close) => h('div', { class: 'menu-group' },
+      choiceRow('Text', [['normal', 'Normal'], ['big', 'Big']], bigOn() ? 'big' : 'normal', (v) => { if ((v === 'big') !== bigOn()) { toggleBig(); close(); route().then(() => openSettings(document.getElementById('pdf'))); } }),
+      bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => setPref('stb-layout', v)),
+      choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); })),
+    (close) => h('div', { class: 'menu-group' },
+      app.store.mode === 'shared' ? menuItem('Get Runs from RouteSmart…', () => { close(); openRefetch(); }, { hint: 'Fetches the latest sheets for a day. Use it if a change is phoned in' }) : null,
+      menuItem('Upload a run sheet (PDF)…', () => { close(); fileInput?.click(); }, { hint: 'A sheet you downloaded yourself' }),
+      app.me.role === 'dispatcher' ? menuItem('Dispatch dashboard', () => { close(); location.hash = '#/dispatch'; }) : null),
+    app.store.mode === 'shared' ? (close) => h('div', { class: 'menu-group' },
+      h('div', { class: 'small muted', style: 'padding:0 12px' }, `Signed in as ${app.me.name}`),
+      menuItem('Change password…', () => { close(); changePassword(); }),
+      menuItem('Sign out', async () => { close(); await app.store.signOut(); route(); }, { danger: true })) : null);
 }
 
 // Change your own password (e.g. after a dispatcher set a temporary one).
@@ -473,7 +580,7 @@ function viewLoad() {
         : h('ul', { class: 'checks' }, h('li', { class: 'ok' }, `✓ All ${r.checks.length} totals match the report`)),
       villageSummary(r),
       flagged.length ? h('div', { class: 'small' }, h('b', null, 'Flagged on tiles: '),
-        flagged.map((l) => `${l.number} ${l.street} (${l.flags.map((f) => FLAG_LABEL[f.type]).join(', ')})`).join('; ')) : null,
+        flagged.map((l) => `${addrText(l)} (${l.flags.map((f) => FLAG_LABEL[f.type]).join(', ')})`).join('; ')) : null,
       r.warnings.length ? h('details', { style: 'margin-top:6px' }, h('summary', { class: 'small' }, `${r.warnings.length} note${r.warnings.length > 1 ? 's' : ''} to check`),
         h('ul', { class: 'warnings' }, r.warnings.map((w) => h('li', null, w)))) : null,
       x.existing ? h('div', { class: 'banner warn', style: 'margin-top:10px' },
@@ -526,34 +633,61 @@ async function viewRun(ids) {
   const label = data.map((d) => d.run.route).join(' + ');
   const date = data[0].run.delivery_date;
 
-  // header pieces
-  // Thin bar fixed to the top: progress, elapsed time, and what helpers just did.
+  // ---- header: one slim sticky bar (back, run, search, menu), progress and status under it
   const fbFill = h('i', { class: 'fb-fill' });
   const fbProg = h('span', { class: 'fb-prog' });
   const fbTime = h('span', { class: 'fb-time' });
   const fbNote = h('span', { class: 'fb-note' });
-  const floatbar = h('div', { class: 'floatbar', role: 'status', onclick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
-    fbFill, h('div', { class: 'fb-row' }, fbProg, fbTime, fbNote));
-  const withChip = h('span', { class: 'chip with', hidden: true });
-  const gpsChip = h('span', { class: 'chip' });
-  const syncChip = h('span', { class: 'chip' });
-  const orderChip = h('span', { class: 'chip order', hidden: true });
+  const floatbar = h('div', { class: 'rh-prog', role: 'status', onclick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) }, fbProg, fbTime, fbNote);
+  const withChip = h('span', { class: 'st with', hidden: true });
+  const gpsChip = h('span', { class: 'st' });
+  const syncChip = h('span', { class: 'st' });
+  const orderChip = h('span', { class: 'st', hidden: true });
   const body = h('div', { class: 'runbody' });
-  const search = h('input', { class: 'search', type: 'search', placeholder: 'Find address or note', enterkeyhint: 'search', autocomplete: 'off' });
+  const search = h('input', { class: 'search', type: 'search', placeholder: 'Find a number, street or note', enterkeyhint: 'search', autocomplete: 'off' });
   search.addEventListener('input', () => { S.query = search.value.trim().toLowerCase(); render(); });
-  const todoBtn = h('button', { class: 'btn small toggle', 'aria-pressed': 'false', onclick: () => { S.todoOnly = !S.todoOnly; todoBtn.setAttribute('aria-pressed', String(S.todoOnly)); render(); } }, 'To do only');
+  const searchRow = h('div', { class: 'rh-row', hidden: true }, search,
+    h('button', { class: 'btn small', onclick: () => { search.value = ''; S.query = ''; searchRow.hidden = true; render(); } }, 'Done'));
+  const todoBtn = { setAttribute() {} }; // "To do only" now lives in the menu
   const seg = data.length > 1 ? h('div', { class: 'seg' },
     [['all', 'All'], ...data.map((d) => [d.run.id, shortRoute(d.run.route)])].map(([v, t]) => h('button', {
       'aria-pressed': String(S.show === v),
       onclick: (e) => { S.show = v; [...seg.children].forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget))); render(); },
     }, t))) : null;
 
-  const geo = new Geo(() => { gpsChip.textContent = geo.label(); gpsChip.className = `chip ${geo.state === 'ok' ? 'good' : geo.state === 'denied' ? 'warn' : ''}`; });
+  // ---- bottom bar: what you just did (with Undo and Photo), and where to go next
+  const abMain = h('div', { class: 'ab-main' });
+  const abSub = h('div', { class: 'ab-sub' });
+  const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, '↶ Undo');
+  const abPhoto = h('button', { class: 'ab-btn', hidden: true, onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, '📷');
+  const abNext = h('button', { class: 'ab-btn primary', onclick: () => goNext(true) }, 'Next ↓');
+  const actionbar = h('div', { class: 'actionbar', role: 'region', 'aria-label': 'Last delivery and next stop' },
+    h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abPhoto, abNext);
+  function drawBar(nextEl) {
+    const last = S.last;
+    abUndo.hidden = !last; abPhoto.hidden = !(last && last.lines.length === 1);
+    abMain.textContent = last ? `✓ ${last.label}` : (nextEl ? 'Next stop' : '');
+    abSub.textContent = nextEl ? `Next: ${nextEl.getAttribute('data-label') || ''}` : (S.progress?.total ? 'All done on this screen' : '');
+    abNext.hidden = !nextEl;
+  }
+  // Scroll the next stop into view (only if it's off screen, unless asked).
+  function goNext(force) {
+    const el = body.querySelector('.tile.next');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const top = document.querySelector('.rh')?.getBoundingClientRect().bottom || 0;
+    const bottom = innerHeight - actionbar.getBoundingClientRect().height;
+    if (force || r.top < top + 8 || r.bottom > bottom - 8) {
+      window.scrollBy({ top: r.top - top - (bottom - top - r.height) / 3, behavior: 'smooth' });
+    }
+  }
+
+  const geo = new Geo(() => { gpsChip.textContent = geo.label(); gpsChip.className = `st ${geo.state === 'ok' ? 'good' : geo.state === 'denied' ? 'warn' : ''}`; });
   geo.start();
   const updateSync = (n = app.store.pendingCount()) => {
-    if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'chip'; return; }
+    if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'st'; return; }
     syncChip.textContent = n ? `${n} to send` : 'All sent';
-    syncChip.className = `chip ${n ? 'warn' : 'good'}`;
+    syncChip.className = `st ${n ? 'warn' : 'good'}`;
   };
   updateSync();
   const offSync = app.store.onSync(updateSync);
@@ -561,7 +695,7 @@ async function viewRun(ids) {
   // One tap = one tile, or a whole bundle (e.g. Run 8 reception). A bundle
   // records an entry for every paper in it, same time and GPS, so the audit
   // keeps each obligation while the driver makes one handover.
-  async function tap(line) { return tapMany([line], `${line.number} ${titleCase(line.street)}`, `${line.run_id}::${line.line_key}`); }
+  async function tap(line) { return tapMany([line], addrText(line), `${line.run_id}::${line.line_key}`); }
   async function tapMany(lines, label, flashKey) {
     const st = status();
     const done = !lines.every((l) => st[`${l.run_id}::${l.line_key}`]?.done);
@@ -579,8 +713,10 @@ async function viewRun(ids) {
     S.flash = done ? flashKey : null;
     app.store.addEvents(evs, !fresh);
     if (navigator.vibrate) navigator.vibrate(done ? 15 : [10, 40, 10]);
+    const wasNext = body.querySelector('.tile.next')?.getAttribute('data-key') === flashKey;
+    S.last = done ? { lines, label, flashKey } : (S.last?.flashKey === flashKey ? null : S.last);
     render();
-    if (done) toast(`✓ ${label}`, [{ label: 'Undo', fn: () => tapMany(lines, label, flashKey) }, lines.length === 1 ? { label: '📷 Photo', fn: () => takePhoto(lines[0]) } : null]);
+    if (done && wasNext) goNext(false); // ticked the next stop: bring the new one into view
     if (!fresh) {
       const fix = await geo.fixFor(now);
       const patch = fix ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc, fix_age_ms: Math.max(0, now - fix.t) } : {};
@@ -701,7 +837,7 @@ async function viewRun(ids) {
     S.blocks = {};
     for (const { d, groups, fixed } of laid) {
       if (visibleRuns.length > 1 || fixed) {
-        out.push(h('div', { class: 'route-divider' }, fixed ? `${d.run.route} · ${layoutFor(d.run.route).name}` : d.run.route,
+        out.push(h('div', { class: 'route-divider' }, fixed ? `${shortRoute(d.run.route)} · ${layoutFor(d.run.route).name}` : shortRoute(d.run.route),
           !fixed && S.useCustom && hasCustom(d) ? ' · your order' : ''));
       }
       groups.forEach((g, gi) => {
@@ -740,10 +876,15 @@ async function viewRun(ids) {
       out.push(h('div', { class: 'finished' }, q ? 'No match.' : S.todoOnly && stopsDone === stops ? 'Run complete. Nice work.' : 'Nothing to show.'));
     }
     body.replaceChildren(...out);
+    body.classList.toggle('as-list', layoutIsList());
+    // The next stop: the first tile not yet done, in reading order.
+    const next = body.querySelector('.tile:not(.done)');
+    if (next && !q) next.classList.add('next');
+    drawBar(q ? null : next);
     S.flash = null;
     const custom = S.data.some((d) => !layoutFor(d.run.route) && hasCustom(d));
     orderChip.hidden = !custom;
-    orderChip.textContent = S.useCustom ? 'Your order' : 'Sheet order';
+    orderChip.textContent = S.useCustom ? 'your order' : 'sheet order';
   }
 
   // Building header for a route layout: name, access code (from behind the login), progress.
@@ -795,7 +936,7 @@ async function viewRun(ids) {
     const someDone = !allDone && g.lines.some((l) => st[`${l.run_id}::${l.line_key}`]?.done);
     return h('button', {
       class: `tile bundle ${allDone ? 'done' : ''} ${S.flash === key ? 'flash' : ''}`,
-      'aria-pressed': String(allDone), 'data-fixed': '1',
+      'aria-pressed': String(allDone), 'data-fixed': '1', 'data-key': key, 'data-label': g.section.label,
       'aria-label': `${g.section.label}, ${g.qty} papers in one handover${allDone ? ', done' : ''}`,
       onclick: () => { if (drag.suppressClick) return; tapMany(g.lines, `${g.section.label} (${g.qty} papers)`, key); },
     },
@@ -867,16 +1008,18 @@ async function viewRun(ids) {
     return h('button', {
       class: `tile ${done ? 'done' : ''} ${kind ? `has-pub kind-${kind}` : ''} ${S.flash === key ? 'flash' : ''}`,
       'aria-pressed': String(done),
-      'aria-label': `${l.number} ${titleCase(l.street)}, ${parts.map((pt) => `${pt.qty} ${pt.pub}`).join(' and ')}${done ? ', done' : ''}`,
+      'aria-label': `${addrText(l)}, ${parts.map((pt) => `${pt.qty} ${pt.pub}`).join(' and ')}${done ? ', done' : ''}`,
       'data-key': key,
       'data-run': l.run_id,
       'data-addr': l.address_key,
+      'data-label': addrText(l),
       'data-fixed': opts.fixed ? '1' : null,
       onclick: () => { if (drag.suppressClick) return; tap(l); },
     },
     stripe,
-    h('div', { class: 'num' }, l.number,
+    h('div', { class: 'num' }, fmtNumber(l.number).main,
       plainNZH && l.qty > 1 ? h('span', { class: 'badge qty' }, `×${l.qty}`) : null),
+    fmtNumber(l.number).sub ? h('div', { class: 'unit' }, fmtNumber(l.number).sub) : null,
     plainNZH ? null : h('div', { class: 'pubs' }, parts.map((pt) => pubChip(pt.pub, pt.qty, kind))),
     S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
     l.bankNote ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday', title: l.bankNote }, 'Check bank')) : null,
@@ -892,61 +1035,66 @@ async function viewRun(ids) {
     done ? h('div', { class: 'done-word' }, 'DONE') : null);
   }
 
-  const menu = h('select', {
-    class: 'btn small menu', 'aria-label': 'More options',
-    onchange: async (e) => {
-      const v = e.target.value; e.target.value = '';
-      if (v === 'untick') {
-        const st = status();
-        const visible = (S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show)).flatMap((d) => d.lines.map((l) => ({ ...l, route: d.run.route })));
-        const done = visible.filter((l) => st[`${l.run_id}::${l.line_key}`]?.done);
-        if (!done.length) return toast('Nothing is ticked.');
-        if (!confirm(`Untick all ${done.length} completed deliveries? Everyone sharing this run will see it.`)) return;
-        for (const l of done) {
-          const ev = { id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route, done: false, user_name: app.me.name, device_time: new Date().toISOString(), device: deviceLabel() };
-          S.events.push(ev); app.store.addEvent(ev);
-        }
-        render();
-      } else if (v === 'order') {
-        if (!S.data.some(hasCustom)) return toast('This run is in sheet order. Hold a tile or street name to move it.');
-        S.useCustom = !S.useCustom; render();
-        toast(S.useCustom ? 'Showing your order.' : 'Showing the sheet’s order. Switch back to move tiles.');
-      } else if (v === 'codes') {
-        const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route));
-        if (d) openCodes(d);
-      } else if (v === 'big') {
-        const on = toggleBig(); render(); toast(on ? 'Big text on.' : 'Normal text.');
-      } else if (v === 'howto') {
-        toast('Hold a tile or a street name, drag it, let go. Quick taps still tick.');
-      } else if (v === 'resetorder') {
-        const runs = (S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show)).filter(hasCustom);
-        if (!runs.length) return toast('Already in sheet order.');
-        if (!confirm(`Put ${runs.map((d) => d.run.route).join(' + ')} back in the sheet's order? This changes it for everyone, for future runs too.`)) return;
-        for (const d of runs) { S.seq[d.run.route] = null; app.store.saveSequence(d.run.route, null, app.me.name); }
-        render();
-      } else if (v === 'refresh') {
-        S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.');
-      } else if (v === 'checks') {
-        alert(S.data.map((d) => `${d.run.route}\n${(d.run.checks || []).map((c) => `${c.ok ? '✓' : '✗'} ${c.label}: ${c.got}/${c.expected}`).join('\n')}${(d.run.warnings || []).length ? `\n\nNotes:\n- ${d.run.warnings.join('\n- ')}` : ''}`).join('\n\n'));
-      }
-    },
-  }, h('option', { value: '' }, '•••'), h('option', { value: 'big' }, bigOn() ? 'Normal text size' : 'Make text bigger'), h('option', { value: 'refresh' }, 'Refresh'), h('option', { value: 'order' }, 'Switch: your order / sheet order'),
-  h('option', { value: 'howto' }, 'How to move tiles'),
-  data.some((d) => layoutFor(d.run.route)) ? h('option', { value: 'codes' }, 'Door codes…') : null, h('option', { value: 'resetorder' }, 'Reset to sheet order…'),
-  h('option', { value: 'checks' }, 'Sheet checks'), h('option', { value: 'untick' }, 'Untick all…'));
+  // ---- the ⋯ menu: everything that isn't ticking lives here
+  const visibleData = () => (S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show));
+  function openMenu() {
+    const hasLayout = data.some((d) => layoutFor(d.run.route));
+    openSheet('Run options',
+      (close) => h('div', { class: 'menu-group' },
+        choiceRow('Show', [['all', 'All stops'], ['todo', 'To do only']], S.todoOnly ? 'todo' : 'all', (v) => { S.todoOnly = v === 'todo'; render(); }),
+        S.data.some((d) => !layoutFor(d.run.route) && hasCustom(d))
+          ? choiceRow('Order', [['mine', 'Your order'], ['sheet', 'Sheet order']], S.useCustom ? 'mine' : 'sheet', (v) => { S.useCustom = v === 'mine'; render(); }) : null,
+        bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => { setPref('stb-layout', v); render(); }),
+        choiceRow('Text', [['normal', 'Normal'], ['big', 'Big']], bigOn() ? 'big' : 'normal', (v) => { if ((v === 'big') !== bigOn()) { toggleBig(); render(); close(); openMenu(); } }),
+        choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); })),
+      (close) => h('div', { class: 'menu-group' },
+        menuItem('Find an address…', () => { close(); searchRow.hidden = false; search.focus(); }),
+        menuItem('Text a link to this run', () => { close(); shareRuns(ids, `${label} ${fmtDate(date)}`); }, { hint: 'Anyone in the family can open it and help' }),
+        hasLayout ? menuItem('Door codes…', () => { close(); const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route)); if (d) openCodes(d); }) : null,
+        menuItem('Refresh', async () => { close(); S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.'); }),
+        menuItem('How to move tiles', () => { close(); toast('Hold a tile or a street name, drag it, let go. Quick taps still tick.'); }),
+        menuItem('Sheet checks', () => { close(); openSheet('Sheet checks', h('div', { class: 'checks-list' }, S.data.map((d) => h('div', { class: 'card' },
+          h('b', null, shortRoute(d.run.route)),
+          h('ul', { class: 'checks' }, (d.run.checks || []).map((c) => h('li', { class: c.ok ? 'ok' : 'fail' }, `${c.ok ? '✓' : '✗'} ${c.label}: ${c.got}/${c.expected}`))),
+          (d.run.warnings || []).length ? h('ul', { class: 'warnings' }, d.run.warnings.map((w) => h('li', null, w))) : null)))); })),
+      (close) => h('div', { class: 'menu-group' },
+        menuItem('Put back in the sheet’s order…', () => {
+          close();
+          const runs = visibleData().filter(hasCustom);
+          if (!runs.length) return toast('Already in sheet order.');
+          if (!confirm(`Put ${runs.map((d) => shortRoute(d.run.route)).join(' + ')} back in the sheet's order? This changes it for everyone, for future runs too.`)) return;
+          for (const d of runs) { S.seq[d.run.route] = null; app.store.saveSequence(d.run.route, null, app.me.name); }
+          render();
+        }, { danger: true }),
+        menuItem('Untick everything…', () => {
+          close();
+          const st = status();
+          const done = visibleData().flatMap((d) => d.lines.map((l) => ({ ...l, route: d.run.route }))).filter((l) => st[`${l.run_id}::${l.line_key}`]?.done);
+          if (!done.length) return toast('Nothing is ticked.');
+          if (!confirm(`Untick all ${done.length} completed deliveries? Everyone sharing this run will see it.`)) return;
+          for (const l of done) {
+            const ev = { id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route, done: false, user_name: app.me.name, device_time: new Date().toISOString(), device: deviceLabel() };
+            S.events.push(ev); app.store.addEvent(ev);
+          }
+          S.last = null; render();
+        }, { danger: true })));
+  }
 
   mount(
-    floatbar,
-    h('header', { class: 'runhead' },
-      h('div', { class: 'row' },
-        h('a', { class: 'link', href: '#/', style: 'padding-left:0' }, '‹ Runs'),
-        h('h1', null, `${data.map((d) => shortRoute(d.run.route)).join(' + ')} · ${fmtDate(date)}`),
-        menu,
-        h('button', { class: 'btn small primary', onclick: () => shareRuns(ids, `${label} ${fmtDate(date)}`) }, 'Text link')),
-      h('div', { class: 'row chips' }, withChip, orderChip, gpsChip, syncChip),
-      seg ? h('div', { class: 'row' }, seg) : null,
-      h('div', { class: 'row' }, search, todoBtn)),
-    body);
+    h('header', { class: 'rh' },
+      h('div', { class: 'rh-row' },
+        h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to runs' }, '‹'),
+        h('div', { class: 'rh-title' },
+          h('h1', null, data.map((d) => shortRoute(d.run.route)).join(' + ')),
+          h('div', { class: 'rh-status' }, fmtDate(date), withChip, orderChip, gpsChip, syncChip)),
+        h('button', { class: 'icon-btn search-btn', 'aria-label': 'Find an address', onclick: () => { searchRow.hidden = !searchRow.hidden; if (!searchRow.hidden) search.focus(); } }, '🔍'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Run options', onclick: openMenu }, '⋯')),
+      floatbar,
+      seg ? h('div', { class: 'rh-row' }, seg) : null,
+      searchRow,
+      fbFill),
+    body,
+    actionbar);
 
   // ------------------------------------------------------------ hold to move
   // Hold a tile (or a street name) ~half a second: it lifts and follows your
@@ -964,7 +1112,7 @@ async function viewRun(ids) {
     drag.suppressClick = true;
     clearTimeout(drag.sTimer);
     if (!S.useCustom && S.data.some(hasCustom)) { toast('Switch back to your order (•••) to move tiles.'); return; }
-    if (S.todoOnly || S.query) { toast('Clear “To do only” and search to move tiles, so you can see where they land.'); return; }
+    if (S.todoOnly || S.query) { toast('Show all stops and close search (⋯ menu) to move tiles, so you can see where they land.'); return; }
     if (el.closest('[data-fixed]')) { toast('This run follows its own layout rules (building order, banks), so tiles can’t be moved here.'); return; }
     const src = kind === 'tile' ? el : el.closest('.street');
     const runId = src.dataset.run;
@@ -1021,8 +1169,8 @@ async function viewRun(ids) {
   // speeding up the longer it's held there, until you let go or move away.
   function autoScroll() {
     if (!drag.active) return;
-    const top = Math.max(0, document.querySelector('.floatbar')?.getBoundingClientRect().bottom || 0);
-    const bottom = window.visualViewport ? window.visualViewport.height : innerHeight;
+    const top = Math.max(0, document.querySelector('.rh')?.getBoundingClientRect().bottom || 0);
+    const bottom = (window.visualViewport ? window.visualViewport.height : innerHeight) - (document.querySelector('.actionbar')?.getBoundingClientRect().height || 0);
     const zone = Math.max(90, (bottom - top) * 0.18);
     let dir = 0, depth = 0;
     if (drag.y < top + zone) { dir = -1; depth = (top + zone - drag.y) / zone; }
@@ -1124,7 +1272,7 @@ async function viewRun(ids) {
     },
     presence: (names) => {
       withChip.hidden = !names.length;
-      withChip.textContent = names.length === 1 ? `With ${names[0]}` : `With ${names.length} others`;
+      withChip.textContent = names.length === 1 ? `with ${names[0]}` : `with ${names.length} others`;
       withChip.title = names.join(', ');
     },
     seq: (route, v) => {

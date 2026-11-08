@@ -4,7 +4,7 @@ with sync_playwright() as p:
     ctx = b.new_context(**p.devices['iPhone 13'])
     page = ctx.new_page(); errs=[]
     page.on('pageerror', lambda e: errs.append(str(e)))
-    page.goto('http://localhost:8765/'); page.wait_for_selector('text=Manually upload runsheet')
+    page.goto('http://localhost:8765/'); page.wait_for_selector('#pdf', state='attached')
     page.set_input_files('#pdf', '/home/claude/src2/report.pdf')
     page.wait_for_selector('text=Check the sheet', timeout=30000)
     print([t.split('\n')[0:3] for t in page.locator('.card').all_inner_texts()])

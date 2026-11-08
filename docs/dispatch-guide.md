@@ -1,6 +1,18 @@
 # Dispatch guide
 
-The dispatch dashboard is where routes are planned: the register of every address we deliver to, the places the vehicle stops, where the work is done on foot, and the rules that apply there. It is for people with **App + Dispatch** access. Open it from the **Dispatch dashboard** button on the Runs page (best on a laptop or tablet; it works on a phone too).
+The dispatch dashboard is where routes are planned: the register of every address we deliver to, the places the vehicle stops, where the work is done on foot, and the rules that apply there. It is for people with **App + Dispatch** access, and is its own site: **whoisdoingthis-star.github.io/stb-runs/dispatch/**. On a laptop a dispatcher lands there when opening the app; on a phone, use **Dispatch dashboard ›** on the Runs page or ⚙ Settings. **‹ Driver app** (bottom of the sidebar) goes back.
+
+## Overview (the landing page)
+- **Sheets** for today (or the next delivery day loaded): each run's stops, papers, whether the totals match RouteSmart, when it was updated and from where, and how many details changed. **Get Runs from RouteSmart** and **Upload a sheet** are here.
+- **Needs attention**: totals that don't match, changes since the previous sheet, complaints, addresses not tied to a location, new addresses on this sheet, service locations not yet validated. Most lines link straight to the fix.
+- **Progress**: each run's ticks so far and the last tick (live on delivery mornings).
+- **Papers to collect** and **Recent photos**.
+
+## Runs & sheets
+Every loaded day: per run, the totals check, the sheet's notes, when and how it was loaded, and what changed (tap to expand). Open any run from here.
+
+## History
+Every change on the dashboard (people, logins, locations, assignments, policies): when, who, what.
 
 The words used here are defined in [Business rules: locations](business-rules.md#locations-operating-and-service).
 
@@ -8,7 +20,8 @@ The words used here are defined in [Business rules: locations](business-rules.md
 Every address that has ever appeared on a run sheet, added automatically as sheets load. Nothing to type.
 - **Filters**: by run, by status (not assigned / assigned but not validated / validated / no GPS yet), or search.
 - **GPS** column: how many deliveries have been ticked there with a good GPS fix. Those positions are where the letterbox really is.
-- **Assign**: tick addresses (or the box at the top to tick all shown), choose an **operating location** and optionally a **service location**, then **Assign**. Assigning resets validation, since the new assignment hasn't been checked. The ticks clear after every Assign, Mark validated or Unassign, so each batch starts fresh; if some ticked addresses are hidden by the filters, the bar says so before you assign.
+- **Map** (above the table, once there's GPS): the shown addresses as dots (orange not assigned, green assigned, purple ticked). Click dots to tick them, then assign.
+- **Assign**: tick addresses (or the box at the top to tick all shown), choose an **operating location** and optionally a **service location**, then **Assign**. It asks you to confirm, listing the addresses, and the message afterwards has **Undo**, which puts every one back as it was. Assigning resets validation, since the new assignment hasn't been checked. The ticks clear after every Assign, Mark validated or Unassign, so each batch starts fresh; if some ticked addresses are hidden by the filters, the bar says so before you assign.
 - **Mark validated**: once someone has checked on the ground that the assignment is right.
 - Click an address to see it on the map (green = where it was delivered, blue = the stop, orange = the service location), add notes, see every policy that applies to it and where each comes from, or add a policy just for that address.
 
@@ -35,7 +48,7 @@ Each can be limited to certain days (none ticked = every day) and switched off w
 
 *Today policies are recorded and shown on the dashboard. Showing them on the drivers' run screens, and navigating stop to stop, is the next step ([roadmap](roadmap.md)).*
 
-## Users
+## People
 - **Access**: **App only** (runs, ticks, photos) or **App + Dispatch** (also this dashboard). Changes apply at their next screen.
 - **Add a person**: name (it shows on tiles they tick), email, access, and a temporary password you give them in person. They can change it from the Runs page (**Change password**).
 - **Set password**: give someone a new temporary password if they forget theirs.

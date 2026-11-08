@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2f3337">
+  <meta name="theme-color" content="#0e0f11">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="STB Runs">
@@ -16,6 +16,8 @@
 <body>
   <main id="app" aria-live="polite"><p class="boot">Loading…</p></main>
   <div id="toast" role="status" hidden></div>
+  <!-- Night is the default: set before the first paint so there's no white flash in the dark. -->
+  <script>try { var t = localStorage.getItem('stb-theme') || 'night', hr = +new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', hourCycle: 'h23' }).format(new Date()); if (t === 'night' || (t === 'auto' && (hr >= 19 || hr < 7))) document.documentElement.classList.add('dark'); } catch (e) { document.documentElement.classList.add('dark'); }</script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

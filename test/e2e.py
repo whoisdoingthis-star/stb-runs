@@ -1,6 +1,15 @@
+# Browser test of the driver app in demo mode (empty config.js), on a phone-sized screen.
+# Needs a real run sheet (kept out of the repo: it has customer addresses):
+#   python3 -m http.server 8765 &   then   python3 test/e2e.py /path/to/Report.pdf
 import json, sys
 from playwright.sync_api import sync_playwright
-PDF = '/home/claude/src/report.pdf'
+
+PDF = sys.argv[1] if len(sys.argv) > 1 else '/home/claude/src/report.pdf'
+fails = []
+def check(name, ok, detail=''):
+    print(('✓' if ok else '✗'), name, detail)
+    if not ok: fails.append(name)
+
 with sync_playwright() as p:
     b = p.chromium.launch()
     ctx = b.new_context(**p.devices['Pixel 7'], geolocation={'latitude': -36.8985, 'longitude': 174.9312, 'accuracy': 9}, permissions=['geolocation'])
@@ -9,50 +18,51 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.goto('http://localhost:8765/')
-    page.wait_for_selector('text=Manually upload runsheet')
-    page.screenshot(path='test/01-home.png')
+    page.wait_for_selector('#pdf', state='attached')
+    check('night mode is the default', page.evaluate("document.documentElement.classList.contains('dark')"))
     page.set_input_files('#pdf', PDF)
     page.wait_for_selector('text=Check the sheet', timeout=20000)
-    page.screenshot(path='test/02-load.png', full_page=True)
-    print('load text:', page.locator('.card').all_inner_texts())
-    page.click('text=Save 2 runs and open')
-    page.wait_for_selector('.tile')
-    page.wait_for_timeout(1500)
-    print('tiles:', page.locator('.tile').count(), '| stats:', page.locator('.fb-prog').inner_text(), '| gps:', page.locator('.runhead .chip:visible').nth(0).inner_text())
-    page.screenshot(path='test/03-run.png')
-    # tap first three tiles of HOWICK06 and the bulk Paper Plus line
-    tiles = page.locator('.tile')
-    for i in [0, 1, 4]:
-        tiles.nth(i).click()
-    page.wait_for_timeout(300)
-    print('after taps:', page.locator('.fb-prog').inner_text(), '| done tiles:', page.locator('.tile.done').count())
-    page.screenshot(path='test/04-tapped.png')
-    # undo the last via second tap
-    page.locator('.tile').nth(4).click()
-    print('after untap:', page.locator('.fb-prog').inner_text())
-    # switch to Run 13
-    page.click('.seg button:has-text("Run 13")')
-    print('run13 view:', page.locator('.fb-prog').inner_text(), page.locator('.tile').count())
-    page.click('.seg button:has-text("All")')
-    # to-do filter + search
-    page.click('text=To do only')
-    print('todo tiles:', page.locator('.tile').count())
-    page.click('text=To do only')
-    page.fill('.search', 'uxbridge')
-    print('search uxbridge tiles:', page.locator('.tile').count())
-    page.fill('.search', '')
-    # flagged tiles
-    print('flags:', page.locator('.flag').all_inner_texts())
-    # reload: ticks persist
+    page.locator('.stickybar button').click()
+    page.wait_for_selector('.tile'); page.wait_for_timeout(800)
+    check('one slim header, no Text link button in it', page.locator('.rh').count() == 1 and page.locator('.rh >> text=Text link').count() == 0)
+    nxt = page.locator('.tile.next')
+    check('exactly one next stop', nxt.count() == 1)
+    first_label = nxt.get_attribute('data-label')
+    nxt.click(); page.wait_for_timeout(300)
+    check('bottom bar shows the tick with Undo', first_label in page.inner_text('.ab-main') and page.locator('.actionbar >> text=Undo').is_visible(), page.inner_text('.ab-main'))
+    check('next stop moved on', page.locator('.tile.next').get_attribute('data-label') != first_label)
+    check('progress counts it', page.inner_text('.fb-prog').startswith('1/'), page.inner_text('.fb-prog'))
+    page.click('.actionbar >> text=Undo'); page.wait_for_timeout(300)
+    check('undo unticks', page.locator('.tile.done').count() == 0 and page.inner_text('.fb-prog').startswith('0/'))
+    check('units read naturally', all('/' not in t for t in page.locator('.tile .num').all_inner_texts()))
+    # menu: To do only, layout, colours
+    page.click('[aria-label="Run options"]'); page.wait_for_selector('.sheet')
+    page.click('.sheet >> text=One per row'); page.wait_for_timeout(200)
+    check('one per row layout', page.evaluate("document.querySelector('.runbody').classList.contains('as-list')"))
+    page.click('.sheet >> text=Day'); page.wait_for_timeout(200)
+    check('day colours on request', not page.evaluate("document.documentElement.classList.contains('dark')"))
+    page.click('.sheet >> text=Night'); page.click('.sheet >> text=Two across'); page.keyboard.press('Escape')
+    # search
+    page.click('[aria-label="Find an address"]'); page.fill('.search', 'uxbridge'); page.wait_for_timeout(200)
+    n = page.locator('.tile').count()
+    check('search finds a street', 0 < n < 20, str(n))
+    page.click('.rh >> text=Done'); page.wait_for_timeout(200)
+    # tick three, reload, still ticked
+    for _ in range(3):
+        page.locator('.tile.next').click(); page.wait_for_timeout(150)
     page.reload(); page.wait_for_selector('.tile'); page.wait_for_timeout(500)
-    print('after reload:', page.locator('.fb-prog').inner_text())
+    check('ticks survive a reload', page.locator('.tile.done').count() == 3)
     ev = page.evaluate("Object.keys(localStorage).filter(k=>k.startsWith('stb.events.')).flatMap(k=>JSON.parse(localStorage.getItem(k)))")
-    print('events stored:', len(ev)); print(json.dumps(ev[0], indent=1))
-    url = page.url
-    # home list
-    page.goto('http://localhost:8765/#/'); page.wait_for_selector('.run-card')
-    print('home:', page.locator('.run-card').all_inner_texts())
-    page.screenshot(path='test/05-home-after.png')
-    print('URL of run:', url)
-    print('errors:', errors)
+    check('ticks carry GPS', all(e.get('lat') for e in ev if e['done']), json.dumps(ev[0])[:120])
+    # leaving the run: no stray message, Today home lists runs as Run N
+    page.goto('http://localhost:8765/#/'); page.wait_for_selector('.run-tile', state='attached')
+    if page.locator('details.earlier').count(): page.click('details.earlier > summary')  # an older sample sheet sits under "Earlier days"
+    check('toast does not follow to home', page.locator('#toast').is_hidden())
+    names = page.locator('.rt-name').all_inner_texts()
+    check('home uses Run N names, in order', names == sorted(names, key=lambda x: int(x.split()[-1])) and all(x.startswith('Run ') for x in names), str(names))
+    page.click('[aria-label=Settings]'); page.wait_for_selector('.sheet')
+    check('settings has upload and colours', page.locator('.sheet >> text=Upload a run sheet').count() == 1 and page.locator('.sheet >> text=Colours').count() == 1)
+    check('no page errors', not errors, str(errors))
     b.close()
+print('FAILED:' if fails else 'ALL PASSED', fails)
+sys.exit(1 if fails else 0)

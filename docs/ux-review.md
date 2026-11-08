@@ -3,6 +3,7 @@
 - **Date:** 8 Nov 2026 (before the first live trial)
 - **Asked by:** Mike, because "the app interface is becoming a bit clunky"
 - **Method:** walked every screen at phone size (390 px) and laptop size, in normal and big text, using the Mon 9 Nov sheets. Checked against the usual heuristics (Nielsen's ten, Apple/Material touch and reach guidance, WCAG 2.2 AA contrast and target size) and the realities of this job.
+- **Status:** all four phases implemented on 9 Nov 2026 (see the [changelog](../CHANGELOG.md)), with night mode as the default at Zaph's suggestion. D3's map-first planning is a click-to-select map on the Addresses page; a fuller drag-to-stop map is still on the [roadmap](roadmap.md).
 - **Screenshots:** kept out of the repository, because the repo is public and the screens show customer names and addresses.
 
 ## Summary: the five changes that matter most

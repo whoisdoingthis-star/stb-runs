@@ -33,8 +33,8 @@ async function leaflet() {
   return L;
 }
 
-export async function viewDispatch(ctx, tab = 'addresses') {
-  const { app, h, mount, toast, titleCase, shortRoute } = ctx;
+export async function viewDispatch(ctx, tab = 'overview') {
+  const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary } = ctx;
   if (app.store.mode !== 'shared') {
     mount(h('div', { class: 'page' }, h('p', null, 'The dispatch dashboard needs the shared version.'), h('a', { href: '#/' }, '‹ Runs')));
     return;
@@ -44,7 +44,7 @@ export async function viewDispatch(ctx, tab = 'addresses') {
     return;
   }
   const sb = app.store.sb;
-  const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [] };
+  const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [], runs: [], status: [], complaints: [], photos: [] };
   const sel = new Set();             // selected address keys
   const F = { route: '', status: 'all', q: '' };
   let current = null;                // { type: 'group'|'op'|'svc'|'address', id }
@@ -62,6 +62,25 @@ export async function viewDispatch(ctx, tab = 'addresses') {
     ]);
     D.addresses = must(a); D.groups = must(g); D.ops = must(o); D.svcs = must(s); D.policies = must(p); D.members = must(m);
     D.addresses.sort(addrCompare);
+    D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes').order('delivery_date', { ascending: false }).order('route').limit(80));
+    const focus = focusDate();
+    const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
+    const [st, cl, ph, hi] = await Promise.all([
+      ids.length ? sb.from('line_status').select('run_id, line_key, done, user_name, device_time').in('run_id', ids) : { data: [] },
+      ids.length ? sb.from('run_lines').select('run_id, number, street, flags').in('run_id', ids) : { data: [] },
+      sb.from('photos').select('route, address_key, taken_at, user_name').order('taken_at', { ascending: false }).limit(10),
+      tab === 'history' ? sb.from('dispatch_history').select('*').order('at', { ascending: false }).limit(250) : { data: D.history },
+    ]);
+    D.status = st.data || [];
+    D.complaints = (cl.data || []).filter((l) => (l.flags || []).some((f) => f.type === 'complaint'));
+    D.photos = ph.data || [];
+    D.history = hi.data || [];
+  }
+  // The delivery day the overview is about: today or the next one loaded, else the latest.
+  function focusDate() {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+    const dates = [...new Set(D.runs.map((r) => r.delivery_date))].sort();
+    return dates.find((d) => d >= today) || dates[dates.length - 1] || today;
   }
   const by = () => app.me.name;
   const now = () => new Date().toISOString();
@@ -122,8 +141,9 @@ export async function viewDispatch(ctx, tab = 'addresses') {
     const draw = (pts) => {
       layer.clearLayers();
       for (const p of pts) {
-        L.circleMarker([p.lat, p.lng], { radius: p.big ? 9 : 6, color: p.color || '#2f3337', weight: 2, fillOpacity: 0.7 })
+        const mk = L.circleMarker([p.lat, p.lng], { radius: p.big ? 9 : 6, color: p.color || '#2f3337', weight: 2, fillOpacity: 0.7 })
           .bindTooltip(p.label || '').addTo(layer);
+        if (p.onClick) mk.on('click', p.onClick);
       }
     };
     draw(points);
@@ -138,26 +158,129 @@ export async function viewDispatch(ctx, tab = 'addresses') {
   }
 
   // ---- layout
-  const tabs = [['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'Users']];
-  if (!tabs.some(([k]) => k === tab)) tab = 'addresses';
+  const tabs = [['overview', 'Overview'], ['runs', 'Runs & sheets'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'History']];
+  if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
-  const nav = h('nav', { class: 'dz-tabs' });
-  // Switch tabs without leaving the page (keeps what's selected); the address bar follows along.
-  const go = (k, focus) => { tab = k; if (focus !== undefined) current = focus; history.replaceState(null, '', `#/dispatch/${k}`); render(); };
-  mount(h('div', { class: 'dz' },
-    h('header', { class: 'dz-top' }, h('a', { href: '#/', class: 'link' }, '‹ Runs'), h('h1', null, 'Dispatch'), nav),
-    body));
+  const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
+  // Switch pages without leaving (keeps what's selected); the address bar follows along.
+  const go = async (k, focus) => {
+    const needHistory = k === 'history' && tab !== 'history';
+    tab = k; if (focus !== undefined) current = focus;
+    history.replaceState(null, '', `#/dispatch/${k}`);
+    if (needHistory) await refresh(); else render();
+  };
+  mount(h('div', { class: 'dz dz-shell' },
+    h('aside', { class: 'dz-sidebar' },
+      h('div', { class: 'dz-logo' }, h('span', { class: 'brand' }, 'Send The Boy'), h('b', null, 'Dispatch')),
+      nav,
+      h('div', { class: 'dz-side-foot' },
+        h('a', { href: '#/', class: 'dz-applink' }, '‹ Driver app'),
+        h('div', { class: 'small muted' }, app.me.name))),
+    h('main', { class: 'dz-content' }, body)));
   try { await load(); } catch (e) { body.replaceChildren(h('div', { class: 'banner bad' }, `Could not load: ${e.message}. Has the dispatch part of sql/schema.sql been run?`)); return; }
   const render = () => {
     maps.splice(0).forEach((m) => m.remove());
-    nav.replaceChildren(...tabs.map(([k, label]) => h('a', { href: `#/dispatch/${k}`, class: k === tab ? 'on' : '', onclick: (e) => { e.preventDefault(); go(k, null); } }, label)));
-    body.replaceChildren(({ addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers })[tab]());
+    nav.replaceChildren(...tabs.map(([k, label]) => h('a', { href: `#/dispatch/${k}`, class: k === tab ? 'on' : '', onclick: (e) => { e.preventDefault(); go(k, null); } }, label,
+      k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null)));
+    body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
+      ({ overview: renderOverview, runs: renderRuns, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
   const act = async (fn, ok) => { try { await fn(); if (ok) toast(ok); await refresh(); } catch (e) { toast(`Didn't save: ${e.message}`); } };
   // Bulk actions on the selected addresses. The selection is cleared afterwards, so the next
   // assignment can never sweep up addresses from the previous one (bug found 8 Nov 2026).
   const bulkAct = (fn, ok) => act(async () => { await fn(); sel.clear(); }, ok);
+  // (act/bulkAct return promises, so a toast with Undo can follow the refresh)
+
+  // ================= Overview (landing) =================
+  function renderOverview() {
+    const date = focusDate();
+    const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
+    const doneBy = (id) => D.status.filter((x) => x.run_id === id && x.done).length;
+    const lastTick = D.status.filter((x) => x.done).sort((a, b) => (a.device_time < b.device_time ? 1 : -1))[0];
+    const unassigned = D.addresses.filter((a) => !a.operating_location_id);
+    const newOnes = D.addresses.filter((a) => a.first_seen === date && D.addresses.some((b) => b.first_seen < date));
+    const notValidated = D.svcs.filter((x) => !x.validated_at);
+    const changed = rs.filter((r) => r.last_changes?.count);
+    const failed = rs.filter((r) => (r.checks || []).some((c) => !c.ok));
+    const card = (title, ...kids) => h('section', { class: `dz-card ${title.startsWith('Sheets') ? 'wide' : ''}` }, h('h2', null, title), ...kids);
+    const attention = [
+      failed.length ? h('li', { class: 'bad' }, `Totals don't match on ${failed.map((r) => shortRoute(r.route)).join(', ')}`) : null,
+      changed.length ? h('li', null, `${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')} since the previous sheet`) : null,
+      D.complaints.length ? h('li', null, `${D.complaints.length} complaint${D.complaints.length === 1 ? '' : 's'}: ${D.complaints.map((l) => `${l.number} ${titleCase(l.street)}`).join(', ')}`) : null,
+      unassigned.length ? h('li', null, h('button', { class: 'link', onclick: () => { F.status = 'unassigned'; F.route = ''; go('addresses', null); } }, `${unassigned.length} addresses not tied to a location`)) : null,
+      newOnes.length ? h('li', null, `${newOnes.length} new address${newOnes.length === 1 ? '' : 'es'} on this sheet: ${newOnes.slice(0, 6).map(addrLabel).join(', ')}${newOnes.length > 6 ? '…' : ''}`) : null,
+      notValidated.length ? h('li', null, h('button', { class: 'link', onclick: () => go('locations', null) }, `${notValidated.length} service location${notValidated.length === 1 ? '' : 's'} not validated on the ground`)) : null,
+    ].filter(Boolean);
+    return h('div', { class: 'dz-grid' },
+      card(`Sheets · ${fmtDate(date, true)}`,
+        rs.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
+          h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Papers'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'))),
+          h('tbody', null, rs.map((r) => h('tr', null,
+            h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
+            h('td', null, r.summary?.lines ?? '?'),
+            h('td', null, r.summary?.copies ?? '?'),
+            h('td', null, (r.checks || []).every((c) => c.ok) ? h('span', { class: 'ok' }, '✓ match') : h('span', { class: 'bad' }, '✗ check')),
+            h('td', null, `${fmtStamp(r.updated_at || r.created_at)} ${r.source === 'auto' ? '(RouteSmart)' : '(upload)'}`),
+            h('td', null, r.last_changes ? (r.last_changes.count ? h('span', { class: 'warn' }, `${r.last_changes.count} changed`) : 'none') : '–')))))) : h('p', { class: 'muted' }, 'No sheets for this day yet.'),
+        h('div', { class: 'dz-actions' },
+          h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
+          h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…'))),
+      card('Needs attention', attention.length ? h('ul', { class: 'dz-attn' }, attention) : h('p', { class: 'ok' }, '✓ Nothing waiting.')),
+      card('Progress',
+        rs.length ? h('div', null, rs.map((r) => {
+          const n = r.summary?.lines || 0; const d = doneBy(r.id);
+          return h('div', { class: 'dz-prog' }, h('span', { class: 'dz-prog-name' }, shortRoute(r.route)),
+            h('div', { class: 'bar' }, h('i', { style: `width:${n ? Math.round((100 * d) / n) : 0}%` })), h('span', { class: 'dz-prog-n' }, `${d}/${n}`));
+        }),
+        h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–')),
+      card('Papers to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–')),
+      card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
+        : h('p', { class: 'muted' }, 'No delivery photos yet.')));
+  }
+
+  // ================= Runs & sheets =================
+  function renderRuns() {
+    const dates = [...new Set(D.runs.map((r) => r.delivery_date))];
+    return h('div', null,
+      h('div', { class: 'dz-actions' },
+        h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
+        h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…')),
+      dates.length ? dates.map((date) => {
+        const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
+        return h('section', { class: 'dz-card' }, h('h2', null, fmtDate(date, true)),
+          h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
+            h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Papers'), h('th', null, 'Totals'), h('th', null, 'Notes'), h('th', null, 'Loaded'), h('th', null, 'What changed'))),
+            h('tbody', null, rs.map((r) => h('tr', null,
+              h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
+              h('td', null, r.summary?.lines ?? '?'),
+              h('td', null, r.summary?.copies ?? '?'),
+              h('td', null, (r.checks || []).every((c) => c.ok) ? h('span', { class: 'ok' }, `✓ ${r.checks?.length || 0}`) : h('span', { class: 'bad' }, (r.checks || []).filter((c) => !c.ok).map((c) => `✗ ${c.label}`).join(', '))),
+              h('td', null, (r.warnings || []).length ? h('details', null, h('summary', null, `${r.warnings.length}`), h('ul', null, r.warnings.map((w) => h('li', null, w)))) : '–'),
+              h('td', null, `${fmtStamp(r.updated_at || r.created_at)} · ${r.source === 'auto' ? 'RouteSmart' : 'upload'}`),
+              h('td', null, !r.last_changes ? '–' : !r.last_changes.count ? 'No changes'
+                : h('details', null, h('summary', null, `${r.last_changes.count} changed`), h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))))))))));
+      }) : h('p', { class: 'muted' }, 'No sheets loaded yet.'));
+  }
+
+  // ================= History =================
+  function renderHistory() {
+    const what = (x) => {
+      const d = x.data || {};
+      if (x.entity === 'addresses') return `${d.number || ''} ${titleCase(d.street || '')}: ${d.operating_location_id ? `→ ${opById(d.operating_location_id)?.name || 'a location'}${d.service_location_id ? ` / ${svcById(d.service_location_id)?.name || ''}` : ''}` : 'unassigned'}${d.validated_at ? ' ✓' : ''}`;
+      if (x.entity === 'members') return `${d.display_name || x.entity_id}: ${d.role === 'dispatcher' ? 'App + Dispatch' : 'App only'}${d.active === false ? ' (switched off)' : ''}`;
+      if (x.entity === 'login') return `${x.entity_id}: ${x.action}`;
+      if (x.entity === 'location_policies') return policyText(d);
+      return d.name || x.entity_id;
+    };
+    const ENT = { addresses: 'Address', members: 'Person', login: 'Login', location_groups: 'Group', operating_locations: 'Operating location', service_locations: 'Service location', location_policies: 'Policy' };
+    return D.history.length ? h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' },
+      h('thead', null, h('tr', null, h('th', null, 'When'), h('th', null, 'Who'), h('th', null, 'What'), h('th', null, ''), h('th', null, 'Details'))),
+      h('tbody', null, D.history.map((x) => h('tr', null,
+        h('td', null, fmtStamp(x.at)), h('td', null, (x.by_email || 'system').split('@')[0]), h('td', null, ENT[x.entity] || x.entity),
+        h('td', null, x.action), h('td', null, what(x)))))))
+      : h('p', { class: 'muted' }, 'No changes recorded yet.');
+  }
 
   // ================= Addresses =================
   function renderAddresses() {
@@ -182,13 +305,26 @@ export async function viewDispatch(ctx, tab = 'addresses') {
     opSel.addEventListener('change', () => svcSel.replaceChildren(h('option', { value: '' }, '(no service location)'),
       ...D.svcs.filter((s) => s.operating_location_id === opSel.value).map((s) => h('option', { value: s.id }, s.name))));
     const keys = () => [...sel];
+    // Confirm, remember what was there, change, then offer Undo.
+    const bulkChange = (question, patch, ok, filter = () => true) => {
+      const rows = D.addresses.filter((a) => sel.has(a.address_key) && filter(a));
+      if (!rows.length) return toast('Nothing to change.');
+      if (!confirm(`${question}\n\n${rows.slice(0, 12).map(addrLabel).join('\n')}${rows.length > 12 ? `\n…and ${rows.length - 12} more` : ''}`)) return;
+      const before = rows.map((a) => ({ key: a.address_key, v: { operating_location_id: a.operating_location_id, service_location_id: a.service_location_id, validated_at: a.validated_at, validated_by: a.validated_by } }));
+      bulkAct(async () => must(await sb.from('addresses').update({ ...patch, updated_at: now(), updated_by: by() }).in('address_key', rows.map((a) => a.address_key))), null)
+        .then(() => toast(`${ok} (${rows.length})`, { label: 'Undo', fn: () => act(async () => { for (const b of before) must(await sb.from('addresses').update({ ...b.v, updated_at: now(), updated_by: by() }).eq('address_key', b.key)); }, 'Undone.') }));
+    };
     const bulk = h('div', { class: 'dz-bulk', hidden: !sel.size },
       h('b', null, `${sel.size} selected`),
       [...sel].some((k) => !shown.some((a) => a.address_key === k)) ? h('span', { class: 'bad small' }, `(${[...sel].filter((k) => !shown.some((a) => a.address_key === k)).length} not shown by the filters)`) : null,
       opSel, svcSel,
-      h('button', { class: 'btn small primary', onclick: () => { if (!opSel.value) return toast('Choose an operating location.'); bulkAct(async () => must(await sb.from('addresses').update({ operating_location_id: opSel.value, service_location_id: svcSel.value || null, validated_at: null, validated_by: null, updated_at: now(), updated_by: by() }).in('address_key', keys())), `Assigned ${sel.size}.`); } }, 'Assign'),
-      h('button', { class: 'btn small', onclick: () => bulkAct(async () => must(await sb.from('addresses').update({ validated_at: now(), validated_by: by(), updated_at: now(), updated_by: by() }).in('address_key', keys()).not('operating_location_id', 'is', null)), 'Marked validated (assigned ones only).') }, 'Mark validated'),
-      h('button', { class: 'btn small', onclick: () => bulkAct(async () => must(await sb.from('addresses').update({ operating_location_id: null, service_location_id: null, validated_at: null, validated_by: null, updated_at: now(), updated_by: by() }).in('address_key', keys())), 'Unassigned.') }, 'Unassign'),
+      h('button', { class: 'btn small primary', onclick: () => {
+        if (!opSel.value) return toast('Choose an operating location.');
+        const o = opById(opSel.value); const sv = svcById(svcSel.value);
+        bulkChange(`Assign ${sel.size} address${sel.size === 1 ? '' : 'es'} to ${o.name}${sv ? ` / ${sv.name}` : ''}?`, { operating_location_id: opSel.value, service_location_id: svcSel.value || null, validated_at: null, validated_by: null }, `Assigned to ${o.name}.`);
+      } }, 'Assign'),
+      h('button', { class: 'btn small', onclick: () => bulkChange('Mark these as checked on the ground?', { validated_at: now(), validated_by: by() }, 'Marked validated.', (a) => !!a.operating_location_id) }, 'Mark validated'),
+      h('button', { class: 'btn small', onclick: () => bulkChange('Unassign these addresses?', { operating_location_id: null, service_location_id: null, validated_at: null, validated_by: null }, 'Unassigned.') }, 'Unassign'),
       h('button', { class: 'link small', onclick: () => { sel.clear(); render(); } }, 'Clear'));
 
     const allBox = h('input', { type: 'checkbox', checked: shown.length > 0 && shown.every((a) => sel.has(a.address_key)), title: 'Select all shown',
@@ -212,12 +348,27 @@ export async function viewDispatch(ctx, tab = 'addresses') {
           h('span', null, h('b', null, D.addresses.filter((a) => a.gps_lat != null).length), ' with GPS')),
         h('div', { class: 'dz-filters' }, routeSel, statusSel, search),
         bulk,
+        addressMap(shown),
         h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' },
           h('thead', null, h('tr', null, h('th', null, allBox), h('th', null, 'Address'), h('th', null, 'Runs'), h('th', null, 'GPS'), h('th', null, 'Operating location'), h('th', null, 'Service location'), h('th', null, 'OK'))),
           h('tbody', null, rows))),
         shown.length > 600 ? h('p', { class: 'small muted' }, `Showing 600 of ${shown.length}. Narrow it with the filters.`) : null,
         !D.addresses.length ? h('p', { class: 'muted' }, 'No addresses yet. They are added automatically each time a run sheet loads.') : null),
       h('aside', { class: 'dz-side' }, current?.type === 'address' ? addressPanel(D.addresses.find((a) => a.address_key === current.id)) : h('p', { class: 'muted' }, 'Tick addresses to assign them to an operating location in bulk, or click one to see it on the map.')));
+  }
+
+  // Map of the shown addresses that have delivery GPS: click a dot to tick it for bulk assigning.
+  function addressMap(shown) {
+    const pts = shown.filter((a) => a.gps_lat != null);
+    if (!pts.length) return h('p', { class: 'small muted' }, 'Map: no GPS for these addresses yet. Dots appear once deliveries are ticked.');
+    const el = h('div', { class: 'dz-map dz-map-wide' });
+    const det = h('details', { class: 'dz-mapcard', open: F.mapOpen ? true : null, ontoggle: () => { F.mapOpen = det.open; if (det.open) draw(); } },
+      h('summary', null, `Map (${pts.length} with GPS) · click a dot to tick it`), el);
+    const draw = () => map(el, { points: pts.map((a) => ({ lat: a.gps_lat, lng: a.gps_lng, label: `${addrLabel(a)}${a.operating_name ? ` · ${a.operating_name}` : ''}`,
+      color: sel.has(a.address_key) ? '#c4b5fd' : a.operating_location_id ? '#15803d' : '#f59e0b', big: sel.has(a.address_key),
+      onClick: () => { if (sel.has(a.address_key)) sel.delete(a.address_key); else sel.add(a.address_key); render(); } })) });
+    if (F.mapOpen) setTimeout(draw, 0);
+    return det;
   }
 
   function addressPanel(a) {

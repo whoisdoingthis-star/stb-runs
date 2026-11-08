@@ -6,6 +6,7 @@
 | [Business rules](business-rules.md) | How the sheets are read and shown; locations, policies, access |
 | [Dispatch guide](dispatch-guide.md) | Using the dispatch dashboard |
 | [Roadmap](roadmap.md) | What's next |
+| [Design guide](design.md) | How screens look and behave |
 | [UX review](ux-review.md) | Usability review of the app and dashboard (8 Nov 2026), with a phased plan |
 | [Run 8: Bruce McLaren Village](run8-village.md) | Run 8's own rules |
 | [Architecture](architecture.md) | How the system fits together |

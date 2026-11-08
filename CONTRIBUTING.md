@@ -56,6 +56,7 @@ lets it through. Use it rarely.
 ## Definition of done
 
 - [ ] Works on a phone (or demo mode) and `npm run check` passes
+- [ ] Follows the [design guide](docs/design.md): tokens only, checked in Night, Day and big text
 - [ ] The affected docs pages are updated, and the family guide if anything on screen changed
 - [ ] CHANGELOG.md has a line under *Unreleased*
 - [ ] Database changes are in `sql/schema.sql` and `docs/data-model.md`
