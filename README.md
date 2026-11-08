@@ -16,6 +16,7 @@ the full project, so the documentation lives here with the code and changes with
 | [Business rules](docs/business-rules.md) | How the sheets are read: publications, retail and dockets, complaints, colours, what counts as a change |
 | [Dispatch guide](docs/dispatch-guide.md) | The dispatch dashboard: address register, operating and service locations, policies, users |
 | [Roadmap](docs/roadmap.md) | What's planned next |
+| [UX review](docs/ux-review.md) | Usability review and the plan to make the app calmer and faster |
 | [Run 8: Bruce McLaren Village](docs/run8-village.md) | Run 8's own rules: building order, mailbox banks, reception handover, door codes |
 | [Architecture](docs/architecture.md) | How the pieces fit: RouteSmart → GitHub Actions → Supabase → phones |
 | [Data model](docs/data-model.md) | Every table, what it holds, who can see it |
