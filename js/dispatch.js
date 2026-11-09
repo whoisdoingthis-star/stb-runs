@@ -388,11 +388,11 @@ export async function viewDispatch(ctx, tab = 'overview') {
   // ================= Closing a run (docs/business-rules.md#closing-a-run) =================
   const runStatus = (r) => h('div', { class: 'dz-runstatus' },
     r.closed_at
-      ? h('span', { class: 'ok' }, `✓ Closed${r.close_method === 'paper' ? ' (paper)' : ''}${r.driver ? ` · ${r.driver}` : ''} · ${fmtStamp(r.closed_at)}`)
-      : runComplete(r) ? h('span', { class: 'ok' }, `✓ Finished in the app${r.tickedBy ? ` by ${r.tickedBy}` : ''}${r.lastTick ? ` · ${fmtStamp(r.lastTick)}` : ''}`)
+      ? h('span', { class: 'ok' }, `✓ Closed (${r.close_method === 'paper' ? 'paper' : 'app'})${r.driver ? ` · ${r.driver}` : ''} · ${fmtStamp(r.closed_at)}`)
+      : runComplete(r) ? h('span', { class: 'ok' }, `✓ Completed (app)${r.tickedBy ? ` · ${r.tickedBy}` : ''}${r.lastTick ? ` · ${fmtStamp(r.lastTick)}` : ''}`)
       : h('span', null, `Open${r.done ? ` · ${r.done}/${r.summary?.lines ?? '?'} done` : ''}${r.driver ? ` · ${r.driver}` : ''}`),
     r.close_note ? h('div', { class: 'small muted' }, r.close_note) : null,
-    h('button', { class: 'btn small', onclick: () => (r.closed_at ? reopenRun(r) : closeRun(r)) }, r.closed_at ? 'Reopen…' : 'Close run…'));
+    h('button', { class: 'btn small', onclick: () => (r.closed_at ? reopenRun(r) : closeRun(r)) }, r.closed_at ? 'Reopen…' : runComplete(r) ? 'Set driver…' : 'Close run…'));
 
   // Default finish time: 7am on the delivery day (runs are done early), or now if that is still ahead.
   const defaultFinish = (date) => {
