@@ -39,6 +39,14 @@ If no dispatcher can sign in: Supabase SQL editor → `update public.members set
 ## Change the database
 Edit `sql/schema.sql` (re-runnable), run the new part in the Supabase SQL editor, update [data model](data-model.md), `npm run check`, commit. See [CONTRIBUTING](../CONTRIBUTING.md).
 
+## Remove an accidental tick
+Ticks are never changed from the app; normally Undo is the fix (the history keeps both). If a tap was a mistake that shouldn't be in the record at all (a test tap away from the address, whose GPS would skew the letterbox position), a dispatcher can delete it by hand, with the owner's say-so:
+1. In the Supabase SQL editor, list that address's taps for the day (`tap_events` joined to `runs` on `run_id`, filtered by `address_key` and `delivery_date`).
+2. Delete only the mistaken rows by `id`. The previous tick becomes the current one again.
+3. Add a line to `dispatch_history` (entity `tap_events`, action `delete`, a note of what and why) so the Change log shows it.
+
+Done once so far: 9 Nov 2026, an accidental untick and re-tick at Hulme 447 (Run 8), at Mike's request; Lisa's 5:23 am tick kept.
+
 ## Find a delivery photo
 Supabase **Storage → delivery-photos → date → route**. The `photos` table lists who took each one, when and where.
 
