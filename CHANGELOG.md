@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- Finished runs now say who finished them and when ("✓ Finished in the app by Lisa · 6:42 am" in Dispatch, "✓ Finished by Lisa" on the phones), instead of looking open until closed.
 - **Runs to do / History**: the Runs page on the phones now shows only today's and upcoming runs that aren't finished. Finished runs (every stop ticked, or closed in Dispatch) and earlier days move to the **History** tab. Replaces *Earlier days*.
 - **Dispatch, Runs & sheets: Active / History.** Active keeps every unfinished run, including earlier days, until it's finished or closed; Overview lists only the day's active runs and flags earlier runs not yet closed under Needs attention. The old *History* page is now **Change log**.
 - **Fix:** stop counts on the Runs page could undercount once there were weeks of runs (the phone counted from at most 1000 ticks). Now counted in the database. (view `run_progress`)

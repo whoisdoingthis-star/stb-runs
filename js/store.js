@@ -280,9 +280,9 @@ export class SupabaseStore extends Base {
     if (error) { const c = LS.get('stb.runlist', []); if (c.length) return c; throw error; }
     const ids = data.map((r) => r.id);
     if (ids.length) {
-      const { data: st } = await this.sb.from('run_progress').select('run_id, done, not_delivered').in('run_id', ids);
+      const { data: st } = await this.sb.from('run_progress').select('run_id, done, not_delivered, ticked_by').in('run_id', ids);
       const by = Object.fromEntries((st || []).map((x) => [x.run_id, x]));
-      data.forEach((r) => { r.done = by[r.id]?.done || 0; r.notDelivered = by[r.id]?.not_delivered || 0; });
+      data.forEach((r) => { r.done = by[r.id]?.done || 0; r.notDelivered = by[r.id]?.not_delivered || 0; r.tickedBy = by[r.id]?.ticked_by || ''; });
     }
     LS.set('stb.runlist', data);
     return data;

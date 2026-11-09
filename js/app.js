@@ -312,7 +312,7 @@ async function viewHome() {
                   pickList(r).map((x) => pickItem(x))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
                 r.closed_at ? h('div', { class: 'rt-closed' }, `✓ Closed${r.close_method === 'paper' ? ', done on paper' : ''}${r.driver ? ` by ${r.driver}` : ''}`)
-                  : done ? h('div', { class: 'rt-sub' }, done >= stops ? '✓ Finished' : `${done} of ${stops} done`) : null),
+                  : done ? h('div', { class: done >= stops ? 'rt-closed' : 'rt-sub' }, done >= stops ? `✓ Finished${r.tickedBy ? ` by ${r.tickedBy}` : ''}` : `${done} of ${stops} done`) : null),
               h('span', { class: 'rt-go' }, r.closed_at || (done && done >= stops) ? 'View' : done ? 'Continue' : 'Start')),
             r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, `What changed on ${shortRoute(r.route)}`),
               h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))) : null);

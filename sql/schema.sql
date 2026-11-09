@@ -820,6 +820,7 @@ select run_id,
        count(*) filter (where done)                         as done,
        count(*) filter (where done and outcome = 'futile')  as not_delivered,
        count(*) filter (where done and method = 'paper')    as paper,
-       max(device_time) filter (where done)                 as last_tick
+       max(device_time) filter (where done)                 as last_tick,
+       string_agg(distinct user_name, ', ') filter (where done) as ticked_by
 from public.line_status
 group by run_id;

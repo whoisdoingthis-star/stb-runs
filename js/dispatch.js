@@ -66,9 +66,9 @@ export async function viewDispatch(ctx, tab = 'overview') {
     D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes, key_report, driver, closed_at, closed_by, close_method, close_note').order('delivery_date', { ascending: false }).order('route').limit(80));
     // Progress per run, counted in the database: a run is complete when closed or every stop is dealt with.
     const allIds = D.runs.map((r) => r.id);
-    const prog = allIds.length ? (await sb.from('run_progress').select('run_id, done, not_delivered').in('run_id', allIds)).data || [] : [];
+    const prog = allIds.length ? (await sb.from('run_progress').select('run_id, done, not_delivered, last_tick, ticked_by').in('run_id', allIds)).data || [] : [];
     const pb = Object.fromEntries(prog.map((x) => [x.run_id, x]));
-    D.runs.forEach((r) => { r.done = pb[r.id]?.done || 0; r.notDelivered = pb[r.id]?.not_delivered || 0; });
+    D.runs.forEach((r) => { r.done = pb[r.id]?.done || 0; r.notDelivered = pb[r.id]?.not_delivered || 0; r.lastTick = pb[r.id]?.last_tick; r.tickedBy = pb[r.id]?.ticked_by; });
     const focus = focusDate();
     const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
     D.register = (await sb.from('complaint_register').select('*').order('reported_on', { ascending: false }).limit(1000)).data || [];
@@ -389,7 +389,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
   const runStatus = (r) => h('div', { class: 'dz-runstatus' },
     r.closed_at
       ? h('span', { class: 'ok' }, `✓ Closed${r.close_method === 'paper' ? ' (paper)' : ''}${r.driver ? ` · ${r.driver}` : ''} · ${fmtStamp(r.closed_at)}`)
-      : h('span', null, `${runComplete(r) ? '✓ Finished in the app' : 'Open'}${r.done ? ` · ${r.done}/${r.summary?.lines ?? '?'}` : ''}${r.driver ? ` · ${r.driver}` : ''}`),
+      : runComplete(r) ? h('span', { class: 'ok' }, `✓ Finished in the app${r.tickedBy ? ` by ${r.tickedBy}` : ''}${r.lastTick ? ` · ${fmtStamp(r.lastTick)}` : ''}`)
+      : h('span', null, `Open${r.done ? ` · ${r.done}/${r.summary?.lines ?? '?'} done` : ''}${r.driver ? ` · ${r.driver}` : ''}`),
     r.close_note ? h('div', { class: 'small muted' }, r.close_note) : null,
     h('button', { class: 'btn small', onclick: () => (r.closed_at ? reopenRun(r) : closeRun(r)) }, r.closed_at ? 'Reopen…' : 'Close run…'));
 

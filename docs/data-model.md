@@ -27,7 +27,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.
 - `complaint_register`: complaints with who ticked that delivery (time, GPS accuracy, outcome and reason), photos that day, and the address's complaint count, order and previous date.
 - `policy_clashes`: pairs of active policies that disagree (can appear after an address moves to a different stop).
-- `run_progress`: per run, stops done, not delivered, paper ticks and the last tick. Decides when a run is complete and moves to History.
+- `run_progress`: per run, stops done, not delivered, paper ticks, the last tick and who ticked. Decides when a run is complete and moves to History.
 - `current_policies`: policies in force today (active, inside their dates).
 - `address_register`: the register with learned GPS and location names, as the dashboard shows it.
 
