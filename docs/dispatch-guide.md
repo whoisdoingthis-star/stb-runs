@@ -5,6 +5,7 @@ The dispatch dashboard is where routes are planned: the register of every addres
 ## Overview (the landing page)
 - **Sheets** for today (or the next delivery day loaded): each run's stops, items, whether the totals match RouteSmart, when it was updated and from where, and how many details changed. **Get Runs from RouteSmart** and **Upload a sheet** are here.
 - **Needs attention**: totals that don't match, changes since the previous sheet, complaints, addresses not tied to a location, new addresses on this sheet, service locations not yet validated. Most lines link straight to the fix.
+- **Status** (last column of Sheets, and on Runs & sheets): open, or closed with the driver and finish time. **Close run…** asks who did it, when it finished and how: *on the paper sheet* ticks every stop not ticked in the app in the driver's name; *in the app* closes it as it is. **Reopen…** unticks only the paper ticks. See [business rules](business-rules.md#closing-a-run).
 - **Needs attention** also lists every **couldn't deliver** (address, reason, who) and any **policies that disagree**.
 - **Progress**: each run's ticks so far and the last tick (live on delivery mornings).
 - **Delivery score (DIFOTIS)** per run: delivered, in full (not short), on time (inside the address's time policies, or on the day), in spec (no wet, damaged or wrong-paper complaint for that day), and couldn't deliver. See [business rules](business-rules.md#delivery-outcomes).

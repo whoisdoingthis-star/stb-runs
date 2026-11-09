@@ -124,7 +124,7 @@ class Base {
 }
 
 const HOLD_MS = 10000;
-const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device'];
+export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device', 'outcome', 'reason', 'qty_delivered', 'method'];
 
 // ---------------------------------------------------------------------------
 
@@ -275,7 +275,7 @@ export class SupabaseStore extends Base {
 
   async listRuns() {
     const { data, error } = await this.sb.from('runs')
-      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source, last_changes, key_report')
+      .select('id, route, delivery_date, weekday_name, summary, created_at, updated_at, source, last_changes, key_report, driver, closed_at, close_method')
       .order('delivery_date', { ascending: false }).order('route').limit(60);
     if (error) { const c = LS.get('stb.runlist', []); if (c.length) return c; throw error; }
     const ids = data.map((r) => r.id);

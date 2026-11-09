@@ -104,6 +104,8 @@ create index if not exists tap_events_address_idx on public.tap_events (address_
 alter table public.tap_events add column if not exists outcome text;
 alter table public.tap_events add column if not exists reason text;
 alter table public.tap_events add column if not exists qty_delivered int;
+-- How it was recorded: null = ticked in the app; 'paper' = entered in Dispatch from a paper run sheet.
+alter table public.tap_events add column if not exists method text;
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'tap_events_outcome_check') then
     alter table public.tap_events add constraint tap_events_outcome_check
@@ -115,7 +117,7 @@ end $$;
 create or replace view public.line_status with (security_invoker = true) as
 select distinct on (run_id, line_key)
   run_id, line_key, done, user_name, device_time, lat, lng, accuracy_m,
-  coalesce(outcome, case when done then 'delivered' else 'undone' end) as outcome, reason, qty_delivered
+  coalesce(outcome, case when done then 'delivered' else 'undone' end) as outcome, reason, qty_delivered, method
 from public.tap_events
 order by run_id, line_key, device_time desc, server_time desc;
 
@@ -639,11 +641,12 @@ select c.*,
        row_number() over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as customer_complaint_no,
        lag(coalesce(c.happened_on, c.reported_on)) over (partition by c.address_key order by coalesce(c.happened_on, c.reported_on), c.reported_on) as previous_complaint_on,
        d.outcome    as delivered_outcome,
-       d.reason     as delivered_reason
+       d.reason     as delivered_reason,
+       d.method     as delivered_method
 from public.complaints c
 left join lateral (
   select t.user_name, t.device_time, t.done, t.accuracy_m,
-         coalesce(t.outcome, case when t.done then 'delivered' else 'undone' end) as outcome, t.reason
+         coalesce(t.outcome, case when t.done then 'delivered' else 'undone' end) as outcome, t.reason, t.method
   from public.tap_events t join public.runs r on r.id = t.run_id
   where t.address_key = c.address_key and r.delivery_date = c.happened_on
   order by t.device_time desc limit 1
@@ -765,3 +768,46 @@ select * from public.location_policies
 where active
   and (valid_from is null or valid_from <= (now() at time zone 'Pacific/Auckland')::date)
   and (valid_to is null or valid_to >= (now() at time zone 'Pacific/Auckland')::date);
+
+-- ===============================================================
+-- Closing a run in Dispatch (docs/business-rules.md#closing-a-run), e.g. a run done on the
+-- paper sheet while drivers are still getting used to the app. Closing records the driver and
+-- when the run finished; stops not ticked in the app get a 'paper' tick from Dispatch (new
+-- entries, never edits). Reopening adds 'undone' entries for those paper ticks.
+-- Only dispatchers can close, reopen or set the driver.
+-- ===============================================================
+alter table public.runs add column if not exists driver text;          -- who did the run
+alter table public.runs add column if not exists closed_at timestamptz; -- when it finished (null = open)
+alter table public.runs add column if not exists closed_by text;        -- the dispatcher who closed it
+alter table public.runs add column if not exists close_method text;     -- 'paper' or 'app'
+alter table public.runs add column if not exists close_note text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'runs_close_method_check') then
+    alter table public.runs add constraint runs_close_method_check check (close_method is null or close_method in ('paper', 'app'));
+  end if;
+end $$;
+
+create or replace function public.runs_close_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (new.driver, new.closed_at, new.closed_by, new.close_method, new.close_note)
+     is distinct from (old.driver, old.closed_at, old.closed_by, old.close_method, old.close_note) then
+    if coalesce(auth.role(), '') = 'authenticated' and not public.is_dispatcher() then
+      raise exception 'Only a dispatcher can close or reopen a run, or set its driver.' using errcode = 'P0001';
+    end if;
+    insert into public.dispatch_history (entity, entity_id, action, data)
+    values ('runs', new.id, case when new.closed_at is not null and old.closed_at is null then 'close'
+                                 when new.closed_at is null and old.closed_at is not null then 'reopen' else 'update' end,
+            jsonb_build_object('route', new.route, 'delivery_date', new.delivery_date, 'driver', new.driver,
+                               'closed_at', new.closed_at, 'close_method', new.close_method, 'close_note', new.close_note));
+  end if;
+  return new;
+end $$;
+drop trigger if exists runs_close_guard on public.runs;
+create trigger runs_close_guard before update on public.runs
+  for each row execute function public.runs_close_guard();
+
+-- Paper ticks can only be entered by a dispatcher.
+drop policy if exists tap_events_add on public.tap_events;
+create policy tap_events_add on public.tap_events for insert to authenticated
+  with check (public.is_member() and user_id = auth.uid() and (method is null or public.is_dispatcher()));

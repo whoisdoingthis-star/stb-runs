@@ -199,7 +199,7 @@ async function route() {
       input.addEventListener('change', () => { if (input.files.length) loadFiles([...input.files]); input.remove(); });
       document.body.append(input); input.click();
     };
-    return import('./dispatch.js').then((m) => m.viewDispatch({ app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary }, dz[1] || 'overview'));
+    return import('./dispatch.js').then((m) => m.viewDispatch({ app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet }, dz[1] || 'overview'));
   }
   return viewHome();
 }
@@ -302,15 +302,16 @@ async function viewHome() {
           const done = r.done || 0;
           const dockets = r.summary?.dockets || 0;
           return h('div', { class: 'run-tile-wrap' },
-            h('button', { class: `run-tile ${done && done >= stops ? 'finished' : ''}`, onclick: () => { location.hash = `#/r/${r.id}`; } },
+            h('button', { class: `run-tile ${(done && done >= stops) || r.closed_at ? 'finished' : ''}`, onclick: () => { location.hash = `#/r/${r.id}`; } },
               h('div', { class: 'rt-main' },
                 h('div', { class: 'rt-name' }, shortRoute(r.route)),
                 h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} items${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
                 pickList(r).length ? h('div', { class: 'rt-pick' }, h('span', { class: 'rt-pick-label' }, 'Pick'),
                   pickList(r).map((x) => pickItem(x))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
-                done ? h('div', { class: 'rt-sub' }, done >= stops ? '✓ Finished' : `${done} of ${stops} done`) : null),
-              h('span', { class: 'rt-go' }, done ? (done >= stops ? 'View' : 'Continue') : 'Start')),
+                r.closed_at ? h('div', { class: 'rt-closed' }, `✓ Closed${r.close_method === 'paper' ? ', done on paper' : ''}${r.driver ? ` by ${r.driver}` : ''}`)
+                  : done ? h('div', { class: 'rt-sub' }, done >= stops ? '✓ Finished' : `${done} of ${stops} done`) : null),
+              h('span', { class: 'rt-go' }, r.closed_at || (done && done >= stops) ? 'View' : done ? 'Continue' : 'Start')),
             r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, `What changed on ${shortRoute(r.route)}`),
               h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))) : null);
         }),

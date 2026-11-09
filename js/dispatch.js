@@ -34,7 +34,7 @@ async function leaflet() {
 }
 
 export async function viewDispatch(ctx, tab = 'overview') {
-  const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary } = ctx;
+  const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
   if (app.store.mode !== 'shared') {
     mount(h('div', { class: 'page' }, h('p', null, 'The dispatch dashboard needs the shared version.'), h('a', { href: '#/' }, '‹ Runs')));
     return;
@@ -62,12 +62,12 @@ export async function viewDispatch(ctx, tab = 'overview') {
     ]);
     D.addresses = must(a); D.groups = must(g); D.ops = must(o); D.svcs = must(s); D.policies = must(p); D.members = must(m);
     D.addresses.sort(addrCompare);
-    D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes, key_report').order('delivery_date', { ascending: false }).order('route').limit(80));
+    D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes, key_report, driver, closed_at, closed_by, close_method, close_note').order('delivery_date', { ascending: false }).order('route').limit(80));
     const focus = focusDate();
     const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
     D.register = (await sb.from('complaint_register').select('*').order('reported_on', { ascending: false }).limit(1000)).data || [];
     const [st, cl, ph, hi] = await Promise.all([
-      ids.length ? sb.from('line_status').select('run_id, line_key, done, outcome, reason, qty_delivered, user_name, device_time').in('run_id', ids) : { data: [] },
+      ids.length ? sb.from('line_status').select('run_id, line_key, done, outcome, reason, qty_delivered, user_name, device_time, method').in('run_id', ids) : { data: [] },
       ids.length ? sb.from('run_lines').select('run_id, line_key, address_key, number, street, qty, flags').in('run_id', ids) : { data: [] },
       sb.from('photos').select('route, address_key, taken_at, user_name').order('taken_at', { ascending: false }).limit(10),
       tab === 'history' ? sb.from('dispatch_history').select('*').order('at', { ascending: false }).limit(250) : { data: D.history },
@@ -227,10 +227,10 @@ export async function viewDispatch(ctx, tab = 'overview') {
     });
     return h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
       h('thead', null, h('tr', null, ['Run', 'Delivered', 'In full', 'On time', 'In spec', 'Not delivered'].map((t) => h('th', null, t)))),
-      h('tbody', null, rows.map((x) => h('tr', null, h('td', null, shortRoute(x.r.route)),
+      h('tbody', null, rows.map((x) => h('tr', null, h('td', null, shortRoute(x.r.route), x.r.close_method === 'paper' ? h('span', { class: 'small muted' }, ' (paper)') : null),
         h('td', null, `${x.delivered}/${x.n}`), h('td', null, pct(x.full, x.delivered)), h('td', null, pct(x.onTime, x.delivered)),
         h('td', null, pct(x.spec, x.delivered)), h('td', { class: x.futile ? 'bad' : '' }, String(x.futile)))))),
-      h('p', { class: 'small muted' }, 'In full = no short delivery. On time = within the address\u2019s time policies if it has any, otherwise on the delivery day. In spec = no wet, damaged or wrong-paper complaint for that day. Not delivered = ticked as couldn\u2019t deliver.'));
+      h('p', { class: 'small muted' }, 'In full = no short delivery. On time = within the address\u2019s time policies if it has any, otherwise on the delivery day. In spec = no wet, damaged or wrong-paper complaint for that day. Not delivered = ticked as couldn\u2019t deliver. Paper runs: stops ticked when the run was closed count as delivered at the finish time entered.'));
   }
   // On time: inside any current time policy for that address and weekday; with none, on the delivery day.
   function deliveredOnTime(l, e, date) {
@@ -271,14 +271,15 @@ export async function viewDispatch(ctx, tab = 'overview') {
     return h('div', { class: 'dz-grid' },
       card(`Sheets · ${fmtDate(date, true)}`,
         rs.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
-          h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'))),
+          h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'), h('th', null, 'Status'))),
           h('tbody', null, rs.map((r) => h('tr', null,
             h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
             h('td', null, r.summary?.lines ?? '?'),
             h('td', null, r.summary?.copies ?? '?'),
             h('td', null, (r.checks || []).every((c) => c.ok) ? h('span', { class: 'ok' }, '✓ match') : h('span', { class: 'bad' }, '✗ check')),
             h('td', null, `${fmtStamp(r.updated_at || r.created_at)} ${r.source === 'auto' ? '(RouteSmart)' : '(upload)'}`),
-            h('td', null, r.last_changes ? (r.last_changes.count ? h('span', { class: 'warn' }, `${r.last_changes.count} changed`) : 'none') : '–')))))) : h('p', { class: 'muted' }, 'No sheets for this day yet.'),
+            h('td', null, r.last_changes ? (r.last_changes.count ? h('span', { class: 'warn' }, `${r.last_changes.count} changed`) : 'none') : '–'),
+            h('td', null, runStatus(r))))))) : h('p', { class: 'muted' }, 'No sheets for this day yet.'),
         h('div', { class: 'dz-actions' },
           h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
           h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…'))),
@@ -289,7 +290,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         rs.length ? h('div', null, rs.map((r) => {
           const n = r.summary?.lines || 0; const d = doneBy(r.id);
           return h('div', { class: 'dz-prog' }, h('span', { class: 'dz-prog-name' }, shortRoute(r.route)),
-            h('div', { class: 'bar' }, h('i', { style: `width:${n ? Math.round((100 * d) / n) : 0}%` })), h('span', { class: 'dz-prog-n' }, `${d}/${n}`));
+            h('div', { class: 'bar' }, h('i', { style: `width:${n ? Math.round((100 * d) / n) : 0}%` })), h('span', { class: 'dz-prog-n' }, `${d}/${n}${r.closed_at ? ` · closed${r.close_method === 'paper' ? ' (paper)' : ''}` : ''}`));
         }),
         h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–')),
       rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null,
@@ -307,6 +308,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   // Who ticked that delivery, as evidence (or the lack of it).
   function deliveredLine(c) {
     if (!c.happened_on) return 'Date of the problem not given';
+    if (c.delivered_by && c.delivered_method === 'paper' && c.delivered) return `Done on the paper sheet by ${c.delivered_by} (closed in Dispatch, no GPS)`;
     if (c.delivered_by && c.delivered_outcome === 'futile') return `Not delivered: ${c.delivered_reason || 'no reason given'} (${c.delivered_by}, ${new Date(c.delivered_at).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })})`;
     if (c.delivered_by && c.delivered_outcome === 'short') return `Short delivery by ${c.delivered_by}`;
     if (c.delivered_by) return `${c.delivered ? 'Ticked' : 'Unticked'} by ${c.delivered_by} at ${new Date(c.delivered_at).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}${c.photos_that_day ? ` · 📷 ${c.photos_that_day}` : ''}`;
@@ -371,6 +373,98 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   // ================= Runs & sheets =================
+  // ================= Closing a run (docs/business-rules.md#closing-a-run) =================
+  const runStatus = (r) => h('div', { class: 'dz-runstatus' },
+    r.closed_at
+      ? h('span', { class: 'ok' }, `✓ Closed${r.close_method === 'paper' ? ' (paper)' : ''}${r.driver ? ` · ${r.driver}` : ''} · ${fmtStamp(r.closed_at)}`)
+      : h('span', null, r.driver ? `Open · ${r.driver}` : 'Open'),
+    r.close_note ? h('div', { class: 'small muted' }, r.close_note) : null,
+    h('button', { class: 'btn small', onclick: () => (r.closed_at ? reopenRun(r) : closeRun(r)) }, r.closed_at ? 'Reopen…' : 'Close run…'));
+
+  // Default finish time: 7am on the delivery day (runs are done early), or now if that is still ahead.
+  const defaultFinish = (date) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    const seven = new Date(`${date}T07:00`); const now = new Date();
+    const d = seven > now ? now : seven;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  async function closeRun(r) {
+    let lines; let st;
+    try {
+      [lines, st] = await Promise.all([
+        sb.from('run_lines').select('line_key, address_key').eq('run_id', r.id).then(must),
+        sb.from('line_status').select('line_key, done, outcome').eq('run_id', r.id).then(must)]);
+    } catch (e) { toast(`Couldn't load the run: ${e.message}`); return; }
+    const done = new Set(st.filter((x) => x.done).map((x) => x.line_key));
+    const todo = lines.filter((l) => !done.has(l.line_key));
+    const futile = st.filter((x) => x.outcome === 'futile').length;
+    const names = D.members.filter((m) => m.active !== false).map((m) => m.display_name);
+    const OTHER = '__other';
+    const who = h('select', { 'aria-label': 'Driver' }, h('option', { value: '' }, 'Choose…'),
+      ...names.map((n) => h('option', { value: n, selected: n === r.driver }, n)), h('option', { value: OTHER }, 'Someone else…'));
+    const other = h('input', { type: 'text', placeholder: 'Their name', hidden: true });
+    if (r.driver && !names.includes(r.driver)) { who.value = OTHER; other.hidden = false; other.value = r.driver; }
+    who.onchange = () => { other.hidden = who.value !== OTHER; if (!other.hidden) other.focus(); };
+    const when = h('input', { type: 'datetime-local', value: defaultFinish(r.delivery_date), 'aria-label': 'Finished at' });
+    const paper = h('input', { type: 'radio', name: 'cm', value: 'paper', checked: todo.length > 0 });
+    const inApp = h('input', { type: 'radio', name: 'cm', value: 'app', checked: todo.length === 0 });
+    const note = h('input', { type: 'text', placeholder: 'Note (optional), e.g. "Lisa used the paper sheet; 2 papers short"' });
+    const err = h('p', { class: 'bad small', hidden: true });
+    openSheet(`Close ${shortRoute(r.route)} · ${fmtDate(r.delivery_date, true)}`,
+      h('p', { class: 'small muted' }, `${lines.length - todo.length} of ${lines.length} stops ticked in the app${futile ? ` (${futile} not delivered)` : ''}.`),
+      h('label', { class: 'dz-field' }, h('span', null, 'Driver'), who, other),
+      h('label', { class: 'dz-field' }, h('span', null, 'Finished at'), when),
+      h('div', { class: 'dz-field' }, h('span', null, 'How was it done?'),
+        h('label', { class: 'dz-radio' }, paper, ` On the paper sheet: tick the ${todo.length} stop${todo.length === 1 ? '' : 's'} not ticked in the app as delivered by the driver`),
+        h('label', { class: 'dz-radio' }, inApp, ' In the app: close it as it is', todo.length ? ` (${todo.length} stop${todo.length === 1 ? '' : 's'} stay unticked)` : '')),
+      h('label', { class: 'dz-field' }, h('span', null, 'Note'), note),
+      err,
+      (close) => h('div', { class: 'dz-actions' },
+        h('button', { class: 'btn primary', onclick: async (e) => {
+          const driver = (who.value === OTHER ? other.value : who.value).trim();
+          const at = when.value ? new Date(when.value) : null;
+          const method = paper.checked ? 'paper' : 'app';
+          if (!driver) { err.hidden = false; err.textContent = 'Choose who did the run.'; return; }
+          if (!at || Number.isNaN(at.getTime())) { err.hidden = false; err.textContent = 'Enter when the run finished.'; return; }
+          e.target.disabled = true;
+          try {
+            if (method === 'paper' && todo.length) {
+              must(await sb.from('tap_events').insert(todo.map((l) => ({
+                id: crypto.randomUUID(), run_id: r.id, line_key: l.line_key, address_key: l.address_key, route: r.route,
+                done: true, outcome: 'delivered', method: 'paper', user_name: driver, device_time: at.toISOString(),
+                device: `Dispatch: paper run sheet (entered by ${by()})`,
+              }))));
+            }
+            must(await sb.from('runs').update({ driver, closed_at: at.toISOString(), closed_by: by(), close_method: method, close_note: note.value.trim() || null }).eq('id', r.id));
+            close();
+            toast(`${shortRoute(r.route)} closed${method === 'paper' ? `: ${todo.length} stop${todo.length === 1 ? '' : 's'} ticked from the paper sheet` : ''}.`);
+            refresh();
+          } catch (x) { e.target.disabled = false; err.hidden = false; err.textContent = `Not saved: ${x.message}`; }
+        } }, 'Close run'),
+        h('button', { class: 'btn', onclick: close }, 'Cancel')));
+  }
+
+  async function reopenRun(r) {
+    let st;
+    try { st = must(await sb.from('line_status').select('line_key, done, method').eq('run_id', r.id)); } catch (e) { toast(e.message); return; }
+    const paperTicks = st.filter((x) => x.done && x.method === 'paper');
+    if (!confirm(`Reopen ${shortRoute(r.route)}?${paperTicks.length ? `\n\nThe ${paperTicks.length} stop${paperTicks.length === 1 ? '' : 's'} ticked from the paper sheet will be unticked (the history keeps both).` : ''}\nTicks made in the app stay.`)) return;
+    try {
+      const { data: lines } = await sb.from('run_lines').select('line_key, address_key').eq('run_id', r.id);
+      const addr = Object.fromEntries((lines || []).map((l) => [l.line_key, l.address_key]));
+      if (paperTicks.length) {
+        must(await sb.from('tap_events').insert(paperTicks.map((x) => ({
+          id: crypto.randomUUID(), run_id: r.id, line_key: x.line_key, address_key: addr[x.line_key] || x.line_key, route: r.route,
+          done: false, outcome: 'undone', method: 'paper', user_name: by(), device_time: new Date().toISOString(), device: 'Dispatch: run reopened',
+        }))));
+      }
+      must(await sb.from('runs').update({ closed_at: null, closed_by: null, close_method: null, close_note: null }).eq('id', r.id));
+      toast(`${shortRoute(r.route)} reopened.`);
+      refresh();
+    } catch (x) { toast(`Not reopened: ${x.message}`); }
+  }
+
   function renderRuns() {
     const dates = [...new Set(D.runs.map((r) => r.delivery_date))];
     return h('div', null,
@@ -381,7 +475,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
         return h('section', { class: 'dz-card' }, h('h2', null, fmtDate(date, true)),
           h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
-            h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Notes'), h('th', null, 'Loaded'), h('th', null, 'What changed'))),
+            h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Notes'), h('th', null, 'Loaded'), h('th', null, 'What changed'), h('th', null, 'Status'))),
             h('tbody', null, rs.map((r) => h('tr', null,
               h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
               h('td', null, r.summary?.lines ?? '?'),
@@ -390,7 +484,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
               h('td', null, (r.warnings || []).length ? h('details', null, h('summary', null, `${r.warnings.length}`), h('ul', null, r.warnings.map((w) => h('li', null, w)))) : '–'),
               h('td', null, `${fmtStamp(r.updated_at || r.created_at)} · ${r.source === 'auto' ? 'RouteSmart' : 'upload'}`),
               h('td', null, !r.last_changes ? '–' : !r.last_changes.count ? 'No changes'
-                : h('details', null, h('summary', null, `${r.last_changes.count} changed`), h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))))))))));
+                : h('details', null, h('summary', null, `${r.last_changes.count} changed`), h('ul', null, r.last_changes.items.map((x) => h('li', null, x))))),
+              h('td', null, runStatus(r))))))));
       }) : h('p', { class: 'muted' }, 'No sheets loaded yet.'));
   }
 

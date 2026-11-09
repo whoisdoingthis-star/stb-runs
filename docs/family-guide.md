@@ -26,6 +26,8 @@ These are remembered on that phone only.
 - Older days are folded away under **Earlier days**.
 
 ## Doing a run
+If you do a run on the **paper sheet**, that's fine: Mike closes it in Dispatch afterwards and it shows on the Runs page as **✓ Closed, done on paper by** you. You can still open it.
+
 - The **purple NEXT tile** is your next stop. Tap it when delivered: it turns green with your name and the time, and the next one lights up (the list scrolls to it if it's off screen).
 - The **bar at the bottom** shows what you just ticked with **↶ Undo**, **⚠** and **📷**, and the next stop with **Next ↓** (jumps to it). It stays until your next tick, so there's no rush.
 - **Couldn't deliver, or not enough papers?** Tick the address as normal, then tap **⚠** in the bottom bar and pick the reason (gate locked, dog, no letterbox, door code didn't work, not safe, ran out) or how many you left. The tile turns **red** (not delivered) or **amber** (short) and Dispatch sees it straight away. Changed your mind? Tap ⚠ again and choose *It was delivered after all*, or Undo.

@@ -95,6 +95,16 @@ When a sheet replaces an earlier one for the same run and day, these are compare
 - **DIFOTIS** (Dispatch Overview, per run, per address on the sheet): **Delivered**; **In full** = not short; **On time** = inside the address's time policies in force that day, or on the delivery day if it has none; **In spec** = no wet, damaged or wrong-paper complaint for that day.
 - Bundles (Run 8 reception) record the outcome for every paper in the handover.
 
+## Closing a run
+(Mike, 9 Nov 2026.) While drivers are getting used to the app, some runs are still done on the paper sheet. A dispatcher can **close** a run in Dispatch (Overview or Runs & sheets → *Close run…*):
+
+- **Driver**: who did the run (a family member, or someone else by name). **Finished at**: defaults to 7:00 on the delivery day.
+- **On the paper sheet**: every stop not ticked in the app gets a tick from Dispatch, in the driver's name, at the finish time, marked *paper*. Stops already ticked (including couldn't-deliver and short) are left as they are.
+- **In the app**: the run is closed as it is; unticked stops stay unticked.
+- Closing never edits a tick. **Reopen** adds *undone* entries for the paper ticks only; app ticks stay. Every close and reopen is in the dispatch history.
+- Only dispatchers can close or reopen a run, set its driver, or enter paper ticks (enforced by the database).
+- Paper ticks have no GPS, so they never feed learned letterbox positions or delivery order; they do count in DIFOTIS (on time = the finish time entered).
+
 ## Tracing a tile back to the sheet
 Every run keeps the SHA-256 fingerprint of the PDF it was read from (`runs.source_hash`), and every tile keeps each sheet line it came from: page, row, publication, quantity and the text exactly as printed. Lines are combined into one tile for the driver, never lost. (Governance baseline v0.5, adopted 9 Nov 2026)
 

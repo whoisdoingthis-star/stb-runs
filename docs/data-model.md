@@ -5,9 +5,9 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | Table | Holds | Notes |
 |---|---|---|
 | `members` | Everyone with access: email, display name, `role` (`driver` = app only, `dispatcher` = app + dispatch), `active` | The display name shows on ticked tiles. Managed on the dashboard's Users tab. A trigger keeps at least one active dispatcher. |
-| `runs` | One row per route per delivery day | `source_hash` (SHA-256 of the PDF it came from: the sheet's fingerprint), `summary` (counts, papers by publication, dockets), `checks`, `warnings`, `key_report`, `source` (`auto` = evening fetch, `upload` = manual), `updated_at`, `last_changes` (what changed when the sheet was last replaced: `{at, count, items[]}`). |
+| `runs` | One row per route per delivery day | `source_hash` (SHA-256 of the PDF it came from: the sheet's fingerprint), `summary` (counts, papers by publication, dockets), `checks`, `warnings`, `key_report`, `source` (`auto` = evening fetch, `upload` = manual), `updated_at`, `driver`, `closed_at` (null = open), `closed_by`, `close_method` (`paper` or `app`), `close_note`, `last_changes` (what changed when the sheet was last replaced: `{at, count, items[]}`). |
 | `run_lines` | The tiles: one per address on a run | `address_key` (same every day), `parts` (papers and quantities), `sources` (original sheet lines: page, row, publication, quantity and the raw printed text), `note`, `flags` (complaint, start, stop, check day…). Replaced whole when a sheet is replaced. |
-| `tap_events` | Every tick and untick, never changed or deleted | Who, device time, server time, GPS (`lat`, `lng`, `accuracy_m`, `fix_age_ms`), device, `outcome` (`delivered`, `short`, `futile` = couldn't deliver, `undone`; older entries have none and mean delivered/undone), `reason`, `qty_delivered`. A problem is a new entry after the tick, never an edit. Runs with taps can't be deleted. |
+| `tap_events` | Every tick and untick, never changed or deleted | Who, device time, server time, GPS (`lat`, `lng`, `accuracy_m`, `fix_age_ms`), device, `outcome` (`delivered`, `short`, `futile` = couldn't deliver, `undone`; older entries have none and mean delivered/undone), `reason`, `qty_delivered`, `method` (null = ticked in the app; `paper` = entered in Dispatch when a paper run was closed, dispatchers only). A problem is a new entry after the tick, never an edit. Runs with taps can't be deleted. |
 | `route_sequences` | Each route's custom delivery order | Set by hold-and-drag; applied to future sheets. |
 | `route_sequence_history` | Every change to a custom order | Who and when. Filled by a trigger. |
 | `access_codes` | Run 8 door codes per building | Entered in the app; never in the repository. |
@@ -23,7 +23,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `dispatch_history` | Every change to people, locations, assignments and policies | Who, when, what (the row as JSON). Filled by triggers; the register filling itself isn't logged. |
 
 ## Views
-- `line_status`: latest tick state per tile, with its outcome, reason and quantity delivered.
+- `line_status`: latest tick state per tile, with its outcome, reason, quantity delivered and method.
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.
 - `complaint_register`: complaints with who ticked that delivery (time, GPS accuracy, outcome and reason), photos that day, and the address's complaint count, order and previous date.
 - `policy_clashes`: pairs of active policies that disagree (can appear after an address moves to a different stop).
@@ -31,7 +31,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 - `address_register`: the register with learned GPS and location names, as the dashboard shows it.
 
 ## Who can change what
-Everything is readable by active members. Runs, tiles, taps, photos, custom orders and door codes can be written by any active member. Locations, policies, the register's assignments, complaint status and people can only be changed by dispatchers (`is_dispatcher()`).
+Everything is readable by active members. Runs, tiles, taps, photos, custom orders and door codes can be written by any active member. Locations, policies, the register's assignments, complaint status, people, closing runs, run drivers and paper ticks can only be changed by dispatchers (`is_dispatcher()`).
 
 ## Storage buckets (private)
 - `run-sheets`: the PDFs the evening fetch downloads, kept for the record.

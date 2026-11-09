@@ -1,3 +1,4 @@
+import { EVENT_COLUMNS } from '../js/store.js';
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'fs';
 const db = new PGlite();
@@ -8,6 +9,7 @@ create table auth.ctx(email text, uid uuid);
 insert into auth.ctx values ('mike@example.com','11111111-1111-1111-1111-111111111111');
 create function auth.jwt() returns jsonb language sql stable as $$ select jsonb_build_object('email', email) from auth.ctx $$;
 create function auth.uid() returns uuid language sql stable as $$ select uid from auth.ctx $$;
+create function auth.role() returns text language sql stable as $$ select case when current_setting('role', true) = 'authenticated' then 'authenticated' end $$;
 create publication supabase_realtime;
 grant usage on schema auth to authenticated; grant select on auth.ctx to authenticated;
 `);
@@ -126,3 +128,22 @@ check('older ticks read as delivered', (await db.query(`select outcome from line
 blocked = false; try { await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,outcome) values (gen_random_uuid(),$1,'x','x','x',true,now(),'lost')`, [run2]); } catch { blocked = true; }
 check('unknown outcomes are refused', blocked);
 check('runs keep a sheet fingerprint', (await db.query(`select source_hash from runs limit 1`)).fields.some((f) => f.name === 'source_hash'));
+
+// ---- the app's sync sends exactly the tap columns the database has ----
+const tapCols = (await db.query(`select column_name from information_schema.columns where table_name='tap_events'`)).rows.map((r) => r.column_name);
+check('every field the app sends is a tap_events column', EVENT_COLUMNS.every((c) => tapCols.includes(c)));
+check('every tap_events column (bar user and server time) is sent by the app', tapCols.filter((c) => !['user_id', 'server_time'].includes(c)).every((c) => EVENT_COLUMNS.includes(c)));
+
+// ---- closing a run in Dispatch ----
+await as('lisa@example.com');
+blocked = false; try { await db.query(`update runs set driver='Lisa' where id=$1`, [run2]); } catch { blocked = true; }
+check('a driver cannot close a run or set its driver', blocked);
+blocked = false; try { await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_id,method) values (gen_random_uuid(),$1,'K|C|3','K|C|3','HOWICK10',true,now(),'11111111-1111-1111-1111-111111111111','paper')`, [run2]); } catch { blocked = true; }
+check('a driver cannot enter paper ticks', blocked);
+await as('mike@example.com');
+await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_name,outcome,method,device) values (gen_random_uuid(),$1,'K|C|3','K|C|3','HOWICK10',true,'2026-11-08T18:05:00Z','Lisa','delivered','paper','Dispatch: paper run sheet')`, [run2]);
+await db.query(`update runs set driver='Lisa', closed_at='2026-11-08T18:05:00Z', closed_by='Mike', close_method='paper' where id=$1`, [run2]);
+check('a dispatcher closes a run on paper, ticks show as paper', (await db.query(`select method, user_name from line_status where run_id=$1 and line_key='K|C|3'`, [run2])).rows[0].method === 'paper');
+check('closing is in the dispatch history', (await db.query(`select count(*)::int n from dispatch_history where entity='runs' and action='close' and entity_id=$1`, [run2])).rows[0].n === 1);
+await db.query(`update runs set closed_at=null, closed_by=null, close_method=null where id=$1`, [run2]);
+check('reopening is in the dispatch history', (await db.query(`select count(*)::int n from dispatch_history where entity='runs' and action='reopen'`)).rows[0].n === 1);

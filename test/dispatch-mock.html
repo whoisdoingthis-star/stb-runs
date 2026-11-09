@@ -7,9 +7,12 @@ const T = {
   location_groups: [], operating_locations: [], service_locations: [], location_policies: [], dispatch_history: [], photos: [],
   runs: [{ id: 'r6', route: 'HOWICK06', delivery_date: '2026-11-09', summary: { lines: 98, copies: 115, byPub: { NZH: 100, NZHR: 13, WD: 2 }, dockets: 2 }, checks: [{ ok: true, label: 'NZH' }], warnings: [], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 1, items: ['13 Ambrose Lane: NZH ×1 → NZH ×2'] } }, { id: 'r8', route: 'HOWICK08', delivery_date: '2026-11-09', summary: { lines: 66, copies: 70, byPub: { NZH: 70 } }, checks: [{ ok: true }], warnings: ['x'], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 0, items: [] } }],
   complaint_register: [{ id: 'c1', address_key: 'K|BROOMFIELDS ROAD|70', route: 'HOWICK13', number: '70', street: 'BROOMFIELDS ROAD', kind: 'MISSED', happened_on: '2026-11-07', publication: 'NZH', service: 'WKLY7', description: 'Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)', reported_on: '2026-11-09', last_seen_on: '2026-11-09', status: 'open', customer_complaints: 2, customer_complaint_no: 2, previous_complaint_on: '2026-10-02', delivered_by: null }, { id: 'c2', address_key: 'K|CLIFTON ROAD|401', route: 'HOWICK13', number: '401', street: 'CLIFTON ROAD', kind: 'MISSED', happened_on: '2026-11-10', publication: 'NZH', description: 'Missed delivery on Tue 10 Nov', reported_on: '2026-11-09', last_seen_on: '2026-11-09', status: 'open', customer_complaints: 1, customer_complaint_no: 1, delivered_by: 'Lisa', delivered: true, delivered_at: '2026-11-09T16:42:00Z', photos_that_day: 1 }],
-  complaints: [],
-  line_status: [{ run_id: 'r6', line_key: 'a', done: true, user_name: 'Mike', device_time: '2026-11-09T05:10:00Z' }],
-  run_lines: [{ run_id: 'r6', number: '70', street: 'BROOMFIELDS ROAD', flags: [{ type: 'complaint' }] }],
+  complaints: [], policy_clashes: [], tap_events: [],
+  line_status: [{ run_id: 'r6', line_key: 'a', done: true, user_name: 'Mike', device_time: '2026-11-09T05:10:00Z' }, { run_id: 'r8', line_key: 'K|AMON|101', done: true, outcome: 'delivered', user_name: 'Lisa', device_time: '2026-11-09T05:10:00Z' }],
+  run_lines: [{ run_id: 'r6', number: '70', street: 'BROOMFIELDS ROAD', flags: [{ type: 'complaint' }] },
+    { run_id: 'r8', line_key: 'K|AMON|101', address_key: 'K|AMON|101', number: '101', street: 'AMON', flags: [] },
+    { run_id: 'r8', line_key: 'K|AMON|102', address_key: 'K|AMON|102', number: '102', street: 'AMON', flags: [] },
+    { run_id: 'r8', line_key: 'K|AMON|103', address_key: 'K|AMON|103', number: '103', street: 'AMON', flags: [] }],
   addresses: [
     { address_key: 'HOWICK|AMON|101', area: 'HOWICK', street: 'BRUCE MCLAREN VILLAGE AMON', number: '101', routes: ['HOWICK08'], first_seen: '2026-11-05', last_seen: '2026-11-09', gps_lat: -36.9001, gps_lng: 174.9301, gps_taps: 3, gps_accuracy_m: 8 },
     { address_key: 'HOWICK|UXBRIDGE ROAD|38B', area: 'HOWICK', street: 'UXBRIDGE ROAD', number: '38B', routes: ['HOWICK06'], first_seen: '2026-11-06', last_seen: '2026-11-09' },
@@ -30,7 +33,7 @@ function from(t) {
       let data, error = null;
       const base = t === 'address_register' ? 'addresses' : t;
       if (op === 'select') data = view(t).filter((x) => filters.every((f) => f(x)));
-      if (op === 'insert') { const r = { id: uuid(), active: true, ...row }; if (base === 'location_policies' && [r.group_id, r.operating_location_id, r.service_location_id, r.address_key].filter(Boolean).length !== 1) error = { message: 'one target' }; else T[base].push(r); data = [r]; }
+      if (op === 'insert' && Array.isArray(row)) { T[base].push(...row); data = row; } else if (op === 'insert') { const r = { id: uuid(), active: true, ...row }; if (base === 'location_policies' && [r.group_id, r.operating_location_id, r.service_location_id, r.address_key].filter(Boolean).length !== 1) error = { message: 'one target' }; else T[base].push(r); data = [r]; }
       if (op === 'update') { data = T[base].filter((x) => filters.every((f) => f(x))); data.forEach((x) => Object.assign(x, row)); }
       if (op === 'delete') { data = T[base].filter((x) => filters.every((f) => f(x))); T[base] = T[base].filter((x) => !data.includes(x)); }
       if (single) data = data?.[0] ?? null;
@@ -52,6 +55,7 @@ const fmtStamp = (iso) => new Date(iso).toLocaleString('en-NZ');
 const fmtDate = (iso) => iso;
 const changeSummary = (r, ch) => `${shortRoute(r)}: ${ch.count} changed`;
 window.confirm = () => true;
-await viewDispatch({ app: { store: { mode: 'shared', sb }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary }, location.hash.slice(1) || 'overview');
+const openSheet = (title, ...content) => { const close = () => panel.remove(); const panel = h('div', { class: 'sheet-backdrop' }, h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-head' }, h('h2', null, title)), ...content.map((c) => (typeof c === 'function' ? c(close) : c)))); document.body.append(panel); return close; };
+await viewDispatch({ app: { store: { mode: 'shared', sb }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary, openSheet }, location.hash.slice(1) || 'overview');
 window.ready = true;
 </script></body></html>

@@ -557,3 +557,12 @@ html.big .tile.done.futile .num::after, html.big .tile.done.short .num::after { 
 .menu-head { font-weight: 700; color: var(--muted); margin: 8px 0 4px; font-size: var(--t-s, 14px); }
 .tile.futile .who { color: var(--bad); }
 .tile.short .who { color: var(--warn); }
+
+/* Closing a run (dispatch). */
+.dz-field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; }
+.dz-field > span { font-weight: 700; font-size: 14px; color: var(--muted); }
+.dz-field select, .dz-field input[type="text"], .dz-field input[type="datetime-local"] { font: inherit; padding: 10px; border-radius: 10px; border: 1px solid var(--edge); background: var(--bg); color: var(--ink); }
+.dz-radio { display: flex; gap: 8px; align-items: flex-start; line-height: 1.35; font-size: 15px; }
+.dz-radio input { margin-top: 3px; }
+.dz-runstatus { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.rt-closed { font-weight: 700; color: var(--done); }
