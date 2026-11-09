@@ -71,6 +71,9 @@ with sync_playwright() as p:
     check('earlier days are not under Runs to do', page.locator('.run-tile').count() == 0, page.locator('.home').inner_text()[:200])
     page.click('.home-tabs >> text=History'); page.wait_for_selector('.run-tile')
     check('earlier days are under History', page.locator('.run-tile').count() >= 1)
+    page.click('details.papers > summary')
+    tot = page.locator('.pick-table tfoot').inner_text() if page.locator('.pick-table tfoot').count() else ''
+    check('depot pick has an All runs total of bundles and loose', 'All runs' in tot and ('bundle' in tot or 'loose' in tot), tot.replace('\n', ' | '))
     check('toast does not follow to home', page.locator('#toast').is_hidden())
     names = page.locator('.rt-name').all_inner_texts()
     check('home uses Run N names, in order', names == sorted(names, key=lambda x: int(x.split()[-1])) and all(x.startswith('Run ') for x in names), str(names))

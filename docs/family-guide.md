@@ -21,7 +21,7 @@ These are remembered on that phone only.
 - **Pick** on each card is what to collect at the depot, from the report: e.g. **NZH** 1 bundle of 140 + 5 loose (includes 15 for retail), **WD** 2 loose. Shop copies are counted in with the NZH; the note says how many are for shops.
 - **Open all** opens every run for that day together.
 - The line under the date says when the sheets were last updated, and whether anything changed since the previous sheet ("Run 13: 2 details changed"). Tap **What changed on Run 13** to see the list.
-- **To collect** (tap to open): how many of each paper or magazine every run needs, how many **delivery dockets** to bring (one for each shop), and the **depot pick** for every run in one list.
+- **To collect** (tap to open): how many of each paper or magazine every run needs, how many **delivery dockets** to bring (one for each shop), and the **depot pick** for every run in one list, with an **All runs** line at the bottom: total bundles and total loose for each paper or magazine (Lisa, 9 Nov 2026).
 - **⚙ Settings**: text size, colours, tiles, **Get Runs from RouteSmart** (use it if a change is phoned in), **Upload a run sheet**, change password, sign out.
 - Two tabs at the top: **Runs to do** shows only today's and upcoming runs that aren't finished. **History** has every finished run (all stops ticked, or closed by Mike after a paper run) and earlier days. A run moves to History by itself once it's done, so the screen stays clean. You can still open a run from History.
 

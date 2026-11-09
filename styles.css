@@ -570,3 +570,5 @@ html.big .tile.done.futile .num::after, html.big .tile.done.short .num::after { 
 /* Runs to do | History on the Runs page. */
 .home-tabs { display: flex; margin: 4px 0 14px; }
 .home-tabs button { flex: 1; min-height: 48px; font-size: var(--t-m, 17px); font-weight: 700; }
+.pick-table tfoot td { border-top: 2px solid var(--edge); font-weight: 700; padding-top: 8px; }
+.pick-table td:first-child { white-space: nowrap; padding-right: 12px; }

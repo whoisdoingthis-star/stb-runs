@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **To collect → Depot pick** now ends with an **All runs** line: total bundles and total loose for each paper or magazine across the day's runs (Lisa's request).
 - Runs finished in the app now look like closed ones in Dispatch: **✓ Completed (app) · Lisa · Mon, 9 Nov, 6:08 am**, in the same green ("✓ Finished by Lisa" on the phones), with **Set driver…** to record who did it. Runs closed in Dispatch say *(paper)* or *(app)*.
 - **Runs to do / History**: the Runs page on the phones now shows only today's and upcoming runs that aren't finished. Finished runs (every stop ticked, or closed in Dispatch) and earlier days move to the **History** tab. Replaces *Earlier days*.
 - **Dispatch, Runs & sheets: Active / History.** Active keeps every unfinished run, including earlier days, until it's finished or closed; Overview lists only the day's active runs and flags earlier runs not yet closed under Needs attention. The old *History* page is now **Change log**.

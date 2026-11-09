@@ -430,6 +430,18 @@ function pickList(r) {
   }
   return out.sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
 }
+// Depot pick for several runs together: each run is bundled on its own, so bundles and loose
+// copies are added up run by run (not re-bundled). "of 140" only when every run uses that size.
+function pickTotals(runs) {
+  const t = {};
+  for (const x of runs.flatMap(pickList)) {
+    const o = (t[x.pub] ||= { pub: x.pub, bundles: 0, loose: 0, draw: 0, retailQty: 0, sizes: new Set() });
+    o.bundles += x.bundles; o.loose += x.loose; o.draw += x.draw; o.retailQty += x.retailQty || 0;
+    if (x.bundles && x.size) o.sizes.add(x.size);
+  }
+  return Object.values(t).map((o) => ({ ...o, size: o.sizes.size === 1 ? [...o.sizes][0] : null }))
+    .sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
+}
 const pickText = (x) => [x.bundles ? `${x.bundles} bundle${x.bundles === 1 ? '' : 's'}${x.size ? ` of ${x.size}` : ''}` : null, x.loose ? `${x.loose} loose` : null].filter(Boolean).join(' + ');
 const pickItem = (x, cls) => h(cls === 'div' ? 'div' : 'span', { class: cls === 'div' ? '' : 'rt-pick-item' }, h('b', null, x.pub), ` ${pickText(x)}`,
   x.retailQty ? h('small', { class: 'pick-note' }, ` (includes ${x.retailQty} for retail)`) : null);
@@ -482,7 +494,8 @@ function paperSummary(rs) {
       h('div', { class: 'paper-sum-title' }, 'Depot pick (bundles + loose)'),
       h('table', null, h('tbody', null, runs.map((r) => h('tr', null,
         h('td', null, r.route.replace(/^HOWICK0?/, 'Run ')),
-        h('td', null, pickList(r).map((x) => pickItem(x, 'div')))))))) : null,
+        h('td', null, pickList(r).map((x) => pickItem(x, 'div')))))),
+        runs.length > 1 ? h('tfoot', null, h('tr', null, h('td', null, 'All runs'), h('td', null, pickTotals(runs).map((x) => pickItem(x, 'div'))))) : null)) : null,
     h('div', { class: 'small muted' }, `${runs.reduce((t, r) => t + (r.summary?.lines || 0), 0)} addresses across ${runs.length} run${runs.length === 1 ? '' : 's'}`,
       anyRetail ? `. NZH includes ${runs.reduce((t, r) => t + retailCopies(r), 0)} retail copies (NZHR); each shop also gets a delivery docket.` : ''));
 }
