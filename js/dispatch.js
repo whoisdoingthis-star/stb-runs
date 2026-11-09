@@ -33,6 +33,7 @@ async function leaflet() {
   return L;
 }
 
+import { runComplete } from './rows.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
   if (app.store.mode !== 'shared') {
@@ -46,7 +47,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   const sb = app.store.sb;
   const D = { addresses: [], groups: [], ops: [], svcs: [], policies: [], members: [], history: [], runs: [], status: [], complaints: [], photos: [], register: [], lines: [], clashes: [] };
   const sel = new Set();             // selected address keys
-  const F = { route: '', status: 'all', q: '' };
+  const F = { route: '', status: 'all', q: '', runsTab: 'active' };
   let current = null;                // { type: 'group'|'op'|'svc'|'address', id }
   const maps = [];
 
@@ -63,6 +64,11 @@ export async function viewDispatch(ctx, tab = 'overview') {
     D.addresses = must(a); D.groups = must(g); D.ops = must(o); D.svcs = must(s); D.policies = must(p); D.members = must(m);
     D.addresses.sort(addrCompare);
     D.runs = must(await sb.from('runs').select('id, route, delivery_date, summary, checks, warnings, updated_at, created_at, source, last_changes, key_report, driver, closed_at, closed_by, close_method, close_note').order('delivery_date', { ascending: false }).order('route').limit(80));
+    // Progress per run, counted in the database: a run is complete when closed or every stop is dealt with.
+    const allIds = D.runs.map((r) => r.id);
+    const prog = allIds.length ? (await sb.from('run_progress').select('run_id, done, not_delivered').in('run_id', allIds)).data || [] : [];
+    const pb = Object.fromEntries(prog.map((x) => [x.run_id, x]));
+    D.runs.forEach((r) => { r.done = pb[r.id]?.done || 0; r.notDelivered = pb[r.id]?.not_delivered || 0; });
     const focus = focusDate();
     const ids = D.runs.filter((r) => r.delivery_date === focus).map((r) => r.id);
     D.register = (await sb.from('complaint_register').select('*').order('reported_on', { ascending: false }).limit(1000)).data || [];
@@ -168,7 +174,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   // ---- layout
-  const tabs = [['overview', 'Overview'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'History']];
+  const tabs = [['overview', 'Overview'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'Change log']];
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
   const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
@@ -248,6 +254,9 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const date = focusDate();
     const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
     const doneBy = (id) => D.status.filter((x) => x.run_id === id && x.done).length;
+    const active = rs.filter((r) => !runComplete(r)); const finished = rs.length - active.length;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+    const stale = D.runs.filter((r) => r.delivery_date < today && !runComplete(r));
     const lastTick = D.status.filter((x) => x.done).sort((a, b) => (a.device_time < b.device_time ? 1 : -1))[0];
     const unassigned = D.addresses.filter((a) => !a.operating_location_id);
     const newOnes = D.addresses.filter((a) => a.first_seen === date && D.addresses.some((b) => b.first_seen < date));
@@ -259,6 +268,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const futile = D.status.filter((x) => x.outcome === 'futile').map((x) => ({ ...x, line: lineOf(x) }));
     const card = (title, ...kids) => h('section', { class: `dz-card ${title.startsWith('Sheets') ? 'wide' : ''}` }, h('h2', null, title), ...kids);
     const attention = [
+      stale.length ? h('li', { class: 'bad' }, h('button', { class: 'link', onclick: () => { F.runsTab = 'active'; go('runs', null); } },
+        `${stale.length} earlier run${stale.length === 1 ? '' : 's'} not finished or closed: ${stale.slice(0, 5).map((r) => `${shortRoute(r.route)} (${fmtDate(r.delivery_date)})`).join(', ')}${stale.length > 5 ? '…' : ''}`)) : null,
       failed.length ? h('li', { class: 'bad' }, `Totals don't match on ${failed.map((r) => shortRoute(r.route)).join(', ')}`) : null,
       changed.length ? h('li', null, `${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')} since the previous sheet`) : null,
       todays.length ? h('li', null, h('button', { class: 'link', onclick: () => go('complaints', null) }, `${todays.length} complaint${todays.length === 1 ? '' : 's'} on this sheet (see below)`)) : null,
@@ -270,16 +281,17 @@ export async function viewDispatch(ctx, tab = 'overview') {
     ].filter(Boolean);
     return h('div', { class: 'dz-grid' },
       card(`Sheets · ${fmtDate(date, true)}`,
-        rs.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
+        active.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
           h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'), h('th', null, 'Status'))),
-          h('tbody', null, rs.map((r) => h('tr', null,
+          h('tbody', null, active.map((r) => h('tr', null,
             h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
             h('td', null, r.summary?.lines ?? '?'),
             h('td', null, r.summary?.copies ?? '?'),
             h('td', null, (r.checks || []).every((c) => c.ok) ? h('span', { class: 'ok' }, '✓ match') : h('span', { class: 'bad' }, '✗ check')),
             h('td', null, `${fmtStamp(r.updated_at || r.created_at)} ${r.source === 'auto' ? '(RouteSmart)' : '(upload)'}`),
             h('td', null, r.last_changes ? (r.last_changes.count ? h('span', { class: 'warn' }, `${r.last_changes.count} changed`) : 'none') : '–'),
-            h('td', null, runStatus(r))))))) : h('p', { class: 'muted' }, 'No sheets for this day yet.'),
+            h('td', null, runStatus(r))))))) : h('p', { class: rs.length ? 'ok' : 'muted' }, rs.length ? '✓ Every run for this day is finished.' : 'No sheets for this day yet.'),
+        finished ? h('p', { class: 'small muted' }, h('button', { class: 'link', onclick: () => { F.runsTab = 'history'; go('runs', null); } }, `${finished} finished run${finished === 1 ? '' : 's'} for this day in History ›`)) : null,
         h('div', { class: 'dz-actions' },
           h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
           h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…'))),
@@ -377,7 +389,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   const runStatus = (r) => h('div', { class: 'dz-runstatus' },
     r.closed_at
       ? h('span', { class: 'ok' }, `✓ Closed${r.close_method === 'paper' ? ' (paper)' : ''}${r.driver ? ` · ${r.driver}` : ''} · ${fmtStamp(r.closed_at)}`)
-      : h('span', null, r.driver ? `Open · ${r.driver}` : 'Open'),
+      : h('span', null, `${runComplete(r) ? '✓ Finished in the app' : 'Open'}${r.done ? ` · ${r.done}/${r.summary?.lines ?? '?'}` : ''}${r.driver ? ` · ${r.driver}` : ''}`),
     r.close_note ? h('div', { class: 'small muted' }, r.close_note) : null,
     h('button', { class: 'btn small', onclick: () => (r.closed_at ? reopenRun(r) : closeRun(r)) }, r.closed_at ? 'Reopen…' : 'Close run…'));
 
@@ -466,13 +478,20 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   function renderRuns() {
-    const dates = [...new Set(D.runs.map((r) => r.delivery_date))];
+    const hist = F.runsTab === 'history';
+    const shown = D.runs.filter((r) => runComplete(r) === hist);
+    const dates = [...new Set(shown.map((r) => r.delivery_date))];
+    const nHist = D.runs.filter(runComplete).length;
     return h('div', null,
+      h('div', { class: 'seg', role: 'group', 'aria-label': 'Which runs', style: 'max-width:420px;margin-bottom:12px' },
+        h('button', { 'aria-pressed': String(!hist), onclick: () => { F.runsTab = 'active'; render(); } }, `Active (${D.runs.length - nHist})`),
+        h('button', { 'aria-pressed': String(hist), onclick: () => { F.runsTab = 'history'; render(); } }, `History (${nHist})`)),
+      h('p', { class: 'small muted' }, hist ? 'Finished runs: every stop dealt with in the app, or closed here. Reopen one to bring it back.' : 'Runs still to do or not yet closed, including earlier days. Close a run done on the paper sheet to move it to History.'),
       h('div', { class: 'dz-actions' },
         h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
         h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…')),
       dates.length ? dates.map((date) => {
-        const rs = D.runs.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
+        const rs = shown.filter((r) => r.delivery_date === date).sort((a, b) => a.route.localeCompare(b.route));
         return h('section', { class: 'dz-card' }, h('h2', null, fmtDate(date, true)),
           h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
             h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Notes'), h('th', null, 'Loaded'), h('th', null, 'What changed'), h('th', null, 'Status'))),
@@ -486,7 +505,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
               h('td', null, !r.last_changes ? '–' : !r.last_changes.count ? 'No changes'
                 : h('details', null, h('summary', null, `${r.last_changes.count} changed`), h('ul', null, r.last_changes.items.map((x) => h('li', null, x))))),
               h('td', null, runStatus(r))))))));
-      }) : h('p', { class: 'muted' }, 'No sheets loaded yet.'));
+      }) : h('p', { class: 'muted' }, hist ? 'No finished runs yet.' : D.runs.length ? '✓ Nothing active: every run is finished or closed.' : 'No sheets loaded yet.'));
   }
 
   // ================= History =================

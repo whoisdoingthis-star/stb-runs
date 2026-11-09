@@ -23,7 +23,7 @@ These are remembered on that phone only.
 - The line under the date says when the sheets were last updated, and whether anything changed since the previous sheet ("Run 13: 2 details changed"). Tap **What changed on Run 13** to see the list.
 - **To collect** (tap to open): how many of each paper or magazine every run needs, how many **delivery dockets** to bring (one for each shop), and the **depot pick** for every run in one list.
 - **⚙ Settings**: text size, colours, tiles, **Get Runs from RouteSmart** (use it if a change is phoned in), **Upload a run sheet**, change password, sign out.
-- Older days are folded away under **Earlier days**.
+- Two tabs at the top: **Runs to do** shows only today's and upcoming runs that aren't finished. **History** has every finished run (all stops ticked, or closed by Mike after a paper run) and earlier days. A run moves to History by itself once it's done, so the screen stays clean. You can still open a run from History.
 
 ## Doing a run
 If you do a run on the **paper sheet**, that's fine: Mike closes it in Dispatch afterwards and it shows on the Runs page as **✓ Closed, done on paper by** you. You can still open it.

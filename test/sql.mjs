@@ -147,3 +147,7 @@ check('a dispatcher closes a run on paper, ticks show as paper', (await db.query
 check('closing is in the dispatch history', (await db.query(`select count(*)::int n from dispatch_history where entity='runs' and action='close' and entity_id=$1`, [run2])).rows[0].n === 1);
 await db.query(`update runs set closed_at=null, closed_by=null, close_method=null where id=$1`, [run2]);
 check('reopening is in the dispatch history', (await db.query(`select count(*)::int n from dispatch_history where entity='runs' and action='reopen'`)).rows[0].n === 1);
+
+// ---- progress per run ----
+const rp = (await db.query(`select * from run_progress where run_id=$1`, [run2])).rows[0];
+check('run progress counts done stops in the database', rp && Number(rp.done) >= 1 && 'not_delivered' in rp && 'paper' in rp);

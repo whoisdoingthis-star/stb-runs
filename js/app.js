@@ -4,7 +4,7 @@ import { Geo } from './geo.js';
 import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
-import { sha256Hex } from './rows.js';
+import { sha256Hex, runComplete } from './rows.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -240,6 +240,7 @@ function dayName(iso) {
   return iso === t ? `Today · ${fmtDate(iso)}` : iso === tomorrow ? `Tomorrow · ${fmtDate(iso)}` : fmtDate(iso);
 }
 
+let homeTab = 'current'; // Runs to do | History (stays put while the app is open)
 async function viewHome() {
   const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, class: 'file-input', id: 'pdf' });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles([...fileInput.files]); });
@@ -282,12 +283,13 @@ async function viewHome() {
           : `Runs updated ${fmtStamp(new Date().toISOString())}. No details changed.`);
       }
     }
+    // Current: today's and upcoming runs not yet finished. History: finished or closed runs, and earlier days.
     const today = nzToday();
-    const dates = Object.keys(byDate);
-    const upcoming = dates.filter((d) => d >= today).sort();
-    const earlier = dates.filter((d) => d < today).sort().reverse();
-    const daySection = (date) => {
-      const rs = [...byDate[date]].sort((a, b) => a.route.localeCompare(b.route));
+    const isCurrent = (r) => r.delivery_date >= today && !runComplete(r);
+    const pick = (fn) => { const o = {}; for (const r of runs) if (fn(r)) (o[r.delivery_date] ||= []).push(r); return o; };
+    const cur = pick(isCurrent); const past = pick((r) => !isCurrent(r));
+    const daySection = (date, group) => {
+      const rs = [...group[date]].sort((a, b) => a.route.localeCompare(b.route));
       const changed = rs.filter((r) => r.last_changes?.count);
       const latest = rs.reduce((m, r) => { const t = r.updated_at || r.created_at; return t > m ? t : m; }, '');
       const auto = rs.every((r) => r.source === 'auto');
@@ -318,10 +320,16 @@ async function viewHome() {
         h('details', { class: 'papers' }, h('summary', null, `To collect: ${rs.reduce((t, r) => t + (r.summary?.copies || 0), 0)} items`,
           rs.some((r) => r.summary?.dockets) ? `, ${rs.reduce((t, r) => t + (r.summary?.dockets || 0), 0)} dockets` : ''), paperSummary(rs)));
     };
-    list.replaceChildren(...[
-      ...(upcoming.length ? upcoming.map(daySection) : [h('div', { class: 'empty' }, 'No runs for today or tomorrow yet. They load themselves after 7pm.')]),
-      earlier.length ? h('details', { class: 'earlier' }, h('summary', null, `Earlier days (${earlier.length})`), earlier.map(daySection)) : null,
-    ].filter(Boolean));
+    const nPast = Object.values(past).reduce((n, rs) => n + rs.length, 0);
+    const tabs = h('div', { class: 'seg home-tabs', role: 'group', 'aria-label': 'Which runs' },
+      h('button', { 'aria-pressed': String(homeTab === 'current'), onclick: () => { homeTab = 'current'; renderList(); } }, 'Runs to do'),
+      h('button', { 'aria-pressed': String(homeTab === 'history'), onclick: () => { homeTab = 'history'; renderList(); } }, `History${nPast ? ` (${nPast})` : ''}`));
+    const curDates = Object.keys(cur).sort();
+    const pastDates = Object.keys(past).sort().reverse();
+    list.replaceChildren(tabs, ...(homeTab === 'current'
+      ? (curDates.length ? curDates.map((d) => daySection(d, cur)) : [h('div', { class: 'empty' }, Object.keys(byDate).some((d) => d >= today)
+        ? 'All done. Finished runs are under History.' : 'No runs for today or tomorrow yet. They load themselves after 7pm.')])
+      : (pastDates.length ? pastDates.map((d) => daySection(d, past)) : [h('div', { class: 'empty' }, 'Finished runs will show here.')])));
   }
   await renderList();
 

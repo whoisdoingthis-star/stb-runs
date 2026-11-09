@@ -95,6 +95,13 @@ When a sheet replaces an earlier one for the same run and day, these are compare
 - **DIFOTIS** (Dispatch Overview, per run, per address on the sheet): **Delivered**; **In full** = not short; **On time** = inside the address's time policies in force that day, or on the delivery day if it has none; **In spec** = no wet, damaged or wrong-paper complaint for that day.
 - Bundles (Run 8 reception) record the outcome for every paper in the handover.
 
+## Current and history
+(Mike, 9 Nov 2026.) A run is **complete** when it has been closed in Dispatch, or every stop on it has been dealt with in the app (ticked, short or couldn't deliver). Complete runs move to **History** on both screens, so they stay clean:
+
+- **Phones, Runs to do**: today's and upcoming runs that aren't complete. Everything else (complete runs and earlier days) is under **History**.
+- **Dispatch, Runs & sheets → Active**: every run that isn't complete, *including earlier days*, so a run done on paper is never forgotten until it's closed. Earlier runs not complete are also listed under **Needs attention**. **History**: complete runs; reopening one brings it back.
+- Progress is counted in the database (`run_progress`), not on the phone.
+
 ## Closing a run
 (Mike, 9 Nov 2026.) While drivers are getting used to the app, some runs are still done on the paper sheet. A dispatcher can **close** a run in Dispatch (Overview or Runs & sheets → *Close run…*):
 

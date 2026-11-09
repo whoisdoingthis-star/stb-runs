@@ -19,9 +19,12 @@ The dispatch dashboard is where routes are planned: the register of every addres
 - A pattern is a prompt to look closer, not proof: see [Business rules: complaints register](business-rules.md#complaints-register).
 
 ## Runs & sheets
+Two tabs: **Active** (every run not yet finished or closed, including earlier days: close the paper ones) and **History** (finished in the app, or closed here). Overview's Sheets table also lists only the day's active runs, with a link to the finished ones.
+
 Every loaded day: per run, the totals check, the sheet's notes, when and how it was loaded, and what changed (tap to expand). Open any run from here.
 
-## History
+## Change log
+(Was called *History*; renamed so it isn't confused with finished runs.)
 Every change on the dashboard (people, logins, locations, assignments, policies): when, who, what.
 
 The words used here are defined in [Business rules: locations](business-rules.md#locations-operating-and-service).

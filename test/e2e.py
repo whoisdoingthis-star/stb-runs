@@ -67,8 +67,10 @@ with sync_playwright() as p:
     ev = page.evaluate("Object.keys(localStorage).filter(k=>k.startsWith('stb.events.')).flatMap(k=>JSON.parse(localStorage.getItem(k)))")
     check('ticks carry GPS', all(e.get('lat') for e in ev if e['done']), json.dumps(ev[0])[:120])
     # leaving the run: no stray message, Today home lists runs as Run N
-    page.goto('http://localhost:8765/#/'); page.wait_for_selector('.run-tile', state='attached')
-    if page.locator('details.earlier').count(): page.click('details.earlier > summary')  # an older sample sheet sits under "Earlier days"
+    page.goto('http://localhost:8765/#/'); page.wait_for_selector('.home-tabs')
+    check('earlier days are not under Runs to do', page.locator('.run-tile').count() == 0, page.locator('.home').inner_text()[:200])
+    page.click('.home-tabs >> text=History'); page.wait_for_selector('.run-tile')
+    check('earlier days are under History', page.locator('.run-tile').count() >= 1)
     check('toast does not follow to home', page.locator('#toast').is_hidden())
     names = page.locator('.rt-name').all_inner_texts()
     check('home uses Run N names, in order', names == sorted(names, key=lambda x: int(x.split()[-1])) and all(x.startswith('Run ') for x in names), str(names))

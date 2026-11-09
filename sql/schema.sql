@@ -811,3 +811,15 @@ create trigger runs_close_guard before update on public.runs
 drop policy if exists tap_events_add on public.tap_events;
 create policy tap_events_add on public.tap_events for insert to authenticated
   with check (public.is_member() and user_id = auth.uid() and (method is null or public.is_dispatcher()));
+
+-- ---- Progress per run, counted in the database (the app used to count from up to 1000 tick
+-- rows, which undercounts once there are weeks of runs). A run is complete when it is closed
+-- in Dispatch or every stop is dealt with; complete runs move to History (docs/business-rules.md#current-and-history).
+create or replace view public.run_progress with (security_invoker = true) as
+select run_id,
+       count(*) filter (where done)                         as done,
+       count(*) filter (where done and outcome = 'futile')  as not_delivered,
+       count(*) filter (where done and method = 'paper')    as paper,
+       max(device_time) filter (where done)                 as last_tick
+from public.line_status
+group by run_id;

@@ -566,3 +566,7 @@ html.big .tile.done.futile .num::after, html.big .tile.done.short .num::after { 
 .dz-radio input { margin-top: 3px; }
 .dz-runstatus { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .rt-closed { font-weight: 700; color: var(--done); }
+
+/* Runs to do | History on the Runs page. */
+.home-tabs { display: flex; margin: 4px 0 14px; }
+.home-tabs button { flex: 1; min-height: 48px; font-size: var(--t-m, 17px); font-weight: 700; }

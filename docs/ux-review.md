@@ -85,7 +85,7 @@ Severity: **H** = causes mistakes or slows every run; **M** = friction; **L** = 
 
 ## 4. A separate dispatch landing page
 - **Where:** `…/stb-runs/dispatch` (its own page), also linked from the app's settings for dispatchers. On a laptop, a dispatcher's sign-in lands here. On a phone it lands on Today, with a link across.
-- **Layout:** desktop-first. A left sidebar (Overview, Runs & sheets, Addresses, Locations, Policies, People, History), with the content to the right. Tables and maps at full width.
+- **Layout:** desktop-first. A left sidebar (Overview, Runs & sheets, Addresses, Locations, Policies, People, History, since renamed Change log), with the content to the right. Tables and maps at full width.
 - **Overview page (the landing):**
   - **Tonight's sheets:** status of the 7pm fetch, totals check, "No details changed / 3 changed", and a **Get Runs** button.
   - **Live runs** (on delivery mornings): progress per run, who is on it, last tick, a map of today's ticks.

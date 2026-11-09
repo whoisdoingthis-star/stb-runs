@@ -52,3 +52,6 @@ export function changeRecord(oldLines, newLines) {
   const items = diffLines(oldLines, newLines);
   return { at: new Date().toISOString(), count: items.length, items: items.slice(0, 50) };
 }
+
+/** A run is complete (moves to History) when it is closed in Dispatch or every stop has been dealt with. */
+export const runComplete = (r) => !!r.closed_at || (r.summary?.lines > 0 && (r.done || 0) >= r.summary.lines);
