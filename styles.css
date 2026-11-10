@@ -636,3 +636,8 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 .splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink); touch-action: manipulation; }
 .splash svg { width: min(92vw, 440px); height: auto; overflow: visible; }
 .splash .sp-pin, .splash .sp-logo, .splash .sp-tw { opacity: 0; }
+/* Five buttons after a tick: Maps shows just its arrow, and buttons use less padding. */
+.actionbar.has-last .ab-btn { padding: 0 6px; min-width: 0; gap: 4px; }
+.actionbar.has-last .ab-lbl { display: none; }
+.actionbar.has-last .ab-btn { flex: 1 1 auto; }
+.actionbar.has-last .ab-btn.primary { flex: 1.3 1 auto; }

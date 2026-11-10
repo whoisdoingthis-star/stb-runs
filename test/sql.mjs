@@ -151,3 +151,8 @@ check('reopening is in the dispatch history', (await db.query(`select count(*)::
 // ---- progress per run ----
 const rp = (await db.query(`select * from run_progress where run_id=$1`, [run2])).rows[0];
 check('run progress counts done stops in the database', rp && Number(rp.done) >= 1 && 'not_delivered' in rp && 'paper' in rp);
+
+// ---- directions: the stop's GPS beats a learned letterbox position ----
+await db.query(`update operating_locations set lat=-36.9, lng=174.9 where id=$1`, [o]);
+const dest = (await db.query(`select source, lat from address_destinations where address_key='K|A|1'`)).rows[0];
+check('directions go to the stop set in Dispatch when it has GPS', dest?.source === 'stop' && Number(dest.lat) === -36.9);

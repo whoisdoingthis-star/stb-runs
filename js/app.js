@@ -86,6 +86,7 @@ const ICONS = {
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   warn: '<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17v.5"/>',
   undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a5 5 0 0 1 0 10h-2"/>',
+  nav: '<path d="M12 2l7 19-7-4-7 4z"/>',
 };
 const icon = (name) => { const el = h('span', { class: 'ic', 'aria-hidden': 'true' }); el.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`; return el; };
 const menuItem = (label, fn, opts = {}) => h('button', { class: `menu-item ${opts.danger ? 'danger' : ''}`, onclick: fn }, h('span', null, label), opts.hint ? h('small', null, opts.hint) : null);
@@ -705,7 +706,10 @@ async function viewRun(ids) {
     codes: {},         // route -> { section id -> door code }, for routes with a layout
     photos: await app.store.loadPhotos(ids),   // photos taken on these runs
     watch: await app.store.loadWatch([...new Set(data.map((d) => d.run.route))]), // route -> addresses to photo every time
+    dest: {},          // address key -> where Google Maps should go (loaded below, never blocks the run)
+    lineByKey: {},     // tile key -> its line, and bundle key -> its lines, for directions
   };
+  app.store.loadDestinations([...new Set(data.flatMap((d) => d.lines.map((l) => l.address_key)))]).then((d) => { S.dest = d || {}; }).catch(() => {});
   for (const r of new Set(data.map((d) => d.run.route))) if (layoutFor(r)) S.codes[r] = await app.store.loadAccessCodes(r);
   const hasCustom = (d) => !!S.seq[d.run.route]?.keys?.length;
   const orderedLines = (d) => (S.useCustom ? applySequence(d.lines, S.seq[d.run.route]?.keys) : d.lines);
@@ -747,18 +751,42 @@ async function viewRun(ids) {
   const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, icon('undo'), 'Undo');
   const abPhoto = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Take a delivery photo', onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, icon('camera'));
   const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, icon('warn'));
+  const abNav = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Directions to the next stop in Google Maps', onclick: () => directions() }, icon('nav'), h('span', { class: 'ab-lbl' }, 'Maps'));
   const abNext = h('button', { class: 'ab-btn primary', onclick: () => goNext(true) }, 'Next ↓');
   const actionbar = h('div', { class: 'actionbar', role: 'region', 'aria-label': 'Last delivery and next stop' },
-    h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNext);
+    h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNav, abNext);
   function drawBar(nextEl) {
     const last = S.last;
     abUndo.hidden = !last; abProblem.hidden = !last; abPhoto.hidden = !(last && last.lines.length === 1);
     abMain.textContent = last ? `${last.problem ? '⚠' : '✓'} ${last.problem ? `${last.problem}: ` : ''}${last.label}` : (nextEl ? 'Next stop' : '');
     abSub.textContent = nextEl ? `Next: ${nextEl.getAttribute('data-label') || ''}` : (S.progress?.total ? 'All done on this screen' : '');
-    abNext.hidden = !nextEl;
+    abNext.hidden = !nextEl; abNav.hidden = !nextEl;
     actionbar.classList.toggle('has-last', !!last); // two rows once there is a tick: words on top, buttons underneath
   }
   // Scroll the next stop into view (only if it's off screen, unless asked).
+  // ---- directions: Google Maps to the next stop, only when asked (Mike, 10 Nov 2026) ----
+  // Where to: the stop set in Dispatch (where you park), else the letterbox learned from GPS
+  // ticks, else the street address. On Android, Google Maps keeps navigating in a small
+  // floating window when you switch back here.
+  function destinationFor(el) {
+    const key = el?.getAttribute('data-key');
+    const found = key && S.lineByKey[key];
+    const l = Array.isArray(found) ? found[0] : found;
+    if (!l) return null;
+    const label = key.startsWith('bundle:') ? el.getAttribute('data-label') || addrText(l) : addrText(l);
+    const d = S.dest[l.address_key];
+    if (d?.lat != null) return { q: `${d.lat},${d.lng}`, label: d.stop_name || label };
+    const f = fmtNumber(l.number);
+    return { q: `${f.main} ${titleCase(l.street)}, Howick, Auckland, New Zealand`, label };
+  }
+  function directions() {
+    const to = destinationFor(body.querySelector('.tile.next'));
+    if (!to) { toast('No next stop.'); return; }
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(to.q)}&travelmode=driving&dir_action=navigate`;
+    window.open(url, '_blank', 'noopener');
+    toast(`Google Maps: ${to.label}`);
+  }
+
   function goNext(force) {
     const el = body.querySelector('.tile.next');
     if (!el) return;
@@ -1062,6 +1090,7 @@ async function viewRun(ids) {
   // One tile for a whole handover, with what's in it listed underneath.
   function bundleTile(d, g, st, allDone) {
     const key = `bundle:${d.run.id}:${g.section.id}`;
+    S.lineByKey[key] = g.lines;
     const pubs = {};
     for (const l of g.lines) for (const pt of partsOf(l)) pubs[pt.pub] = (pubs[pt.pub] || 0) + pt.qty;
     const last = allDone ? g.lines.map((l) => st[`${l.run_id}::${l.line_key}`]).sort((a, b) => (a.device_time < b.device_time ? 1 : -1))[0] : null;
@@ -1133,6 +1162,7 @@ async function viewRun(ids) {
     const done = !!ev?.done;
     const outcome = done ? ev.outcome || 'delivered' : null;
     const key = `${l.run_id}::${l.line_key}`;
+    S.lineByKey[key] = l;
     const flags = l.flags || [];
     const parts = partsOf(l);
     const plainNZH = parts.length === 1 && parts[0].pub === 'NZH';

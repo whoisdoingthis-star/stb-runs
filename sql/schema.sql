@@ -824,3 +824,16 @@ select run_id,
        string_agg(distinct user_name, ', ') filter (where done) as ticked_by
 from public.line_status
 group by run_id;
+
+-- ---- Where to send Google Maps for each address (docs/business-rules.md#directions):
+-- the stop set in Dispatch (where the vehicle parks: villages, buildings) first, then the
+-- letterbox position learned from GPS ticks. Null = the app falls back to the street address.
+create or replace view public.address_destinations with (security_invoker = true) as
+select a.address_key,
+       coalesce(o.lat, p.lat) as lat,
+       coalesce(o.lng, p.lng) as lng,
+       case when o.lat is not null then 'stop' when p.lat is not null then 'learned' end as source,
+       o.name as stop_name
+from public.addresses a
+left join public.operating_locations o on o.id = a.operating_location_id
+left join public.address_positions p on p.address_key = a.address_key;

@@ -38,6 +38,13 @@ with sync_playwright() as p:
     check('progress counts it', page.inner_text('.fb-prog').startswith('1/'), page.inner_text('.fb-prog'))
     page.click('.actionbar >> text=Undo'); page.wait_for_timeout(300)
     check('undo unticks', page.locator('.tile.done').count() == 0 and page.inner_text('.fb-prog').startswith('0/'))
+    # directions: Google Maps to the next stop, only when asked
+    page.evaluate("window.open = (u) => { window.__opened = u; return null; }")
+    nxt = page.locator('.tile.next').get_attribute('aria-label') or ''
+    page.click('[aria-label="Directions to the next stop in Google Maps"]'); page.wait_for_timeout(150)
+    opened = page.evaluate('window.__opened') or ''
+    from urllib.parse import unquote_plus
+    check('Maps opens Google Maps directions to the next stop', opened.startswith('https://www.google.com/maps/dir/?api=1&destination=') and 'dir_action=navigate' in opened and unquote_plus(opened).split('destination=')[1].split(',')[0].split(' ')[0] in nxt, f'{unquote_plus(opened)[:120]} | {nxt[:60]}')
     # couldn't deliver: tick, then the warning button in the bottom bar; the tick stays in the history
     key = page.locator('.tile.next').get_attribute('data-key')
     page.locator('.tile.next').click(); page.wait_for_timeout(200)

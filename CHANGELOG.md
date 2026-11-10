@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Directions:** an arrow in the bottom bar (labelled **Maps** before the first tick) opens Google Maps with driving directions to the **next stop**, only when tapped. Village stops go to where you park (the stop set in Dispatch), otherwise the letterbox learned from GPS ticks, otherwise the street address. On Android, Google Maps keeps running in a floating window over the run. (view `address_destinations`)
 - **Opening**: now plays **every time you open the app or come back to it** (after a few seconds away), not just once a day; never while you are inside a run. The chimes are **damped further**: softer, shorter, less bright (Mike, 10 Nov; [decision 0018](docs/decisions/0018-opening-every-open.md)).
 - **Opening chimes lightly damped**: each note starts a touch softer, rings for a shorter time and has its bright edge taken off (Mike, 10 Nov).
 - **Opening**: each stop and the pin now gets a little **twinkle**, and with Chimes switched on, **its own soft note**, rising stop by stop, in place of the run of notes at the end (Mike, 10 Nov; [decision 0017](docs/decisions/0017-opening-notes-per-stop.md)).

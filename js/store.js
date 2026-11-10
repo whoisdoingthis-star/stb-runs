@@ -189,6 +189,7 @@ export class LocalStore extends Base {
   // Demo mode keeps a note that a photo was taken (the photo itself stays on the phone).
   async savePhoto(blob, meta) { LS.set('stb.demo.photos', [...LS.get('stb.demo.photos', []), { ...meta, taken_at: new Date().toISOString() }]); return null; }
   async loadPhotos(ids) { return LS.get('stb.demo.photos', []).filter((p) => ids.includes(p.run_id)); }
+  async loadDestinations() { return {}; }
   async loadWatch(routes) { const all = LS.get('stb.watch', {}); return Object.fromEntries(routes.map((r) => [r, all[r] || []])); }
   async setWatch(route, addressKey, on) {
     const all = LS.get('stb.watch', {});
@@ -397,6 +398,20 @@ export class SupabaseStore extends Base {
       if (error) throw error;
       return data;
     } catch { return []; }
+  }
+  /** Where Google Maps should go for each address: the Dispatch stop, else the learned letterbox. */
+  async loadDestinations(keys) {
+    const cached = LS.get('stb.dest', {});
+    try {
+      const out = {};
+      for (let i = 0; i < keys.length; i += 150) {
+        const { data, error } = await this.sb.from('address_destinations').select('address_key, lat, lng, source, stop_name').in('address_key', keys.slice(i, i + 150));
+        if (error) throw error;
+        for (const d of data) if (d.lat != null) out[d.address_key] = d;
+      }
+      LS.set('stb.dest', { ...cached, ...out });
+      return out;
+    } catch { return Object.fromEntries(keys.filter((k) => cached[k]).map((k) => [k, cached[k]])); }
   }
   /** Addresses where the family wants a photo every delivery (e.g. after a disputed complaint). */
   async loadWatch(routes) {
