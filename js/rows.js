@@ -53,5 +53,29 @@ export function changeRecord(oldLines, newLines) {
   return { at: new Date().toISOString(), count: items.length, items: items.slice(0, 50) };
 }
 
+/**
+ * Depot pick for all of a day's runs together (Mike, 10 Nov 2026): take the day's total for each
+ * paper and work out whole bundles and loose copies from that day's bundle size. The size is not
+ * fixed: it comes from that day's key reports ("Bundles: 1 with 80"), so it can change every day.
+ * `items` are the per-run pick lines ({ pub, size, bundles, loose, draw, retailQty }).
+ * - one bundle size on the day's sheets: bundles = whole multiples of it, the rest loose;
+ * - no size on any sheet (no run had a full bundle): everything is loose, `sizeUnknown`;
+ * - sheets disagree on the size: can't re-bundle, so add up run by run and say so (`mixed`).
+ */
+export function rebundle(items) {
+  const t = {};
+  for (const x of items) {
+    const o = (t[x.pub] ||= { pub: x.pub, draw: 0, retailQty: 0, sizes: new Set(), sumBundles: 0, sumLoose: 0 });
+    o.draw += x.draw || 0; o.retailQty += x.retailQty || 0; o.sumBundles += x.bundles || 0; o.sumLoose += x.loose || 0;
+    if (x.size > 0) o.sizes.add(x.size);
+  }
+  return Object.values(t).map(({ sizes, sumBundles, sumLoose, ...o }) => {
+    const list = [...sizes].sort((a, b) => a - b);
+    if (list.length === 1) { const size = list[0]; const bundles = Math.floor(o.draw / size); return { ...o, size, bundles, loose: o.draw - bundles * size, total: true }; }
+    if (!list.length) return { ...o, size: null, bundles: 0, loose: o.draw, total: true, sizeUnknown: true };
+    return { ...o, size: null, bundles: sumBundles, loose: sumLoose, total: true, mixed: list };
+  }).sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
+}
+
 /** A run is complete (moves to History) when it is closed in Dispatch or every stop has been dealt with. */
 export const runComplete = (r) => !!r.closed_at || (r.summary?.lines > 0 && (r.done || 0) >= r.summary.lines);

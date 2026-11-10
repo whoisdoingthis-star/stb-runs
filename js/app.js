@@ -4,7 +4,7 @@ import { Geo } from './geo.js';
 import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
-import { sha256Hex, runComplete } from './rows.js';
+import { sha256Hex, runComplete, rebundle } from './rows.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -439,21 +439,15 @@ function pickList(r) {
   }
   return out.sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
 }
-// Depot pick for several runs together: each run is bundled on its own, so bundles and loose
-// copies are added up run by run (not re-bundled). "of 140" only when every run uses that size.
-function pickTotals(runs) {
-  const t = {};
-  for (const x of runs.flatMap(pickList)) {
-    const o = (t[x.pub] ||= { pub: x.pub, bundles: 0, loose: 0, draw: 0, retailQty: 0, sizes: new Set() });
-    o.bundles += x.bundles; o.loose += x.loose; o.draw += x.draw; o.retailQty += x.retailQty || 0;
-    if (x.bundles && x.size) o.sizes.add(x.size);
-  }
-  return Object.values(t).map((o) => ({ ...o, size: o.sizes.size === 1 ? [...o.sizes][0] : null }))
-    .sort((a, b) => (a.pub === 'NZH' ? -1 : b.pub === 'NZH' ? 1 : a.pub.localeCompare(b.pub)));
-}
+// Depot pick for several runs together: the day's total for each paper, re-bundled by that
+// day's bundle size (rows.js `rebundle`; Mike, 10 Nov 2026).
+const pickTotals = (runs) => rebundle(runs.flatMap(pickList));
 const pickText = (x) => [x.bundles ? `${x.bundles} bundle${x.bundles === 1 ? '' : 's'}${x.size ? ` of ${x.size}` : ''}` : null, x.loose ? `${x.loose} loose` : null].filter(Boolean).join(' + ');
 const pickItem = (x, cls) => h(cls === 'div' ? 'div' : 'span', { class: cls === 'div' ? '' : 'rt-pick-item' }, h('b', null, x.pub), ` ${pickText(x)}`,
-  x.retailQty ? h('small', { class: 'pick-note' }, ` (includes ${x.retailQty} for retail)`) : null);
+  x.total ? ` = ${x.draw}` : '',
+  x.retailQty ? h('small', { class: 'pick-note' }, ` (includes ${x.retailQty} for retail)`) : null,
+  x.sizeUnknown ? h('small', { class: 'pick-note' }, ' (no bundle size on today\u2019s sheets)') : null,
+  x.mixed ? h('small', { class: 'pick-note' }, ` (sheets show bundles of ${x.mixed.join(' and ')}: added up run by run)`) : null);
 
 // "Run 13: 3 details changed" / "Run 13: no details changed".
 function changeSummary(route, ch) {
