@@ -635,4 +635,4 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 /* Opening animation (js/splash.js): over everything, a tap skips it */
 .splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink); touch-action: manipulation; }
 .splash svg { width: min(92vw, 440px); height: auto; overflow: visible; }
-.splash .sp-pin, .splash .sp-logo { opacity: 0; }
+.splash .sp-pin, .splash .sp-logo, .splash .sp-tw { opacity: 0; }
