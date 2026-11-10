@@ -32,16 +32,18 @@ export function chimes(notes) {
     const go = () => {
       if (ctx.state !== 'running') return;
       const late = performance.now() - asked; // time spent waiting for the phone to allow sound
+      // Lightly damped (Mike, 10 Nov 2026): a softer start, a shorter ring, and the bright edge taken off.
+      const out = ctx.createBiquadFilter(); out.type = 'lowpass'; out.frequency.value = 3800; out.Q.value = 0.5; out.connect(ctx.destination);
       const tone = (f, t, d, v, type = 'sine') => {
         const o = ctx.createOscillator(); const g = ctx.createGain();
         o.type = type; o.frequency.value = f;
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-        o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + d + 0.05);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.035); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
       };
       for (const [ms, f] of notes) {
         if (ms - late < -150) continue; // too late to match its stop: leave it out
         const t = ctx.currentTime + Math.max(0, ms - late) / 1000;
-        tone(f, t, 1.2, 0.07); tone(f * 2.01, t, 0.6, 0.022, 'triangle');
+        tone(f, t, 0.7, 0.065); tone(f * 2.01, t, 0.3, 0.012, 'triangle');
       }
     };
     if (ctx.state === 'running') go(); else ctx.resume().then(go).catch(() => {});
