@@ -30,6 +30,7 @@ with sync_playwright() as p:
     first_label = nxt.get_attribute('data-label')
     nxt.click(); page.wait_for_timeout(300)
     check('bottom bar shows the tick with Undo', first_label in page.inner_text('.ab-main') and page.locator('.actionbar >> text=Undo').is_visible(), page.inner_text('.ab-main'))
+    check('bottom bar words are not cut off', page.evaluate("[...document.querySelectorAll('.ab-main, .ab-sub')].every(e => e.scrollWidth <= e.clientWidth)"))
     check('next stop moved on', page.locator('.tile.next').get_attribute('data-label') != first_label)
     check('progress counts it', page.inner_text('.fb-prog').startswith('1/'), page.inner_text('.fb-prog'))
     page.click('.actionbar >> text=Undo'); page.wait_for_timeout(300)

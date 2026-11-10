@@ -57,7 +57,9 @@ setInterval(applyTheme, 60000);
 const layoutIsList = () => bigOn() || pref('stb-layout', 'grid') === 'list';
 
 // A panel that slides up from the bottom, used for menus and settings.
+let toastTimer;
 function openSheet(title, ...content) {
+  clearTimeout(toastTimer); { const t = document.getElementById('toast'); if (t) t.hidden = true; }
   const close = () => { panel.remove(); document.removeEventListener('keydown', esc); };
   const esc = (e) => { if (e.key === 'Escape') close(); };
   const panel = h('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === panel) close(); } },
@@ -77,6 +79,14 @@ function choiceRow(label, options, current, onPick) {
   row.append(seg);
   return row;
 }
+// Line icons drawn the same on every phone (emoji look different on iPhone and Android).
+const ICONS = {
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  warn: '<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17v.5"/>',
+  undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a5 5 0 0 1 0 10h-2"/>',
+};
+const icon = (name) => { const el = h('span', { class: 'ic', 'aria-hidden': 'true' }); el.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`; return el; };
 const menuItem = (label, fn, opts = {}) => h('button', { class: `menu-item ${opts.danger ? 'danger' : ''}`, onclick: fn }, h('span', null, label), opts.hint ? h('small', null, opts.hint) : null);
 
 // House numbers as the driver says them: "2C/ 12" -> 12, Unit 2C; "Suite 1/ 87" -> 87, Suite 1.
@@ -95,7 +105,6 @@ function toggleBig() {
   return next;
 }
 
-let toastTimer;
 function toast(msg, action) {
   const t = document.getElementById('toast');
   const actions = (Array.isArray(action) ? action : [action]).filter(Boolean);
@@ -312,7 +321,7 @@ async function viewHome() {
                   pickList(r).map((x) => pickItem(x))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
                 r.closed_at ? h('div', { class: 'rt-closed' }, `✓ Closed${r.close_method === 'paper' ? ', done on paper' : ''}${r.driver ? ` by ${r.driver}` : ''}`)
-                  : done ? h('div', { class: done >= stops ? 'rt-closed' : 'rt-sub' }, done >= stops ? `✓ Finished${r.tickedBy ? ` by ${r.tickedBy}` : ''}` : `${done} of ${stops} done`) : null),
+                  : done ? h('div', { class: done >= stops ? 'rt-closed' : 'rt-sub' }, done >= stops ? `✓ Finished${r.tickedBy ? ` by ${r.tickedBy}` : ''}` : `${done} of ${stops} done${r.notDelivered ? ` · ${r.notDelivered} not delivered` : ''}`) : null),
               h('span', { class: 'rt-go' }, r.closed_at || (done && done >= stops) ? 'View' : done ? 'Continue' : 'Start')),
             r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, `What changed on ${shortRoute(r.route)}`),
               h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))) : null);
@@ -726,9 +735,9 @@ async function viewRun(ids) {
   // ---- bottom bar: what you just did (with Undo and Photo), and where to go next
   const abMain = h('div', { class: 'ab-main' });
   const abSub = h('div', { class: 'ab-sub' });
-  const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, '↶ Undo');
-  const abPhoto = h('button', { class: 'ab-btn', hidden: true, onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, '📷');
-  const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, '⚠');
+  const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, icon('undo'), 'Undo');
+  const abPhoto = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Take a delivery photo', onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, icon('camera'));
+  const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, icon('warn'));
   const abNext = h('button', { class: 'ab-btn primary', onclick: () => goNext(true) }, 'Next ↓');
   const actionbar = h('div', { class: 'actionbar', role: 'region', 'aria-label': 'Last delivery and next stop' },
     h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNext);
@@ -738,13 +747,14 @@ async function viewRun(ids) {
     abMain.textContent = last ? `${last.problem ? '⚠' : '✓'} ${last.problem ? `${last.problem}: ` : ''}${last.label}` : (nextEl ? 'Next stop' : '');
     abSub.textContent = nextEl ? `Next: ${nextEl.getAttribute('data-label') || ''}` : (S.progress?.total ? 'All done on this screen' : '');
     abNext.hidden = !nextEl;
+    actionbar.classList.toggle('has-last', !!last); // two rows once there is a tick: words on top, buttons underneath
   }
   // Scroll the next stop into view (only if it's off screen, unless asked).
   function goNext(force) {
     const el = body.querySelector('.tile.next');
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const top = document.querySelector('.rh')?.getBoundingClientRect().bottom || 0;
+    const top = (document.querySelector('.rh')?.getBoundingClientRect().bottom || 0) + (el.closest('.street')?.querySelector('h2')?.offsetHeight || 0) + 8;
     const bottom = innerHeight - actionbar.getBoundingClientRect().height;
     if (force || r.top < top + 8 || r.bottom > bottom - 8) {
       window.scrollBy({ top: r.top - top - (bottom - top - r.height) / 3, behavior: 'smooth' });
@@ -818,12 +828,22 @@ async function viewRun(ids) {
     openSheet(`Problem at ${last.label}`,
       h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'Saved with the time and GPS, so Dispatch can answer a complaint.'),
       (close) => h('div', { class: 'menu-group' }, h('div', { class: 'menu-head' }, 'Couldn\u2019t deliver'),
-        ...PROBLEMS.map((r) => menuItem(r, () => { close(); recordOutcome(last, 'futile', r); toast(`Saved: not delivered (${r}).`); })),
-        menuItem('Other reason…', () => { const r = prompt('What stopped the delivery?'); if (!r) return; close(); recordOutcome(last, 'futile', r.trim()); toast('Saved: not delivered.'); })),
+        ...PROBLEMS.map((r) => menuItem(r, () => { close(); recordOutcome(last, 'futile', r); })),
+        menuItem('Other reason…', () => { close(); openOtherReason(last); })),
       total > 1 ? (close) => h('div', { class: 'menu-group' }, h('div', { class: 'menu-head' }, `Delivered fewer than ${total}`),
         h('div', { class: 'seg qty-seg' }, Array.from({ length: Math.min(total - 1, 20) }, (_, i) => i + 1).map((n) =>
-          h('button', { onclick: () => { close(); recordOutcome(last, 'short', 'Short', n); toast(`Saved: ${n} of ${total} delivered.`); } }, String(n))))) : null,
-      last.problem ? (close) => h('div', { class: 'menu-group' }, menuItem('It was delivered after all', () => { close(); recordOutcome(last, 'delivered', null, total); toast('Saved: delivered.'); })) : null);
+          h('button', { onclick: () => { close(); recordOutcome(last, 'short', 'Short', n); } }, String(n))))) : null,
+      last.problem ? (close) => h('div', { class: 'menu-group' }, menuItem('It was delivered after all', () => { close(); recordOutcome(last, 'delivered', null, total); })) : null);
+  }
+
+  function openOtherReason(last) {
+    const input = h('input', { class: 'search', type: 'text', maxlength: '80', placeholder: 'e.g. Road closed', 'aria-label': 'What stopped the delivery?', autocomplete: 'off' });
+    const save = (close) => { const r = input.value.trim(); if (!r) { input.focus(); return; } close(); recordOutcome(last, 'futile', r); };
+    openSheet(`Problem at ${last.label}`,
+      (close) => h('form', { class: 'menu-group', onsubmit: (e) => { e.preventDefault(); save(close); } },
+        h('div', { class: 'menu-head' }, 'What stopped the delivery?'), input,
+        h('button', { class: 'btn primary', type: 'submit' }, 'Save as not delivered')));
+    setTimeout(() => input.focus(), 50);
   }
 
   // ---- delivery photos -------------------------------------------------
@@ -1122,7 +1142,8 @@ async function viewRun(ids) {
     },
     stripe,
     h('div', { class: 'num' }, fmtNumber(l.number).main,
-      plainNZH && l.qty > 1 ? h('span', { class: 'badge qty' }, `×${l.qty}`) : null),
+      plainNZH && l.qty > 1 ? h('span', { class: 'badge qty' }, `×${l.qty}`) : null,
+      done ? h('span', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null),
     fmtNumber(l.number).sub ? h('div', { class: 'unit' }, fmtNumber(l.number).sub) : null,
     plainNZH ? null : h('div', { class: 'pubs' }, parts.map((pt) => pubChip(pt.pub, pt.qty, kind))),
     S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
@@ -1137,7 +1158,6 @@ async function viewRun(ids) {
     }, photosOf(l).length ? `📷 Photo taken (${photosOf(l).length})` : '📷 Take photo') : null,
     outcome === 'futile' ? h('div', { class: 'outcome' }, `Not delivered: ${ev.reason || 'no reason given'}`) : null,
     outcome === 'short' ? h('div', { class: 'outcome' }, `Short: ${ev.qty_delivered} of ${l.qty} delivered`) : null,
-    done ? h('div', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null,
     done ? h('div', { class: 'done-word' }, outcome === 'futile' ? 'NOT DELIVERED' : outcome === 'short' ? 'SHORT' : 'DONE') : null);
   }
 
@@ -1191,9 +1211,9 @@ async function viewRun(ids) {
       h('div', { class: 'rh-row' },
         h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to runs' }, '‹'),
         h('div', { class: 'rh-title' },
-          h('h1', null, data.map((d) => shortRoute(d.run.route)).join(' + ')),
-          h('div', { class: 'rh-status' }, fmtDate(date), withChip, orderChip, gpsChip, syncChip)),
-        h('button', { class: 'icon-btn search-btn', 'aria-label': 'Find an address', onclick: () => { searchRow.hidden = !searchRow.hidden; if (!searchRow.hidden) search.focus(); } }, '🔍'),
+          h('h1', null, h('span', { class: 'rh-name' }, data.map((d) => shortRoute(d.run.route)).join(' + ')), h('span', { class: 'rh-date' }, fmtDate(date))),
+          h('div', { class: 'rh-status' }, withChip, orderChip, gpsChip, syncChip)),
+        h('button', { class: 'icon-btn search-btn', 'aria-label': 'Find an address', onclick: () => { searchRow.hidden = !searchRow.hidden; if (!searchRow.hidden) search.focus(); } }, icon('search')),
         h('button', { class: 'icon-btn', 'aria-label': 'Run options', onclick: openMenu }, '⋯')),
       floatbar,
       seg ? h('div', { class: 'rh-row' }, seg) : null,
@@ -1202,6 +1222,13 @@ async function viewRun(ids) {
       fbFill),
     body,
     actionbar);
+
+  // Street banners stick just under the header, so the street is always in view.
+  const rhEl = document.querySelector('.rh');
+  const setRh = () => document.documentElement.style.setProperty('--rh-h', `${Math.round(rhEl.getBoundingClientRect().height)}px`);
+  setRh();
+  const rhWatch = 'ResizeObserver' in window ? new ResizeObserver(setRh) : null;
+  rhWatch?.observe(rhEl);
 
   // ------------------------------------------------------------ hold to move
   // Hold a tile (or a street name) ~half a second: it lifts and follows your
@@ -1422,7 +1449,7 @@ async function viewRun(ids) {
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onCancel);
     document.removeEventListener('touchmove', blockScroll);
-    geo.stop(); unsub(); offSync(); clearInterval(poll); clearInterval(clock); clearTimeout(noteTimer);
+    geo.stop(); unsub(); offSync(); clearInterval(poll); clearInterval(clock); clearTimeout(noteTimer); rhWatch?.disconnect();
     window.removeEventListener('online', refresh);
     window.removeEventListener('pagehide', unsub);
     document.removeEventListener('visibilitychange', refresh);
@@ -1431,7 +1458,7 @@ async function viewRun(ids) {
   };
 }
 
-const titleCase = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+const titleCase = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()).replace(/\bMc([a-z])/g, (m, c) => `Mc${c.toUpperCase()}`);
 
 boot().catch((e) => {
   console.error(e);

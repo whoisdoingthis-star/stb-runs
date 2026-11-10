@@ -124,3 +124,37 @@ The app already records what's needed:
 - **Undos per run:** a mis-tap rate. It should drop after U4, U6 and U7.
 - **Things to watch and ask:** where people hesitate; whether anyone used search; whether Mum can find the next address without help; whether anyone opened ⋯ during a run (if not, those controls can be hidden).
 - **Three questions after each run:** What slowed you down? What did you look for and not find? What did you never use?
+
+## 8. Second review: 10 Nov 2026
+
+- **Asked by:** Mike, two days into the family trial ("another UX/UI review").
+- **Method:** every driver screen at 390 px and 360 px, in Night, Day and big text, with made-up sheets (3 runs, 136 stops); dispatch at laptop size on the test stand-in. Not checked: dispatch at phone size, Run 8's village layout, and the live data.
+- **Status:** everything below implemented the same day (see the [changelog](../CHANGELOG.md)).
+
+### Driver app
+| # | Finding | Sev | Done |
+|---|---|---|---|
+| V1 | The bottom bar cut off what was just ticked and the next stop ("✓ 23 …", "Next: 25…"; on a 360 px phone just "✓…"), because four buttons shared its row | H | Words get two full-width lines above the buttons |
+| V2 | Mid-street, no street name on screen: tiles show only numbers and the banner scrolled away | H | Street banners stick under the header |
+| V3 | A ticked tile grew by a line (who and when), shifting the tiles below just as the thumb heads for the next one | H | Who and when sit beside the ✓; height unchanged (measured before and after) |
+| V4 | "Saved: not delivered" pop-up repeated the tile and the bar, and sat on top of the problem menu, hiding *Other reason…* | M | Pop-up removed; opening any menu clears a message |
+| V5 | Run header was three rows because the status wrapped | M | Date moved beside the run name; status stays on one line |
+| V6 | Unit and Suite numbers were grey, though they decide the letterbox | M | Body colour, slightly larger |
+| V7 | Home said "4 of 73 done" when one was a couldn't-deliver | L | "4 of 73 done · 1 not delivered" |
+| V8 | *Other reason…* opened a plain browser box | L | Its own sheet with a text box |
+| V9 | Emoji icons (🔍 📷 ⚠) look different on each phone | L | Line icons |
+
+### Dispatch
+| # | Finding | Sev | Done |
+|---|---|---|---|
+| W1 | Delivery score table ran off its card at laptop width ("Not delivered" cut off) | M | Headings wrap; card is wider |
+| W2 | Overview cards left large gaps, and Needs attention was not prominent | M | Two columns: the day's work, and what needs a look |
+| W3 | Two link styles (bold blue run links, grey underlined everything else) | L | One style |
+| W4 | "✓ 1" under Totals and "▸ 1" under Notes didn't say what they counted | L | "✓ match", "1 note" |
+| W5 | "+ note" on Complaints was a tiny target; address links sat off-centre in their column | L | A button; left-aligned |
+| W6 | "Mclaren" | L | McLaren (and other Mc names) |
+
+### Still open
+- Dispatch at phone size has not been reviewed.
+- Notes on complaints still use a browser box (dispatch only, laptop).
+- The first-visit tip ("hold a tile to move it") still covers two tiles for a few seconds, once per phone.

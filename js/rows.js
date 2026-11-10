@@ -28,7 +28,7 @@ export function lineRows(runId, r) {
 // route and day: addresses added or removed, papers or quantities changed,
 // delivery notes changed. Returns short lines a driver can read, e.g.
 //   "Added 12 Smith Road (NZH ×1)", "45 Uxbridge Road: NZH 1 → 2".
-const titleCase = (s) => String(s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+const titleCase = (s) => String(s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()).replace(/\bMc([a-z])/g, (m, c) => `Mc${c.toUpperCase()}`);
 const label = (l) => `${l.number} ${titleCase(l.street)}`;
 const papers = (l) => (l.parts?.length ? l.parts : [{ pub: l.pub, qty: l.qty }])
   .map((p) => `${p.pub} ×${p.qty}`).sort().join(', ');

@@ -36,13 +36,14 @@ How screens in STB look and behave, so new features fit in instead of each addin
 ## Components
 | Component | Where | Rules |
 |---|---|---|
-| **Run header** (`.rh`) | Run screen | Sticky. Back, run name, 🔍, ⋯; date and status dots (GPS, sending, who's here, order) underneath; progress line and a 4px progress fill. Nothing else |
-| **Bottom bar** (`.actionbar`) | Run screen | Last tick with Undo and 📷; next stop with Next ↓. 48px buttons. Stays until the next action |
-| **Tile** (`.tile`) | Run screen | House number first and large, unit underneath ("Unit 2C", "Suite 1"), chips, notes (3 lines max in two-across), flags. 2px `--edge` border, 3px in big text. States: normal, `.next`, `.done`, kind colours |
-| **Street banner** | Run screen | Full-width `--brand` band, bold capitals, count on the right; green when finished |
+| **Run header** (`.rh`) | Run screen | Sticky. Back, run name with the date beside it, search, ⋯; status dots (GPS, sending, who's here) on one line underneath, never wrapping; progress line and a 4px progress fill. Nothing else |
+| **Bottom bar** (`.actionbar`) | Run screen | Before the first tick: next stop and Next ↓ on one row. After a tick: two full-width lines of words (last tick, next stop), never cut short by the buttons, then a row of 48px buttons: Undo, problem, camera, Next ↓. Stays until the next action |
+| **Tile** (`.tile`) | Run screen | House number first and large, unit underneath in body colour ("Unit 2C", "Suite 1"), chips, notes (3 lines max in two-across), flags. **A tile keeps its height when ticked:** who and when go beside the ✓ on the number row, not on a new line. 2px `--edge` border, 3px in big text. States: normal, `.next`, `.done`, kind colours |
+| **Street banner** | Run screen | Full-width `--brand` band, bold capitals, count on the right; green when finished. Sticks under the run header (`--rh-h`, set from the header's real height) so the street is always in view |
 | **Run card** (`.run-tile`) | Home | Whole card is the button: Run N, stops · items · dockets, progress if started, Start / Continue / View |
 | **Sheet** (`openSheet`) | Menus, settings, forms | Slides up from the bottom, title and ✕, Escape closes. Choices as segmented rows (`choiceRow`), actions as full-width rows (`menuItem`), destructive ones last and red |
-| **Toast** | Anywhere | Short confirmations only, one or two lines, never essential, cleared when the screen changes |
+| **Toast** | Anywhere | Short confirmations only, one or two lines, never essential, cleared when the screen changes or a sheet opens. Never repeat what a tile or the bottom bar already shows |
+| **Icons** (`icon()`) | Buttons | Line drawings (search, camera, warning, undo), not emoji, so they look the same on every phone. Icon-only buttons need an `aria-label` |
 | **Dashboard card** (`.dz-card`) | Dispatch | Title in capitals, one job per card. Tables scroll inside the card |
 
 ## Spacing and targets
@@ -58,4 +59,6 @@ How screens in STB look and behave, so new features fit in instead of each addin
 - [ ] Uses tokens only; checked in Night, Day and big text
 - [ ] Works one-handed on a phone if drivers use it; nothing new in the run header
 - [ ] Destructive or bulk actions confirm, and offer Undo where possible
+- [ ] Ticking doesn't move anything under the thumb; no browser pop-up boxes (`prompt`) on driver screens
+- [ ] Dispatch links are all the one style (`--info`, underlined)
 - [ ] The family guide or dispatch guide is updated (CONTRIBUTING rule 1)

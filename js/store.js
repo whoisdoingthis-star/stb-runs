@@ -139,6 +139,7 @@ export class LocalStore extends Base {
     return this.runs().map((r) => {
       const st = statusFrom(this.cachedEvents(r.id));
       r.done = Object.values(st).filter((e) => e.done).length;
+      r.notDelivered = Object.values(st).filter((e) => e.done && e.outcome === 'futile').length;
       return r;
     }).sort((a, b) => (b.delivery_date + b.route < a.delivery_date + a.route ? -1 : 1));
   }

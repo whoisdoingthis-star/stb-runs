@@ -572,3 +572,62 @@ html.big .tile.done.futile .num::after, html.big .tile.done.short .num::after { 
 .home-tabs button { flex: 1; min-height: 48px; font-size: var(--t-m, 17px); font-weight: 700; }
 .pick-table tfoot td { border-top: 2px solid var(--edge); font-weight: 700; padding-top: 8px; }
 .pick-table td:first-child { white-space: nowrap; padding-right: 12px; }
+
+/* ===== UX review 2 (10 Nov 2026) ===== */
+/* Line icons */
+.ic { display: inline-flex; align-items: center; justify-content: center; }
+.ic svg { display: block; }
+.ab-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ab-btn .ic svg { width: 22px; height: 22px; }
+
+/* Run header: run name and date on one line, status on one line */
+.rh-title h1 { display: flex; align-items: baseline; gap: 8px; overflow: visible; }
+.rh-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rh-date { flex: none; font-size: 13px; font-weight: 600; color: var(--muted); }
+.rh-status { flex-wrap: nowrap; overflow: hidden; }
+
+/* Street banners stay in view under the header */
+.street > h2 { position: sticky; top: var(--rh-h, 96px); z-index: 6; box-shadow: 0 0 0 5px var(--bg); }
+
+/* Who and when sit beside the tick, so a tile keeps its height when ticked */
+.tile .num { flex-wrap: nowrap; }
+.tile .num .badge { flex: none; }
+.tile .num .who { margin: 0 0 0 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--done); }
+.tile.done .num::after { margin-left: 0; flex: none; }
+.tile.futile .num .who { color: var(--bad); }
+.tile.short .num .who { color: var(--warn); }
+html.big .tile .num .who { font-size: 16px; }
+html.big .tile.done .num .who { color: #e7fbe9; }
+
+/* Unit and suite numbers decide the letterbox: body colour, not grey */
+.tile .unit { color: var(--ink); font-size: 15px; }
+html.big .tile .unit { font-size: 20px; }
+html.big .tile.done .unit { color: #fff; }
+
+/* Bottom bar: once there is a tick, the words get their own full-width lines above the buttons */
+.actionbar.has-last { flex-wrap: wrap; row-gap: 6px; }
+.actionbar.has-last .ab-text { flex: 1 0 100%; }
+.actionbar.has-last .ab-sub { font-size: 14px; }
+.actionbar.has-last .ab-btn { flex: 1 1 0; }
+.actionbar.has-last .ab-btn.primary { flex: 1.4 1 0; }
+html.big .actionbar.has-last .ab-sub { font-size: 17px; }
+html.big .ab-main { font-size: 20px; }
+body:has(.actionbar.has-last) .runbody { padding-bottom: calc(170px + var(--safe-bottom)); }
+body:has(.actionbar.has-last) #toast { bottom: calc(136px + var(--safe-bottom)); }
+html.big body:has(.actionbar.has-last) .runbody { padding-bottom: calc(200px + var(--safe-bottom)); }
+html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-bottom)); }
+
+/* Dispatch: one link style, tidy tables, Overview in two columns */
+.dz .link:not(.danger), .dz-table a, .dz-attn a { color: var(--info); text-decoration: underline; }
+.dz-table td > .link { padding: 0; margin: 0; text-align: left; }
+.dz-table.dz-fit th { white-space: normal; vertical-align: bottom; }
+.dz-table td:first-child, .dz-table td .ok, .dz-table td .warn { white-space: nowrap; }
+.dz-attn .link { vertical-align: top; }
+.dz-over { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.dz-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.dz-col .dz-card { margin-bottom: 0; }
+.dz-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+@media (min-width: 1100px) {
+  .dz-over { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); }
+  .dz-col.side { order: 2; }
+}

@@ -231,7 +231,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       }
       return { r, n: lines.length, delivered, full, onTime, spec, futile };
     });
-    return h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
+    return h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table dz-fit' },
       h('thead', null, h('tr', null, ['Run', 'Delivered', 'In full', 'On time', 'In spec', 'Not delivered'].map((t) => h('th', null, t)))),
       h('tbody', null, rows.map((x) => h('tr', null, h('td', null, shortRoute(x.r.route), x.r.close_method === 'paper' ? h('span', { class: 'small muted' }, ' (paper)') : null),
         h('td', null, `${x.delivered}/${x.n}`), h('td', null, pct(x.full, x.delivered)), h('td', null, pct(x.onTime, x.delivered)),
@@ -279,8 +279,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       newOnes.length ? h('li', null, `${newOnes.length} new address${newOnes.length === 1 ? '' : 'es'} on this sheet: ${newOnes.slice(0, 6).map(addrLabel).join(', ')}${newOnes.length > 6 ? '…' : ''}`) : null,
       notValidated.length ? h('li', null, h('button', { class: 'link', onclick: () => go('locations', null) }, `${notValidated.length} service location${notValidated.length === 1 ? '' : 's'} not validated on the ground`)) : null,
     ].filter(Boolean);
-    return h('div', { class: 'dz-grid' },
-      card(`Sheets · ${fmtDate(date, true)}`,
+    const sheetsCard = card(`Sheets · ${fmtDate(date, true)}`,
         active.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table' },
           h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Stops'), h('th', null, 'Items'), h('th', null, 'Totals'), h('th', null, 'Updated'), h('th', null, 'Changes'), h('th', null, 'Status'))),
           h('tbody', null, active.map((r) => h('tr', null,
@@ -294,21 +293,25 @@ export async function viewDispatch(ctx, tab = 'overview') {
         finished ? h('p', { class: 'small muted' }, h('button', { class: 'link', onclick: () => { F.runsTab = 'history'; go('runs', null); } }, `${finished} finished run${finished === 1 ? '' : 's'} for this day in History ›`)) : null,
         h('div', { class: 'dz-actions' },
           h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
-          h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…'))),
-      card('Needs attention', attention.length ? h('ul', { class: 'dz-attn' }, attention) : h('p', { class: 'ok' }, '✓ Nothing waiting.')),
-      todays.length ? card(`Complaints on this sheet (${todays.length})`, h('ul', { class: 'dz-complaints' }, todays.map(complaintSummary)),
-        h('button', { class: 'link', onclick: () => go('complaints', null) }, 'All complaints and patterns ›')) : null,
-      card('Progress',
+          h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…')));
+    const attnCard = card('Needs attention', attention.length ? h('ul', { class: 'dz-attn' }, attention) : h('p', { class: 'ok' }, '✓ Nothing waiting.'));
+    const complaintsCard = todays.length ? card(`Complaints on this sheet (${todays.length})`, h('ul', { class: 'dz-complaints' }, todays.map(complaintSummary)),
+        h('button', { class: 'link', onclick: () => go('complaints', null) }, 'All complaints and patterns ›')) : null;
+    const progressCard = card('Progress',
         rs.length ? h('div', null, rs.map((r) => {
           const n = r.summary?.lines || 0; const d = doneBy(r.id);
           return h('div', { class: 'dz-prog' }, h('span', { class: 'dz-prog-name' }, shortRoute(r.route)),
             h('div', { class: 'bar' }, h('i', { style: `width:${n ? Math.round((100 * d) / n) : 0}%` })), h('span', { class: 'dz-prog-n' }, `${d}/${n}${r.closed_at ? ` · closed${r.close_method === 'paper' ? ' (paper)' : ''}` : ''}`));
         }),
-        h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–')),
-      rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null,
-      card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–')),
-      card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
-        : h('p', { class: 'muted' }, 'No delivery photos yet.')));
+        h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–'));
+    const scoreCard = rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null;
+    const itemsCard = card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–'));
+    const photosCard = card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
+        : h('p', { class: 'muted' }, 'No delivery photos yet.'));
+    // Two columns on a laptop: the day's work on the left, what needs a look on the right (first on a phone).
+    return h('div', { class: 'dz-over' },
+      h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard),
+      h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), scoreCard));
   }
 
   // ================= Complaints =================
@@ -353,7 +356,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       rows.length ? h('table', { class: 'dz-table' }, h('tbody', null, rows.slice(0, 8).map(([k, n]) => h('tr', null, h('td', null, fmt(k)), h('td', { class: 'num' }, n))))) : h('p', { class: 'small muted' }, 'None.'));
 
     const statusSel = (c) => { const x = h('select', { onchange: (e) => act(async () => must(await sb.from('complaints').update({ status: e.target.value, updated_at: now(), updated_by: by() }).eq('id', c.id)), 'Saved.') }, STATUS.map(([v, t]) => h('option', { value: v }, t))); x.value = c.status; return x; };
-    const noteBtn = (c) => h('button', { class: 'link small', onclick: () => { const n = prompt(`Notes for ${cAddr(c)}, ${dayFmt(c.happened_on)}`, c.notes || ''); if (n !== null) act(async () => must(await sb.from('complaints').update({ notes: n || null, updated_at: now(), updated_by: by() }).eq('id', c.id)), 'Saved.'); } }, c.notes ? '✎' : '+ note');
+    const noteBtn = (c) => h('button', { class: 'btn small', onclick: () => { const n = prompt(`Notes for ${cAddr(c)}, ${dayFmt(c.happened_on)}`, c.notes || ''); if (n !== null) act(async () => must(await sb.from('complaints').update({ notes: n || null, updated_at: now(), updated_by: by() }).eq('id', c.id)), 'Saved.'); } }, c.notes ? '✎ Edit note' : '+ Note');
 
     return h('div', null,
       h('p', { class: 'small muted' }, 'Every complaint from the RouteSmart key reports, kept once, with who ticked that delivery and the address\'s complaint history. Mark each as disputed (we delivered: the tick, GPS and photo back it up), accepted, or closed.'),
@@ -500,8 +503,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
               h('td', null, h('a', { href: `#/r/${r.id}` }, shortRoute(r.route))),
               h('td', null, r.summary?.lines ?? '?'),
               h('td', null, r.summary?.copies ?? '?'),
-              h('td', null, (r.checks || []).every((c) => c.ok) ? h('span', { class: 'ok' }, `✓ ${r.checks?.length || 0}`) : h('span', { class: 'bad' }, (r.checks || []).filter((c) => !c.ok).map((c) => `✗ ${c.label}`).join(', '))),
-              h('td', null, (r.warnings || []).length ? h('details', null, h('summary', null, `${r.warnings.length}`), h('ul', null, r.warnings.map((w) => h('li', null, w)))) : '–'),
+              h('td', null, (r.checks || []).every((c) => c.ok) ? h('span', { class: 'ok' }, '✓ match') : h('span', { class: 'bad' }, (r.checks || []).filter((c) => !c.ok).map((c) => `✗ ${c.label}`).join(', '))),
+              h('td', null, (r.warnings || []).length ? h('details', null, h('summary', null, `${r.warnings.length} note${r.warnings.length === 1 ? '' : 's'}`), h('ul', null, r.warnings.map((w) => h('li', null, w)))) : '–'),
               h('td', null, `${fmtStamp(r.updated_at || r.created_at)} · ${r.source === 'auto' ? 'RouteSmart' : 'upload'}`),
               h('td', null, !r.last_changes ? '–' : !r.last_changes.count ? 'No changes'
                 : h('details', null, h('summary', null, `${r.last_changes.count} changed`), h('ul', null, r.last_changes.items.map((x) => h('li', null, x))))),
