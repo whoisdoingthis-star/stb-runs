@@ -5,6 +5,7 @@ import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
+import { playSplash, splashDue, soundOn, setSound } from './splash.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -159,6 +160,8 @@ async function shareRuns(ids, label) {
 const app = { store: null, me: null, cleanup: null, pendingLoad: null };
 
 async function boot() {
+  // Opening animation, first open of the day: plays over the top while the app loads underneath.
+  if (splashDue()) playSplash({ sound: soundOn() });
   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     const { createClient } = await import('../vendor/supabase.mjs');
     app.store = new SupabaseStore(createClient, SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -224,7 +227,7 @@ function viewLogin(error) {
     onsubmit: async (ev) => {
       ev.preventDefault();
       btn.disabled = true; btn.textContent = 'Signing in…';
-      try { await app.store.signIn(email.value.trim(), pw.value); await route(); } catch (e) {
+      try { await app.store.signIn(email.value.trim(), pw.value); playSplash({ sound: soundOn() }); await route(); } catch (e) {
         msg.hidden = false; msg.className = 'banner bad'; msg.textContent = e.message;
         btn.disabled = false; btn.textContent = 'Sign in';
       }
@@ -354,8 +357,10 @@ function openSettings(fileInput) {
     (close) => h('div', { class: 'menu-group' },
       choiceRow('Text', [['normal', 'Normal'], ['big', 'Big']], bigOn() ? 'big' : 'normal', (v) => { if ((v === 'big') !== bigOn()) { toggleBig(); close(); route().then(() => openSettings(document.getElementById('pdf'))); } }),
       bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => setPref('stb-layout', v)),
-      choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); })),
+      choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); }),
+      choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
     (close) => h('div', { class: 'menu-group' },
+      menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays by itself on the first open each day' }),
       app.store.mode === 'shared' ? menuItem('Get Runs from RouteSmart…', () => { close(); openRefetch(); }, { hint: 'Fetches the latest sheets for a day. Use it if a change is phoned in' }) : null,
       menuItem('Upload a run sheet (PDF)…', () => { close(); fileInput?.click(); }, { hint: 'A sheet you downloaded yourself' }),
       app.me.role === 'dispatcher' ? menuItem('Dispatch dashboard', () => { close(); location.hash = '#/dispatch'; }) : null),

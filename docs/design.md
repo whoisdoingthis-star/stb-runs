@@ -43,6 +43,7 @@ How screens in STB look and behave, so new features fit in instead of each addin
 | **Run card** (`.run-tile`) | Home | Whole card is the button: Run N, stops · items · dockets, progress if started, Start / Continue / View |
 | **Sheet** (`openSheet`) | Menus, settings, forms | Slides up from the bottom, title and ✕, Escape closes. Choices as segmented rows (`choiceRow`), actions as full-width rows (`menuItem`), destructive ones last and red |
 | **Toast** | Anywhere | Short confirmations only, one or two lines, never essential, cleared when the screen changes or a sheet opens. Never repeat what a tile or the bottom bar already shows |
+| **Opening** (`js/splash.js`) | First open of the day, and after sign-in | Route line, three green stops, a pin that becomes the logo. Plays over the app while it loads, about 1.5 s, a tap skips it, off with reduced motion. Sound only if switched on in Settings ([decision 0016](decisions/0016-opening-animation.md)) |
 | **Icons** (`icon()`) | Buttons | Line drawings (search, camera, warning, undo), not emoji, so they look the same on every phone. Icon-only buttons need an `aria-label` |
 | **Dashboard card** (`.dz-card`) | Dispatch | Title in capitals, one job per card. Tables scroll inside the card |
 
