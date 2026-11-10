@@ -2,7 +2,8 @@
 // at the end and becomes the STB logo. Each stop and the pin gets a small twinkle, and (with
 // the sound on) its own soft note, rising stop by stop (Mike, 10 Nov 2026). About a second and a half, over the top of the app
 // while it loads (it never holds the app up), and a tap skips it.
-//  - Shown on the first open of each day on this phone, and after signing in.
+//  - Shown every time the app is opened or brought back to the front, and after signing in
+//    (app.js decides when; not while a run is on screen).
 //  - Sound (a soft note per stop) is OFF unless switched on in Settings: runs start around 5am.
 //    Phones only allow sound after a touch, so on a cold open it may stay silent anyway.
 // See docs/decisions/0016-opening-animation.md.
@@ -32,18 +33,18 @@ export function chimes(notes) {
     const go = () => {
       if (ctx.state !== 'running') return;
       const late = performance.now() - asked; // time spent waiting for the phone to allow sound
-      // Lightly damped (Mike, 10 Nov 2026): a softer start, a shorter ring, and the bright edge taken off.
-      const out = ctx.createBiquadFilter(); out.type = 'lowpass'; out.frequency.value = 3800; out.Q.value = 0.5; out.connect(ctx.destination);
+      // Damped (Mike, 10 Nov 2026, twice): a soft start, a short ring, and the bright edge taken off.
+      const out = ctx.createBiquadFilter(); out.type = 'lowpass'; out.frequency.value = 2600; out.Q.value = 0.5; out.connect(ctx.destination);
       const tone = (f, t, d, v, type = 'sine') => {
         const o = ctx.createOscillator(); const g = ctx.createGain();
         o.type = type; o.frequency.value = f;
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.035); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
         o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
       };
       for (const [ms, f] of notes) {
         if (ms - late < -150) continue; // too late to match its stop: leave it out
         const t = ctx.currentTime + Math.max(0, ms - late) / 1000;
-        tone(f, t, 0.7, 0.065); tone(f * 2.01, t, 0.3, 0.012, 'triangle');
+        tone(f, t, 0.42, 0.065); tone(f * 2.01, t, 0.18, 0.006, 'triangle');
       }
     };
     if (ctx.state === 'running') go(); else ctx.resume().then(go).catch(() => {});

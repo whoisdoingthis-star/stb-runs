@@ -19,8 +19,9 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0013 | [Roles enforced by the database; temporary passwords instead of email invites](0013-roles-enforced-by-database.md) | 2026-11-08 | Accepted (revisit for STB) |
 | 0014 | [Adopt parts of the STB governance baseline v0.5](0014-governance-baseline.md) | 2026-11-09 | Accepted |
 | 0015 | [Closing a paper run adds paper ticks, it doesn't mark the run done](0015-closing-paper-runs.md) | 2026-11-09 | Accepted |
-| 0016 | [Opening animation: once a day, silent unless switched on](0016-opening-animation.md) | 2026-11-10 | Accepted |
+| 0016 | [Opening animation: once a day, silent unless switched on](0016-opening-animation.md) | 2026-11-10 | Accepted (partly superseded by 0017, 0018) |
 | 0017 | [Opening: a soft note and a twinkle for each stop](0017-opening-notes-per-stop.md) | 2026-11-10 | Accepted |
+| 0018 | [Opening plays every time the app is opened, except on a run](0018-opening-every-open.md) | 2026-11-10 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 

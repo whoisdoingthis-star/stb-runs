@@ -19,7 +19,7 @@ with sync_playwright() as p:
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.goto('http://localhost:8765/')
     page.wait_for_selector('#pdf', state='attached')
-    check('opening animation plays on the first open of the day', page.locator('.splash').count() == 1)
+    check('opening animation plays when the app opens', page.locator('.splash').count() == 1)
     page.wait_for_selector('.splash', state='detached', timeout=4000)
     check('opening is silent unless switched on', page.evaluate("localStorage.getItem('stb-sound')") != 'on')
     check('night mode is the default', page.evaluate("document.documentElement.classList.contains('dark')"))

@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Opening**: now plays **every time you open the app or come back to it** (after a few seconds away), not just once a day; never while you are inside a run. The chimes are **damped further**: softer, shorter, less bright (Mike, 10 Nov; [decision 0018](docs/decisions/0018-opening-every-open.md)).
 - **Opening chimes lightly damped**: each note starts a touch softer, rings for a shorter time and has its bright edge taken off (Mike, 10 Nov).
 - **Opening**: each stop and the pin now gets a little **twinkle**, and with Chimes switched on, **its own soft note**, rising stop by stop, in place of the run of notes at the end (Mike, 10 Nov; [decision 0017](docs/decisions/0017-opening-notes-per-stop.md)).
 - **An opening animation**: the first time you open the app each day, and when you sign in, a run line draws across the screen, three stops tick green, and a pin drops and becomes the STB logo. About a second; tap to skip. **Silent unless you switch on the chimes** in **⚙ Settings → Opening** (a few soft notes; off by default because runs start at 5am). **Play the opening** in Settings shows it any time. (`js/splash.js`, [decision 0016](docs/decisions/0016-opening-animation.md))

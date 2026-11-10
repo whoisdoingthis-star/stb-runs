@@ -1,7 +1,7 @@
 # 0016. Opening animation: once a day, silent unless switched on
 
 - **Date:** 2026-11-10
-- **Status:** Accepted
+- **Status:** Accepted; the once-a-day rule is superseded by [0018](0018-opening-every-open.md), the sound by [0017](0017-opening-notes-per-stop.md)
 
 ## Context
 Mike asked for an opening moment when someone opens the app or signs in: the logo assembling itself, with a sound (10 Nov 2026). After trying sketches he chose a delivery-themed one over a logo-only one, because STB is heading towards general deliveries, and a soft "fairy chimes" sound over a single ding, which he found jarring.

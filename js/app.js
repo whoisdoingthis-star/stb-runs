@@ -5,7 +5,7 @@ import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
-import { playSplash, splashDue, soundOn, setSound } from './splash.js';
+import { playSplash, soundOn, setSound } from './splash.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -160,8 +160,18 @@ async function shareRuns(ids, label) {
 const app = { store: null, me: null, cleanup: null, pendingLoad: null };
 
 async function boot() {
-  // Opening animation, first open of the day: plays over the top while the app loads underneath.
-  if (splashDue()) playSplash({ sound: soundOn() });
+  // Opening animation: every time the app is opened, and every time it is brought back to the
+  // front after a few seconds away (Mike, 10 Nov 2026; decision 0018). It plays over the top
+  // while the app loads underneath. Never while a run is on screen: a driver coming back from
+  // Maps or the camera must be able to tick straight away.
+  const onRun = () => location.hash.startsWith('#/r/');
+  if (!onRun()) playSplash({ sound: soundOn() });
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt >= 3000 && !onRun()) playSplash({ sound: soundOn() });
+    hiddenAt = 0;
+  });
   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     const { createClient } = await import('../vendor/supabase.mjs');
     app.store = new SupabaseStore(createClient, SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -360,7 +370,7 @@ function openSettings(fileInput) {
       choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); }),
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
     (close) => h('div', { class: 'menu-group' },
-      menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays by itself on the first open each day' }),
+      menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays each time you open the app' }),
       app.store.mode === 'shared' ? menuItem('Get Runs from RouteSmart…', () => { close(); openRefetch(); }, { hint: 'Fetches the latest sheets for a day. Use it if a change is phoned in' }) : null,
       menuItem('Upload a run sheet (PDF)…', () => { close(); fileInput?.click(); }, { hint: 'A sheet you downloaded yourself' }),
       app.me.role === 'dispatcher' ? menuItem('Dispatch dashboard', () => { close(); location.hash = '#/dispatch'; }) : null),
