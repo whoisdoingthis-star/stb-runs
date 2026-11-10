@@ -295,6 +295,8 @@ create table if not exists public.photos (
   run_id text references public.runs(id) on delete set null,
   route text not null, line_key text, address_key text not null, path text not null,
   taken_at timestamptz not null default now(), lat double precision, lng double precision, user_name text);
+-- A photo added afterwards (from the gallery, or for an address ticked earlier): no GPS, no tick.
+alter table public.photos add column if not exists added_later boolean not null default false;
 create table if not exists public.photo_watch (
   route text not null, address_key text not null, added_by text, added_at timestamptz not null default now(),
   primary key (route, address_key));
@@ -837,3 +839,21 @@ select a.address_key,
 from public.addresses a
 left join public.operating_locations o on o.id = a.operating_location_id
 left join public.address_positions p on p.address_key = a.address_key;
+
+-- ---- Each person's own delivery order (Mike, 11 Nov 2026): Lisa does Run 6 in a different
+-- order from Mike's, which stays the usual one. A driver's drags save here; a dispatcher's drags
+-- change route_sequences (the usual order). No row = use the usual order.
+create table if not exists public.person_sequences (
+  route        text not null,
+  user_id      uuid not null default auth.uid(),
+  address_keys jsonb not null,
+  updated_by   text,
+  updated_at   timestamptz not null default now(),
+  primary key (route, user_id)
+);
+alter table public.person_sequences enable row level security;
+drop policy if exists person_sequences_read on public.person_sequences;
+create policy person_sequences_read on public.person_sequences for select to authenticated using (public.is_member());
+drop policy if exists person_sequences_own on public.person_sequences;
+create policy person_sequences_own on public.person_sequences for all to authenticated
+  using (public.is_member() and user_id = auth.uid()) with check (public.is_member() and user_id = auth.uid());

@@ -5,6 +5,9 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Your own order** (Lisa's feedback): when Lisa or Mum re-orders a run, it's saved as *their own* order for that run; Mike's usual order isn't touched. The switch reads **My order / Sheet order**; **⋯ → Use the usual order again** drops it. Mike's drags still change the usual order. (table `person_sequences`)
+- **Add a photo to an address later**: **⋯ → 📷 Add a photo to an address…** picks any address on the run and takes a photo or chooses one from the phone's gallery. Marked *added later*, keeps the photo's time, doesn't tick. (`photos.added_later`)
+- **Fix: temporary stops shown as complaints.** A key report row like *21 Gillett Place, STOPNA, "1011 stop till 18112026"* now shows **STOP until Wed 18 Nov: don't deliver** on the tile and stays out of the complaints register.
 - **Directions:** an arrow in the bottom bar (labelled **Maps** before the first tick) opens Google Maps with driving directions to the **next stop**, only when tapped. Village stops go to where you park (the stop set in Dispatch), otherwise the letterbox learned from GPS ticks, otherwise the street address. On Android, Google Maps keeps running in a floating window over the run. (view `address_destinations`)
 - **Opening**: now plays **every time you open the app or come back to it** (after a few seconds away), not just once a day; never while you are inside a run. The chimes are **damped further**: softer, shorter, less bright (Mike, 10 Nov; [decision 0018](docs/decisions/0018-opening-every-open.md)).
 - **Opening chimes lightly damped**: each note starts a touch softer, rings for a shorter time and has its bright edge taken off (Mike, 10 Nov).

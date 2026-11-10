@@ -50,6 +50,9 @@ No other greens are used anywhere: green always means delivered. — `js/app.js`
 - **Starts/Restarts** show as **NEW**; **Stops** still on the delivery list show as **STOP?** and are kept, with a warning to check.
 - A complaint, start or stop with no matching tile becomes a warning on the load screen.
 
+## Temporary stops printed as complaints
+(21 Gillett Place, 11 Nov 2026.) NZME sometimes lists a temporary stop in the key report's **Complaints** table: type `STOPNA`, comment `1011 stop till 18112026` (stopped from 10 Nov until 18 Nov). That is not a complaint. The tile shows a red **STOP** with **"STOP until Wed 18 Nov: don't deliver"**, and it never enters the complaints register. Once the date has passed it shows **Restart: deliver again**. If the address isn't on the delivery list (NZME already left it off), nothing is shown: that's what a stop should look like. Any complaint-table row of type `STOP…` or with "stop till DDMMYYYY" is treated this way. — `js/parser.js` `temporaryStop`
+
 ## Complaints register
 (Mike, 9 Nov 2026.) Complaints are kept as a register to spot repeat problems, customers who complain often, and patterns by run or by who delivered. — `sql/schema.sql` (`complaints`, `complaint_register`), dispatch **Complaints** page
 - **Filled automatically** whenever a sheet loads: each complaint on the Key Report that matches a tile becomes one entry, identified by address, paper, kind and the date it happened. The same complaint listed on several sheets stays one entry (first and last sheet are recorded).
@@ -68,10 +71,12 @@ Some customers report non-delivery when the paper was delivered. Practice: photo
 - Complaint tiles, and addresses on the **photo watch list**, show a camera button; any tile can be photographed from the tick pop-up.
 - Photos are stamped with address, run, date and time, driver and GPS (if fresh), stored privately, and recorded against the address.
 - Taking a photo also records the delivery.
+- **Added later** (Lisa, 11 Nov 2026): ⋯ → *Add a photo to an address…* attaches a photo from the camera or the phone's gallery to any address on the run. It doesn't tick, has no GPS, keeps the photo's own time (if within two days) and is marked `added_later`.
 - The watch list is per route and address and shared by everyone until someone removes it.
 
 ## Delivery order
-- The sheet's order is the starting point. A driver can hold and drag tiles or whole streets; the new order is saved per route for everyone and re-applied to future sheets. New addresses go next to their neighbour from the sheet. — `js/sequence.js`
+- **Each person can have their own order** (Mike, 11 Nov 2026: Lisa does Run 6 differently; the usual order is optimised for Mike). A dispatcher's drags change the **usual order** for the route (`route_sequences`); anyone else's drags save **their own order** (`person_sequences`), used only on their phone, starting from the usual one. No own order = the usual order. Dropping your own order goes back to the usual one. If their own order can't be saved yet, it waits on the phone; it never changes the usual order.
+- The sheet's order is the starting point. A driver can hold and drag tiles or whole streets; the new order is re-applied to future sheets. New addresses go next to their neighbour from the sheet. — `js/sequence.js`
 - Tiles are read left to right, then down. (Mike, 8 Nov 2026)
 - The sheet's original order is always kept. When a run has a custom order, an **Our order / Sheet order** switch sits under the run header so a driver can flip between them at any time; it changes only that phone's view. (Mike, 9 Nov 2026)
 - Later: **smart sequencing** that learns each driver's preferred order from when and where they tick ([roadmap](roadmap.md)). (Mike, 9 Nov 2026)

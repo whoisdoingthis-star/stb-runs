@@ -58,6 +58,7 @@ When a customer says they didn't get their paper but we delivered it, a photo se
 - For any other address, tick it, then tap the **camera** in the bottom bar.
 - The camera opens. The photo is stamped with the address, date, time and who delivered it, saved to the run, and the tile shows **📷 Photo taken**. Taking the photo also ticks the delivery.
 - Tap **Send (WhatsApp…)** and choose the run owner in WhatsApp.
+- **Took it with your phone's own camera, or forgot to tap the camera straight after ticking?** In the run, tap **⋯ → 📷 Add a photo to an address…**, type the number or street (e.g. *27 Luplau*), pick the address, then **Choose from my photos** (or **Take a photo now**). It's saved to that address, marked *added later*, keeps the time the photo was taken, and doesn't tick anything.
 - Tick **Ask for a photo at this address every delivery** to keep the camera button on that address every day, for everyone, until someone unticks it.
 
 ### Working a run together
@@ -69,7 +70,7 @@ Keep going. Ticks are saved on the phone and sent when there is signal ("3 to se
 ## Changing the order of a run
 If the sheet's order is wrong, **press and hold** a tile for half a second until it lifts, drag it, and let go. A blue line shows where it will go (left half of a tile = before it, right half = after). Hold a **street name** to move the whole street.
 To move something a long way, keep holding it and drag it towards the **top or bottom of the screen**: the list scrolls by itself, faster the closer you are to the edge and the longer you hold it there. Move away from the edge to stop, then drop it in place.
-The new order is saved for that run for everyone, and used every day from then on. Once a run has been re-ordered, a switch appears under the header: **↕ Our order** or **📄 Sheet order**. The sheet's original order is always kept, and switching only changes what your phone shows. **⋯ → Put back in the sheet's order…** throws away the re-ordering for everyone.
+**Everyone can have their own order.** When Lisa or Mum moves tiles, it's saved as **their own order** for that run, used every time *they* open it, and Mike's order (the usual one) isn't touched. The switch under the header then says **↕ My order** / **📄 Sheet order**. **⋯ → Use the usual order again** drops your own order. When Mike (dispatcher) moves tiles, he changes the usual order everyone else sees, and only he has **⋯ → Put back in the sheet's order…**. The sheet's original order is always kept, and switching only changes what your phone shows.
 Run 8 keeps its fixed building order and can't be rearranged.
 
 ## Run 8 (Bruce McLaren Village)

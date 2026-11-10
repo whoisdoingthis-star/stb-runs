@@ -107,8 +107,11 @@ class Base {
   cacheSeq(route, v) { if (v) LS.set(`stb.seq.${route}`, v); else LS.del(`stb.seq.${route}`); }
   pendingSeqs() { return LS.get('stb.seqpending', {}); }
   /** keys = ordered address keys, or null to go back to sheet order. */
+  /** Drivers' drags make their own order; a dispatcher's change the usual order everyone sees (Mike, 11 Nov 2026). */
+  get personalOrders() { return !!this.me && this.me.role !== 'dispatcher'; }
+  sharedSequence(route) { return LS.get(`stb.seqshared.${route}`, null); }
   saveSequence(route, keys, by) {
-    const v = keys ? { keys, by, at: new Date().toISOString() } : null;
+    const v = keys ? { keys, by, at: new Date().toISOString(), mine: this.personalOrders } : null;
     this.cacheSeq(route, v);
     LS.set('stb.seqpending', { ...this.pendingSeqs(), [route]: v });
     this.flush();
@@ -129,6 +132,7 @@ export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route'
 // ---------------------------------------------------------------------------
 
 export class LocalStore extends Base {
+  get personalOrders() { return false; } // demo mode: one person
   mode = 'demo';
   async init() { return this; }
   async session() { return { id: 'demo', name: 'Me', email: '' }; }
@@ -366,12 +370,21 @@ export class SupabaseStore extends Base {
     try {
       const { data, error } = await this.sb.from('route_sequences').select('route, address_keys, updated_by, updated_at').in('route', routes);
       if (error) throw error;
+      // A driver's own orders (person_sequences); none yet, or the table not there yet, = the usual order.
+      let mine = [];
+      if (this.personalOrders) {
+        const res = await this.sb.from('person_sequences').select('route, address_keys, updated_by, updated_at').eq('user_id', this.me.id).in('route', routes);
+        if (!res.error) mine = res.data;
+      }
       const pending = this.pendingSeqs();
       const out = {};
       for (const r of routes) {
-        if (r in pending) { out[r] = pending[r]; continue; } // our unsent change wins
         const row = data.find((d) => d.route === r);
-        out[r] = row ? { keys: row.address_keys, by: row.updated_by, at: row.updated_at } : null;
+        const shared = row ? { keys: row.address_keys, by: row.updated_by, at: row.updated_at } : null;
+        LS.set(`stb.seqshared.${r}`, shared);
+        if (r in pending) { out[r] = pending[r] ?? (this.personalOrders ? shared : null); continue; } // our unsent change wins
+        const m = mine.find((d) => d.route === r);
+        out[r] = m ? { keys: m.address_keys, by: m.updated_by, at: m.updated_at, mine: true } : shared;
         this.cacheSeq(r, out[r]);
       }
       return out;
@@ -387,7 +400,8 @@ export class SupabaseStore extends Base {
     if (upErr) throw upErr;
     const { error } = await this.sb.from('photos').insert({
       run_id: meta.run_id, route: meta.route, line_key: meta.line_key, address_key: meta.address_key, path,
-      taken_at: new Date().toISOString(), lat: meta.lat ?? null, lng: meta.lng ?? null, user_name: meta.user_name,
+      taken_at: meta.taken_at || new Date().toISOString(), lat: meta.lat ?? null, lng: meta.lng ?? null, user_name: meta.user_name,
+      ...(meta.added_later ? { added_later: true } : {}),
     });
     if (error) throw error;
     return path;
@@ -448,9 +462,14 @@ export class SupabaseStore extends Base {
   }
   async flushSeqs() {
     for (const [route, v] of Object.entries(this.pendingSeqs())) {
-      const { error } = v
-        ? await this.sb.from('route_sequences').upsert({ route, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route' })
-        : await this.sb.from('route_sequences').delete().eq('route', route);
+      // A driver's order goes to their own row; if that can't be saved it waits on the phone
+      // (never falls back to changing the usual order).
+      const own = this.personalOrders;
+      const { error } = own
+        ? (v ? await this.sb.from('person_sequences').upsert({ route, user_id: this.me.id, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route,user_id' })
+          : await this.sb.from('person_sequences').delete().eq('route', route).eq('user_id', this.me.id))
+        : (v ? await this.sb.from('route_sequences').upsert({ route, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route' })
+          : await this.sb.from('route_sequences').delete().eq('route', route));
       if (error) return;
       const rest = this.pendingSeqs();
       if (rest[route] === v || JSON.stringify(rest[route]) === JSON.stringify(v)) { delete rest[route]; LS.set('stb.seqpending', rest); }
@@ -517,6 +536,8 @@ export class SupabaseStore extends Base {
           if (!row || !routes.includes(row.route)) return;
           if (row.route in this.pendingSeqs()) return; // our own unsent change wins
           const v = p.eventType === 'DELETE' ? null : { keys: row.address_keys, by: row.updated_by, at: row.updated_at };
+          LS.set(`stb.seqshared.${row.route}`, v);
+          if (this.cachedSeq(row.route)?.mine) return; // a driver with their own order keeps it
           this.cacheSeq(row.route, v);
           on.seq?.(row.route, v);
         })

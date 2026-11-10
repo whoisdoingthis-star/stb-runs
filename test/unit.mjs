@@ -35,3 +35,12 @@ t('RB-001 every sheet line is traceable: page, row and the raw text', () => { co
 t('Totals reconcile', () => assert.ok(res.checks.every((c) => c.ok), JSON.stringify(res.checks)));
 t('Column side', () => { assert.equal(res.lines[0].column, 'indent'); assert.equal(res.lines[1].column, 'left'); });
 t('Different publications at one address share a tile, NZH first', () => { const k = res.lines.filter((l) => l.number === '7'); assert.equal(k.length, 1); assert.deepEqual(k[0].parts.map((p) => p.pub), ['NZH', 'WW']); assert.equal(k[0].qty, 2); assert.equal(k[0].lineKey, 'HOWICK|UXBRIDGE ROAD|7'); });
+
+// A temporary stop printed under Complaints (21 Gillett Place, 11 Nov 2026) is a stop, not a complaint.
+{
+  const { temporaryStop } = await import('../js/parser.js');
+  const s = temporaryStop({ type: 'STOPNA', comments: '1011 stop till 18112026', publication: 'NZH' }, '2026-11-11');
+  t('STOPNA "stop till 18112026" is a stop until Wed 18 Nov, not a complaint', () => { assert.equal(s?.until, '2026-11-18'); assert.match(s.text, /STOP until Wed,? 18 Nov: don't deliver/); });
+  t('a real complaint is not a stop', () => assert.equal(temporaryStop({ type: 'WET', comments: '1011' }, '2026-11-11'), null));
+  t('a stop that has ended says deliver again', () => assert.match(temporaryStop({ type: 'STOPNA', comments: '0111 stop till 05112026' }, '2026-11-11').text, /deliver again/));
+}

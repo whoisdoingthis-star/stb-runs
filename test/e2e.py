@@ -45,6 +45,23 @@ with sync_playwright() as p:
     opened = page.evaluate('window.__opened') or ''
     from urllib.parse import unquote_plus
     check('Maps opens Google Maps directions to the next stop', opened.startswith('https://www.google.com/maps/dir/?api=1&destination=') and 'dir_action=navigate' in opened and unquote_plus(opened).split('destination=')[1].split(',')[0].split(' ')[0] in nxt, f'{unquote_plus(opened)[:120]} | {nxt[:60]}')
+    # a photo added later, from the gallery, to an address that isn't the last tick: no tick, marked as added later
+    done_before = page.locator('.tile.done').count()
+    target = page.locator('.tile:not(.done)').nth(3)
+    tnum = target.locator('.num').inner_text().split()[0]
+    page.click('[aria-label="Run options"]'); page.wait_for_selector('.sheet')
+    page.click('.sheet >> text=Add a photo to an address'); page.wait_for_selector('.pick-search')
+    page.fill('.pick-search', tnum); page.wait_for_timeout(150)
+    page.locator('.pick-list .menu-item').first.click()
+    with page.expect_file_chooser() as fc:
+        page.click('.sheet >> text=Choose from my photos')
+    import base64, tempfile, os
+    jpg = os.path.join(tempfile.gettempdir(), 'stb-test.jpg')
+    open(jpg, 'wb').write(base64.b64decode('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA='))
+    fc.value.set_files(jpg); page.wait_for_selector('.photo-sheet'); page.wait_for_timeout(500)
+    saved = page.evaluate("JSON.parse(localStorage.getItem('stb.demo.photos')||'[]')")
+    check('a photo can be added later from the gallery, marked as added later, without ticking', bool(saved) and saved[-1].get('added_later') is True and page.locator('.tile.done').count() == done_before, f'{saved[-1:]} done {done_before}->{page.locator(".tile.done").count()}')
+    page.keyboard.press('Escape'); page.evaluate("document.querySelectorAll('.sheet-backdrop').forEach(e=>e.remove())")
     # couldn't deliver: tick, then the warning button in the bottom bar; the tick stays in the history
     key = page.locator('.tile.next').get_attribute('data-key')
     page.locator('.tile.next').click(); page.wait_for_timeout(200)

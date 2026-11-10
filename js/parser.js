@@ -199,6 +199,19 @@ export function complaintDate(c, deliveryDate) {
   if (deliveryDate && d > new Date(`${deliveryDate}T00:00:00Z`)) d.setUTCFullYear(year - 1);
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
+// A temporary stop listed under Complaints: type STOP… and/or "stop till DDMMYYYY".
+// Returns { until: 'YYYY-MM-DD' | null, text } or null when it's a real complaint.
+export function temporaryStop(c, deliveryDate) {
+  const type = String(c.type || '').toUpperCase();
+  const raw = String(c.comments || '');
+  const till = /stop\s*(?:till|until|to)\s*(\d{2})(\d{2})(\d{4})/i.exec(raw);
+  if (!/^STOP/.test(type) && !till) return null;
+  const until = till ? `${till[3]}-${till[2]}-${till[1]}` : null;
+  const ok = until && !Number.isNaN(new Date(`${until}T12:00:00Z`).getTime());
+  if (ok && deliveryDate && until < deliveryDate) return { until, resume: true, text: `Was stopped until ${fmtShort(until)}: deliver again` };
+  return { until: ok ? until : null, text: ok ? `STOP until ${fmtShort(until)}: don't deliver` : 'STOP: don\u2019t deliver (check the sheet)' };
+}
+const fmtShort = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 export function complaintText(c, deliveryDate) {
   const type = String(c.type || '').toUpperCase();
   const what = COMPLAINT_TYPES[type] || (type ? `${type[0]}${type.slice(1).toLowerCase()} complaint` : 'Complaint');
@@ -459,6 +472,15 @@ function finishRoute(r, kr) {
     }
     for (const c of kr.complaints) {
       const hits = findLines(c.address, c.publication);
+      // NZME sometimes prints a temporary stop in the Complaints table: type STOPNA,
+      // comment "1011 stop till 18112026" (stopped from 10 Nov until 18 Nov). That's not
+      // a complaint: it means don't deliver until then (21 Gillett Place, 11 Nov 2026).
+      const hold = temporaryStop(c, r.deliveryDate);
+      if (hold) {
+        // Not on the delivery list is what a stop should look like: nothing to warn about.
+        hits.forEach((h) => h.flags.push({ type: hold.resume ? 'resume' : 'stop', text: hold.text, until: hold.until, pub: c.publication || null }));
+        continue;
+      }
       const text = complaintText(c, r.deliveryDate);
       // Structured too, for the complaints register (docs/business-rules.md#complaints-register).
       const info = { kind: String(c.type || '').toUpperCase() || null, on: complaintDate(c, r.deliveryDate), pub: c.publication || null, service: c.service || null, raw: String(c.comments || '').trim() || null };

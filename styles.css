@@ -641,3 +641,8 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 .actionbar.has-last .ab-lbl { display: none; }
 .actionbar.has-last .ab-btn { flex: 1 1 auto; }
 .actionbar.has-last .ab-btn.primary { flex: 1.3 1 auto; }
+.flag.resume { background: var(--other-bg, #3a2f12); color: var(--warn); }
+/* Add a photo to an address: search box and results */
+.pick-search { width: 100%; font: inherit; font-size: var(--t-m, 17px); padding: 12px; border-radius: 12px; border: 2px solid var(--edge); background: var(--bg); color: var(--ink); margin-bottom: 8px; }
+.pick-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.menu-item.on { border-color: var(--next); outline: 2px solid var(--next); }

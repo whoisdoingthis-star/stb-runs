@@ -156,3 +156,10 @@ check('run progress counts done stops in the database', rp && Number(rp.done) >=
 await db.query(`update operating_locations set lat=-36.9, lng=174.9 where id=$1`, [o]);
 const dest = (await db.query(`select source, lat from address_destinations where address_key='K|A|1'`)).rows[0];
 check('directions go to the stop set in Dispatch when it has GPS', dest?.source === 'stop' && Number(dest.lat) === -36.9);
+
+// ---- each person's own order ----
+await as('lisa@example.com');
+await db.query(`insert into person_sequences(route, user_id, address_keys, updated_by) values ('HOWICK06', auth.uid(), '["K|B|2","K|A|1"]', 'Lisa')`);
+check('a driver saves their own order', (await db.query(`select count(*)::int n from person_sequences where route='HOWICK06'`)).rows[0].n === 1);
+blocked = false; try { await db.query(`insert into person_sequences(route, user_id, address_keys) values ('HOWICK06', '22222222-2222-2222-2222-222222222222', '[]')`); } catch { blocked = true; }
+check('nobody can save an order in someone else’s name', blocked);

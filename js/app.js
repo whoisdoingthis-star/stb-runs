@@ -144,7 +144,7 @@ function tileKind(parts) {
   return null;
 }
 const partsOf = (l) => (Array.isArray(l.parts) && l.parts.length ? l.parts : [{ pub: l.pub, qty: l.qty }]);
-const FLAG_LABEL = { unrouted: 'Not routed', start: 'New', complaint: 'Complaint', stop: 'Stop?', weekday: 'Check day', combined: 'Combined' };
+const FLAG_LABEL = { unrouted: 'Not routed', start: 'New', complaint: 'Complaint', stop: 'STOP', resume: 'Restart', weekday: 'Check day', combined: 'Combined' };
 
 const runLink = (ids) => `${location.origin}${location.pathname}#/r/${ids.join('+')}`;
 async function shareRuns(ids, label) {
@@ -897,14 +897,47 @@ async function viewRun(ids) {
     const f = camInput.files[0]; camInput.value = '';
     if (f && camFor) photoTaken(camFor, f);
   });
-  function takePhoto(l) { camFor = l; camInput.click(); }
+  function takePhoto(l) { camFor = l; camLater = false; camInput.click(); }
+  // A photo for any address, added afterwards from the camera or the phone's gallery
+  // (Lisa, 11 Nov 2026: she photographed 27 Luplau with the phone's camera and had nowhere to put it).
+  const galleryInput = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  document.body.append(galleryInput);
+  let camLater = false;
+  galleryInput.addEventListener('change', () => {
+    const f = galleryInput.files[0]; galleryInput.value = '';
+    if (f && camFor) photoTaken(camFor, f, { later: true });
+  });
+  function addPhotoLater() {
+    const lines = S.data.flatMap((d) => d.lines.map((l) => ({ ...l, route: l.route || d.run.route, run_id: l.run_id || d.run.id })));
+    const q = h('input', { type: 'search', placeholder: 'Number or street, e.g. 27 Luplau', 'aria-label': 'Find the address', class: 'pick-search' });
+    const list = h('div', { class: 'pick-list' });
+    let picked = null;
+    const choose = h('div', { class: 'menu-group', hidden: true });
+    const draw = () => {
+      const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+      const hits = lines.filter((l) => words.every((w) => `${l.number} ${l.street}`.toLowerCase().includes(w))).slice(0, 8);
+      list.replaceChildren(...(words.length ? hits.map((l) => h('button', { class: `menu-item ${picked === l ? 'on' : ''}`, onclick: () => { picked = l; draw(); } }, addrText(l))) : []));
+      choose.hidden = !picked;
+    };
+    q.oninput = () => { picked = null; draw(); };
+    openSheet('Add a photo to an address',
+      h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'For a photo you didn\u2019t take straight after ticking. It\u2019s saved to that address on this run and marked as added later. It doesn\u2019t tick anything.'),
+      q, list,
+      (close) => { choose.append(
+        menuItem('📷 Take a photo now', () => { close(); camFor = picked; camLater = true; camInput.click(); }),
+        menuItem('🖼 Choose from my photos', () => { close(); camFor = picked; galleryInput.click(); })); return choose; });
+    setTimeout(() => q.focus(), 50);
+  }
 
-  async function photoTaken(l, file) {
-    const when = new Date();
-    const fix = geo.last && Date.now() - geo.last.t < 60000 ? geo.last : null;
+  async function photoTaken(l, file, opts = {}) {
+    const later = !!(opts.later || camLater); camLater = false;
+    // A photo from the gallery keeps the time it was taken (if that was in the last two days).
+    const shot = later && file.lastModified && Date.now() - file.lastModified < 48 * 3600e3 ? new Date(file.lastModified) : null;
+    const when = shot || new Date();
+    const fix = !later && geo.last && Date.now() - geo.last.t < 60000 ? geo.last : null;
     const addr = `${l.number} ${titleCase(l.street)}`;
     const stamp = [addr, `${shortRoute(l.route)} · ${when.toLocaleString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
-      `Delivered by ${app.me.name}${fix ? ` · GPS ${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : ''}`];
+      later ? `Added later by ${app.me.name}` : `Delivered by ${app.me.name}${fix ? ` · GPS ${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : ''}`];
     let blob;
     try { blob = await stampPhoto(file, stamp); } catch { blob = file; }
     const name = `${addr.replace(/[^A-Za-z0-9]+/g, '-')}-${when.toISOString().slice(0, 16).replace(/[:T]/g, '')}.jpg`;
@@ -912,9 +945,9 @@ async function viewRun(ids) {
     const shareText = `Delivered: ${addr}, ${when.toLocaleString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} (${shortRoute(l.route)})`;
 
     // Taking the photo counts as delivering, if it isn't ticked yet.
-    if (!status()[`${l.run_id}::${l.line_key}`]?.done) tap(l);
+    if (!later && !status()[`${l.run_id}::${l.line_key}`]?.done) tap(l);
 
-    const meta = { run_id: l.run_id, route: l.route, line_key: l.line_key, address_key: l.address_key, date, user_name: app.me.name, lat: fix?.lat, lng: fix?.lng };
+    const meta = { run_id: l.run_id, route: l.route, line_key: l.line_key, address_key: l.address_key, date, user_name: app.me.name, lat: fix?.lat, lng: fix?.lng, taken_at: when.toISOString(), added_later: later };
     const saveMsg = h('div', { class: 'small muted' }, 'Saving to the run…');
     const save = async () => {
       saveMsg.className = 'small muted'; saveMsg.textContent = 'Saving to the run…';
@@ -1045,6 +1078,8 @@ async function viewRun(ids) {
     orderChip.hidden = true;
     orderRow.hidden = !custom;
     for (const b of orderSeg.children) b.setAttribute('aria-pressed', String((b.dataset.v === 'mine') === S.useCustom));
+    const ownOrder = S.data.some((d) => S.seq[d.run.route]?.mine && hasCustom(d));
+    orderSeg.firstChild.textContent = ownOrder ? '↕ My order' : '↕ Our order';
   }
 
   // Building header for a route layout: name, access code (from behind the login), progress.
@@ -1188,7 +1223,7 @@ async function viewRun(ids) {
     S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
     l.bankNote ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday', title: l.bankNote }, 'Check bank')) : null,
     flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
-    ...flags.filter((f) => f.type === 'complaint' && f.text).map((f) => h('div', { class: 'flag-detail' }, f.text.replace(/^Complaint:\s*/, ''))),
+    ...flags.filter((f) => (f.type === 'complaint' || f.type === 'resume' || (f.type === 'stop' && f.until !== undefined)) && f.text).map((f) => h('div', { class: 'flag-detail' }, f.text.replace(/^Complaint:\s*/, ''))),
     l.note ? h('div', { class: 'note' }, l.note) : null,
     (wantsPhoto(l) || photosOf(l).length) ? h('span', {
       class: `cam ${photosOf(l).length ? 'has' : ''}`, role: 'button', tabindex: '0',
@@ -1223,7 +1258,14 @@ async function viewRun(ids) {
           h('ul', { class: 'checks' }, (d.run.checks || []).map((c) => h('li', { class: c.ok ? 'ok' : 'fail' }, `${c.ok ? '✓' : '✗'} ${c.label}: ${c.got}/${c.expected}`))),
           (d.run.warnings || []).length ? h('ul', { class: 'warnings' }, d.run.warnings.map((w) => h('li', null, w))) : null)))); })),
       (close) => h('div', { class: 'menu-group' },
-        menuItem('Put back in the sheet’s order…', () => {
+        app.store.personalOrders && visibleData().some((d) => S.seq[d.run.route]?.mine) ? menuItem('Use the usual order again (drop my own)…', () => {
+          close();
+          const runs = visibleData().filter((d) => S.seq[d.run.route]?.mine);
+          if (!confirm(`Drop your own order for ${runs.map((d) => shortRoute(d.run.route)).join(' + ')} and use the usual one again? Only your phone changes.`)) return;
+          for (const d of runs) { app.store.saveSequence(d.run.route, null, app.me.name); S.seq[d.run.route] = app.store.sharedSequence(d.run.route); }
+          render();
+        }) : null,
+        app.store.personalOrders ? null : menuItem('Put back in the sheet’s order…', () => {
           close();
           const runs = visibleData().filter(hasCustom);
           if (!runs.length) return toast('Already in sheet order.');
@@ -1231,6 +1273,7 @@ async function viewRun(ids) {
           for (const d of runs) { S.seq[d.run.route] = null; app.store.saveSequence(d.run.route, null, app.me.name); }
           render();
         }, { danger: true }),
+        menuItem('📷 Add a photo to an address…', () => { close(); addPhotoLater(); }),
         menuItem('Untick everything…', () => {
           close();
           const st = status();
@@ -1380,13 +1423,17 @@ async function viewRun(ids) {
     const next = moveKeys(current, a.keys, tgt.anchor, tgt.after);
     if (next.join() === current.join()) { render(); return; }
     const merged = mergeOrder(before?.keys, next);
-    S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString() };
+    const own = app.store.personalOrders;
+    S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString(), mine: own };
     S.useCustom = true;
     app.store.saveSequence(route, merged, app.me.name);
     render();
-    toast(`Moved ${a.label || 'it'}. Saved for future ${shortRoute(route)} runs.`, {
+    const usual = app.store.sharedSequence(route);
+    toast(own ? `Moved ${a.label || 'it'}. Saved as your own order for ${shortRoute(route)}${before?.mine ? '' : `; ${usual?.by || 'the usual'}${usual?.by ? '\u2019s' : ''} order is unchanged`}.`
+      : `Moved ${a.label || 'it'}. Saved for future ${shortRoute(route)} runs.`, {
       label: 'Undo',
-      fn: () => { S.seq[route] = before; app.store.saveSequence(route, before?.keys || null, app.me.name); render(); },
+      // Undoing a driver's first move drops their own order again, back to the usual one.
+      fn: () => { S.seq[route] = before; app.store.saveSequence(route, own && !before?.mine ? null : before?.keys || null, app.me.name); render(); },
     });
   }
   body.addEventListener('pointerdown', (e) => {
@@ -1482,7 +1529,7 @@ async function viewRun(ids) {
   document.addEventListener('visibilitychange', wake);
 
   app.cleanup = () => {
-    camInput.remove();
+    camInput.remove(); galleryInput.remove();
     endDrag(false);
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
