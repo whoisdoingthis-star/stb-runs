@@ -22,6 +22,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0016 | [Opening animation: once a day, silent unless switched on](0016-opening-animation.md) | 2026-11-10 | Accepted (partly superseded by 0017, 0018) |
 | 0017 | [Opening: a soft note and a twinkle for each stop](0017-opening-notes-per-stop.md) | 2026-11-10 | Accepted |
 | 0018 | [Opening plays every time the app is opened, except on a run](0018-opening-every-open.md) | 2026-11-10 | Accepted |
+| 0019 | [Driver Assistant: our own voice guidance, routed by OpenRouteService](0019-driver-assistant.md) | 2026-11-12 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 

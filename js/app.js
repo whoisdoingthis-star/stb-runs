@@ -5,6 +5,7 @@ import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
+import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
 
 // ---------------------------------------------------------------- helpers
@@ -751,7 +752,7 @@ async function viewRun(ids) {
   const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, icon('undo'), 'Undo');
   const abPhoto = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Take a delivery photo', onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, icon('camera'));
   const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, icon('warn'));
-  const abNav = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Directions to the next stop in Google Maps', onclick: () => directions() }, icon('nav'), h('span', { class: 'ab-lbl' }, 'Maps'));
+  const abNav = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Driver Assistant', 'aria-pressed': 'false', onclick: () => assistant(!da.on, true) }, icon('nav'), h('span', { class: 'ab-lbl' }, 'Assistant'));
   const abNext = h('button', { class: 'ab-btn primary', onclick: () => goNext(true) }, 'Next ↓');
   const actionbar = h('div', { class: 'actionbar', role: 'region', 'aria-label': 'Last delivery and next stop' },
     h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNav, abNext);
@@ -760,8 +761,9 @@ async function viewRun(ids) {
     abUndo.hidden = !last; abProblem.hidden = !last; abPhoto.hidden = !(last && last.lines.length === 1);
     abMain.textContent = last ? `${last.problem ? '⚠' : '✓'} ${last.problem ? `${last.problem}: ` : ''}${last.label}` : (nextEl ? 'Next stop' : '');
     abSub.textContent = nextEl ? `Next: ${nextEl.getAttribute('data-label') || ''}` : (S.progress?.total ? 'All done on this screen' : '');
-    abNext.hidden = !nextEl; abNav.hidden = !nextEl;
+    abNext.hidden = !nextEl; abNav.hidden = !nextEl && !da.on;
     actionbar.classList.toggle('has-last', !!last); // two rows once there is a tick: words on top, buttons underneath
+    if (da.on) { daTick(geo.last); requestAnimationFrame(() => document.documentElement.style.setProperty('--ab-h', `${actionbar.offsetHeight}px`)); } // the next stop may have changed
   }
   // Scroll the next stop into view (only if it's off screen, unless asked).
   // ---- directions: Google Maps to the next stop, only when asked (Mike, 10 Nov 2026) ----
@@ -785,6 +787,105 @@ async function viewRun(ids) {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(to.q)}&travelmode=driving&dir_action=navigate`;
     window.open(url, '_blank', 'noopener');
     toast(`Google Maps: ${to.label}`);
+  }
+
+  // ---- Driver Assistant (Mike, 12 Nov 2026; decision 0019) ------------------------------
+  // Voice-first guidance to the next stop: turn-by-turn when routing is set up (OpenRouteService
+  // through the `route` server function), otherwise an arrow and the distance. It says which
+  // side the letterbox is on and reads the sheet's notes on arrival. It never ticks.
+  const guide = new Guide({ route: async (from, to) => { const g = await app.store.route(from, to); return g ? parseOrs(g) : null; } });
+  const da = { on: false, voice: pref('stb-da-voice', 'on') === 'on', off: null, primed: false, geo: {}, tried: new Set(), myTicks: {} };
+  const daArrow = h('div', { class: 'da-arrow', 'aria-hidden': 'true' }, icon('nav'), h('b', { class: 'da-here' }, '✓'));
+  const daDist = h('div', { class: 'da-dist' });
+  const daText = h('div', { class: 'da-text' });
+  const daNext = h('div', { class: 'da-next' });
+  const daNotes = h('div', { class: 'da-notes' });
+  const daVoice = h('button', { class: 'ab-btn', 'aria-label': 'Voice on or off', onclick: () => {
+    da.voice = !da.voice; setPref('stb-da-voice', da.voice ? 'on' : 'off'); daVoice.textContent = da.voice ? '🔊' : '🔇';
+    if (da.voice) speak('Voice on.'); else if ('speechSynthesis' in window) speechSynthesis.cancel();
+  } }, da.voice ? '🔊' : '🔇');
+  const daMaps = h('button', { class: 'ab-btn', 'aria-label': 'Directions to the next stop in Google Maps', onclick: () => directions() }, 'Maps');
+  const daClose = h('button', { class: 'ab-btn', 'aria-label': 'Close the Driver Assistant', onclick: () => assistant(false, true) }, '✕');
+  const daPanel = h('div', { class: 'da', hidden: true, role: 'region', 'aria-label': 'Driver Assistant', 'aria-live': 'polite' },
+    h('div', { class: 'da-main' }, daArrow, h('div', { class: 'da-words' }, h('div', { class: 'da-top' }, daDist, daText), daNext, daNotes)),
+    h('div', { class: 'da-ctl' }, daVoice, daMaps, daClose));
+
+  let daVoiceName = null;
+  function speak(text) {
+    if (!da.voice || !text || !('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    const voices = speechSynthesis.getVoices();
+    daVoiceName ||= ['en-NZ', 'en-AU', 'en-GB', 'en'].map((l) => voices.find((v) => v.lang?.replace('_', '-').startsWith(l))).find(Boolean) || null;
+    if (daVoiceName) u.voice = daVoiceName;
+    u.lang = daVoiceName?.lang || 'en-NZ'; u.rate = 1;
+    speechSynthesis.speak(u);
+  }
+  // iPhone only lets a page speak after a tap: the first tap anywhere while it's on unlocks it.
+  const primeVoice = () => { if (da.on && !da.primed && 'speechSynthesis' in window) { da.primed = true; speechSynthesis.speak(new SpeechSynthesisUtterance('')); } };
+  document.addEventListener('pointerdown', primeVoice, true);
+
+  function stopFor(el) {
+    const key = el?.getAttribute('data-key');
+    const found = key && S.lineByKey[key];
+    const lines = Array.isArray(found) ? found : found ? [found] : [];
+    const l = lines[0];
+    if (!l) return null;
+    const label = key.startsWith('bundle:') ? el.getAttribute('data-label') || addrText(l) : addrText(l);
+    const d = S.dest[l.address_key]?.lat != null ? S.dest[l.address_key] : da.geo[l.address_key];
+    const f = fmtNumber(l.number);
+    return {
+      key: `${key}|${d?.lat ?? ''}`, addressKey: l.address_key,
+      label: d?.stop_name ? `${d.stop_name}: ${label}` : label,
+      spoken: d?.stop_name ? `${d.stop_name}, ${label}` : label,
+      at: d?.lat != null ? { lat: d.lat, lng: d.lng } : null,
+      notes: stopNotes(lines.map((x) => ({ ...x, parts: partsOf(x) })), { bankNote: l.bankNote }),
+      lookup: `${f.main} ${titleCase(l.street)}, Howick, Auckland`,
+    };
+  }
+  function daTick(fix) {
+    if (!da.on) return;
+    const st = stopFor(body.querySelector('.tile.next'));
+    if (st && !st.at && !da.tried.has(st.addressKey)) { // no position yet: look the address up once
+      da.tried.add(st.addressKey);
+      app.store.geocode(st.lookup).then((p) => { if (p) { da.geo[st.addressKey] = p; daTick(geo.last); } }).catch(() => {});
+    }
+    guide.setStop(st);
+    if (!st) { drawDA({ mode: 'none' }); return; }
+    if (!fix || Date.now() - fix.t > 30000) { drawDA({ mode: 'gps', label: st.label, notes: st.notes }); return; }
+    const { view, say } = guide.update(fix);
+    say.forEach(speak);
+    drawDA(view);
+  }
+  function drawDA(v) {
+    const turn = typeof v.angle === 'number';
+    daArrow.hidden = !(turn || v.roundabout || v.arrived);
+    daArrow.classList.toggle('arrived', !!v.arrived);
+    daArrow.style.transform = turn && !v.arrived ? `rotate(${Math.round(v.angle)}deg)` : '';
+    daArrow.classList.toggle('roundabout', !!v.roundabout && !v.arrived);
+    daDist.textContent = v.distance != null && !v.arrived ? showDistance(v.distance) : '';
+    daText.textContent = v.mode === 'none' ? 'No more stops on this screen.' : v.mode === 'gps' ? 'Waiting for GPS…'
+      : v.mode === 'nopos' ? v.label : v.text;
+    daNext.textContent = v.mode === 'nopos' ? 'No position for this stop yet: tap Maps'
+      : v.mode === 'turn' ? `Then: ${v.label}${v.side ? ` · on your ${v.side}` : ''}`
+      : v.mode === 'gps' ? v.label : v.side ? `On your ${v.side}` : '';
+    daNotes.textContent = (v.notes || []).join(' · ');
+    daNotes.hidden = !v.notes?.length;
+  }
+  function assistant(on, byHand) {
+    if (on === da.on) return;
+    da.on = on;
+    daPanel.hidden = !on;
+    document.body.classList.toggle('da-on', on);
+    abNav.setAttribute('aria-pressed', String(on));
+    if (byHand) setPref('stb-da', on ? 'on' : 'off');
+    da.off?.(); da.off = null;
+    if (on) {
+      if (byHand) { da.primed = true; speak('Driver Assistant on.'); }
+      da.off = geo.onFix(daTick);
+      guide.setStop(null);
+      daTick(geo.last);
+    } else if ('speechSynthesis' in window) speechSynthesis.cancel();
+    drawBar(body.querySelector('.tile.next'));
   }
 
   function goNext(force) {
@@ -826,6 +927,7 @@ async function viewRun(ids) {
       return e;
     });
     S.events.push(...evs);
+    if (done) for (const l of lines) { da.myTicks[l.route] = (da.myTicks[l.route] || 0) + 1; if (da.myTicks[l.route] === 10) setPref(`stb-knows-${l.route}`, '1'); }
     S.flash = done ? flashKey : null;
     app.store.addEvents(evs, !fresh);
     if (navigator.vibrate) navigator.vibrate(done ? 15 : [10, 40, 10]);
@@ -1303,6 +1405,7 @@ async function viewRun(ids) {
       searchRow,
       fbFill),
     body,
+    daPanel,
     actionbar);
 
   // Street banners stick just under the header, so the street is always in view.
@@ -1467,6 +1570,15 @@ async function viewRun(ids) {
   body.addEventListener('contextmenu', noMenu);
 
   render();
+  // Driver Assistant: on if you left it on last time, or once on a run that's new to you on this
+  // phone (you haven't ticked 10 stops of it here yet). Closing it is remembered for that run.
+  const newRuns = data.map((d) => d.run.route).filter((r) => pref(`stb-knows-${r}`, '') !== '1' && pref(`stb-da-offered-${r}`, '') !== '1');
+  if (pref('stb-da', '') === 'on') assistant(true);
+  else if (newRuns.length) {
+    newRuns.forEach((r) => setPref(`stb-da-offered-${r}`, '1'));
+    assistant(true);
+    setTimeout(() => toast(`Driver Assistant is on: ${newRuns.map(shortRoute).join(' + ')} is new to you. Tap ✕ to turn it off.`), 600);
+  }
   try {
     if (!localStorage.getItem('stb.hint.move')) {
       localStorage.setItem('stb.hint.move', '1');
@@ -1530,6 +1642,8 @@ async function viewRun(ids) {
 
   app.cleanup = () => {
     camInput.remove(); galleryInput.remove();
+    da.off?.(); document.removeEventListener('pointerdown', primeVoice, true); document.body.classList.remove('da-on');
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
     endDrag(false);
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);

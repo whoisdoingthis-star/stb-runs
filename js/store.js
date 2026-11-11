@@ -193,7 +193,10 @@ export class LocalStore extends Base {
   // Demo mode keeps a note that a photo was taken (the photo itself stays on the phone).
   async savePhoto(blob, meta) { LS.set('stb.demo.photos', [...LS.get('stb.demo.photos', []), { ...meta, taken_at: new Date().toISOString() }]); return null; }
   async loadPhotos(ids) { return LS.get('stb.demo.photos', []).filter((p) => ids.includes(p.run_id)); }
-  async loadDestinations() { return {}; }
+  async loadDestinations(keys) { return globalThis.__stbFakeDest ? globalThis.__stbFakeDest(keys) : {}; }
+  // Demo mode has no routing; tests can hand in a route with window.__stbFakeRoute.
+  async route(from, to) { return globalThis.__stbFakeRoute ? globalThis.__stbFakeRoute(from, to) : null; }
+  async geocode() { return null; }
   async loadWatch(routes) { const all = LS.get('stb.watch', {}); return Object.fromEntries(routes.map((r) => [r, all[r] || []])); }
   async setWatch(route, addressKey, on) {
     const all = LS.get('stb.watch', {});
@@ -412,6 +415,30 @@ export class SupabaseStore extends Base {
       if (error) throw error;
       return data;
     } catch { return []; }
+  }
+  /** Driver Assistant: a driving route (ORS GeoJSON) from { lat, lng } to { lat, lng }, or null.
+   *  Goes through the `route` server function (the ORS key stays secret). If routing isn't set
+   *  up or fails, it rests for 10 minutes and the Assistant points at the stop instead. */
+  async route(from, to) {
+    if (Date.now() < (this.routeRestUntil || 0)) return null;
+    const { data, error } = await this.sb.functions.invoke('route', { body: { from: [from.lng, from.lat], to: [to.lng, to.lat] } });
+    if (error || !data?.features) { this.routeRestUntil = Date.now() + 10 * 60 * 1000; return null; }
+    return data;
+  }
+  /** Where an address is ({ lat, lng }), looked up once and remembered on this phone. */
+  async geocode(text) {
+    const cache = LS.get('stb.geocode', {});
+    if (text in cache) return cache[text];
+    if (Date.now() < (this.routeRestUntil || 0)) return null;
+    const { data, error } = await this.sb.functions.invoke('route', { body: { geocode: text } });
+    if (error) {
+      if (error.context?.status === 404) { cache[text] = null; LS.set('stb.geocode', cache); } // not found: don't ask again
+      else this.routeRestUntil = Date.now() + 10 * 60 * 1000;
+      return null;
+    }
+    cache[text] = data?.lat != null ? { lat: data.lat, lng: data.lng } : null;
+    LS.set('stb.geocode', cache);
+    return cache[text];
   }
   /** Where Google Maps should go for each address: the Dispatch stop, else the learned letterbox. */
   async loadDestinations(keys) {

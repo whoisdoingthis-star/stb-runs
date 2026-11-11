@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Driver Assistant** (Mike's idea, 12 Nov): the **Assistant** button opens a panel above the bottom bar that talks the driver to the next stop: "Next stop, 27 Luplau Crescent. In 300 metres, turn left onto Masefield Avenue… Arriving, on your left. 2 papers." Big arrow, distance, side of the road and the sheet's notes on screen; never ticks; turns itself on for a run that's new to you. Turn-by-turn needs the routing key and the `route` server function ([setup](docs/setup.md#7-driver-assistant-routing)); until then it points at the stop. Google Maps is now inside the panel.
 - **Your own order** (Lisa's feedback): when Lisa or Mum re-orders a run, it's saved as *their own* order for that run; Mike's usual order isn't touched. The switch reads **My order / Sheet order**; **⋯ → Use the usual order again** drops it. Mike's drags still change the usual order. (table `person_sequences`)
 - **Add a photo to an address later**: **⋯ → 📷 Add a photo to an address…** picks any address on the run and takes a photo or chooses one from the phone's gallery. Marked *added later*, keeps the photo's time, doesn't tick. (`photos.added_later`)
 - **Fix: temporary stops shown as complaints.** A key report row like *21 Gillett Place, STOPNA, "1011 stop till 18112026"* now shows **STOP until Wed 18 Nov: don't deliver** on the tile and stays out of the complaints register.

@@ -109,6 +109,15 @@ When a sheet replaces an earlier one for the same run and day, these are compare
 - **Dispatch, Runs & sheets → Active**: every run that isn't complete, *including earlier days*, so a run done on paper is never forgotten until it's closed. Earlier runs not complete are also listed under **Needs attention**. **History**: complete runs; reopening one brings it back.
 - Progress is counted in the database (`run_progress`), not on the phone.
 
+## Driver Assistant
+(Mike, 12 Nov 2026: "for the driver to navigate to the next stop, particularly if it's a new run for them".) The **Assistant** button in the bottom bar opens a panel above it. — `js/assistant.js`, [decision 0019](decisions/0019-driver-assistant.md)
+- **Voice first:** "Next stop, 27 Luplau Crescent. In 300 metres, turn left onto Masefield Avenue." / "In 150 metres, turn left…" / "Turn left onto Masefield Avenue." / "Arriving. 27 Luplau Crescent, on your left. 2 papers. Don't throw, put it in the Herald box." Each said once. The 🔊 button turns the voice off and on.
+- **On screen:** a big arrow (the next turn, or straight at the stop when close), the distance, the instruction, which side, and the sheet's notes (papers if not just one Herald, notes, temporary stops, complaints, Run 8 bank).
+- **Where it goes:** same as Directions below (Dispatch stop, then learned letterbox, then the address, looked up once).
+- **Turns:** from OpenRouteService, one leg at a time from where you are; worked out again if you leave the route. Without routing (not set up, offline) it shows an arrow straight at the stop and the distance.
+- **Never ticks.** It moves to the next stop when you tick.
+- **Turns on by itself** the first time you open a run that's new to you on your phone (you haven't ticked 10 of its stops there); after that it stays as you left it. **Maps** in the panel still hands over to Google Maps.
+
 ## Directions
 (Mike, 10 Nov 2026.) **Google Maps, one stop at a time, only when asked.** The arrow in the bottom bar opens Google Maps driving directions to the next stop. Waze isn't used. The destination is, in order:
 1. the stop (operating location) set in Dispatch, if it has GPS: where the vehicle parks, so the Bruce McLaren buildings go to their car parks, not each letterbox (navigation goes stop to stop: 8 Nov 2026);

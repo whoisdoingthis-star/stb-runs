@@ -11,14 +11,19 @@ export class Geo {
     this.state = 'off';    // off | waiting | ok | denied | unsupported | error
     this.watchId = null;
     this.waiters = [];
+    this.listeners = new Set(); // e.g. the Driver Assistant, called on every fix
   }
+  /** Call fn on every new fix; returns a function that stops it. */
+  onFix(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   start() {
     if (!('geolocation' in navigator)) { this.set('unsupported'); return; }
     if (this.watchId != null) return;
     this.set('waiting');
     this.watchId = navigator.geolocation.watchPosition(
       (p) => {
-        this.last = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+        this.last = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now(),
+          heading: Number.isFinite(p.coords.heading) ? p.coords.heading : null, speed: Number.isFinite(p.coords.speed) ? p.coords.speed : null };
+        this.listeners.forEach((fn) => { try { fn(this.last); } catch { /* a listener's problem isn't GPS's */ } });
         this.set('ok');
         const w = this.waiters; this.waiters = [];
         w.forEach((fn) => fn(this.last));

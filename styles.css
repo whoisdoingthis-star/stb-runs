@@ -646,3 +646,30 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 .pick-search { width: 100%; font: inherit; font-size: var(--t-m, 17px); padding: 12px; border-radius: 12px; border: 2px solid var(--edge); background: var(--bg); color: var(--ink); margin-bottom: 8px; }
 .pick-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .menu-item.on { border-color: var(--next); outline: 2px solid var(--next); }
+
+/* ---- Driver Assistant (decision 0019): a panel above the bottom bar ---- */
+.da { position: fixed; left: 8px; right: 8px; bottom: calc(var(--ab-h, 72px) + env(safe-area-inset-bottom, 0px) + 8px); z-index: 30;
+  background: var(--card); border: 2px solid var(--next); border-radius: 16px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  display: flex; flex-direction: column; gap: 8px; max-width: 640px; margin: 0 auto; }
+.da[hidden] { display: none; }
+.da-main { display: flex; gap: 12px; align-items: center; }
+.da-arrow { flex: 0 0 64px; height: 64px; border-radius: 50%; background: var(--next); color: #fff; display: grid; place-items: center; transition: transform .4s ease; }
+.da-arrow svg { width: 38px; height: 38px; fill: currentColor; stroke: none; }
+.da-arrow.arrived { background: var(--done); }
+.da-arrow.roundabout svg { transform: rotate(-90deg); }
+.da-words { min-width: 0; flex: 1; }
+.da-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.da-dist { font-size: 28px; font-weight: 800; line-height: 1; }
+.da-text { font-size: 18px; font-weight: 700; line-height: 1.2; }
+.da-next { font-size: 15px; color: var(--muted); margin-top: 2px; }
+.da-notes { font-size: 15px; font-weight: 700; color: var(--warn); margin-top: 4px; line-height: 1.25; }
+.da-ctl { display: flex; gap: 8px; }
+.da-ctl .ab-btn { flex: 1; min-height: 44px; }
+body.da-on .runbody { padding-bottom: 210px; }
+html.big .da-dist { font-size: 36px; }
+html.big .da-text { font-size: 22px; }
+html.big .da-next, html.big .da-notes { font-size: 19px; }
+.da-arrow .da-here { display: none; font-size: 34px; color: #fff; }
+.da-arrow.arrived svg { display: none; }
+.da-arrow.arrived .da-here { display: block; }
+.ab-btn[aria-pressed="true"] { border-color: var(--next); color: var(--next); background: color-mix(in srgb, var(--next) 18%, transparent); }

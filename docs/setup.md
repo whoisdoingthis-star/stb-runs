@@ -37,6 +37,13 @@ Test: **Actions → Fetch tomorrow's run sheets → Run workflow** with *Dry run
 1. Supabase **Edge Functions → Deploy a new function → Via editor**, name `admin-users`, paste `supabase/functions/admin-users/index.ts`, deploy. If calls fail with "Invalid JWT", turn off *Verify JWT with legacy secret* on it (it checks the caller is a dispatcher itself).
 2. Make the first dispatcher: `update public.members set role = 'dispatcher' where email ilike '<email>';`
 
+## 7. Driver Assistant routing
+Turn-by-turn for the Driver Assistant ([decision 0019](decisions/0019-driver-assistant.md)). Without it the Assistant still works, pointing at the stop instead of giving turns.
+1. Sign up at **https://account.heigit.org** (OpenRouteService) and create a free **Standard** API key (2,000 directions a day).
+2. Supabase **Edge Functions → Secrets**: add `ORS_API_KEY` = that key.
+3. Supabase **Edge Functions → Deploy a new function → Via editor**, name `route`, paste `supabase/functions/route/index.ts`, deploy. If calls fail with "Invalid JWT", turn off *Verify JWT with legacy secret* on it (it checks membership itself).
+4. Check: open a run on a phone, tap **Assistant**, drive (or walk) away from the next stop: the panel should say "Turn left onto …" rather than only a distance.
+
 ## 6. Phones
 See the [family guide](family-guide.md#first-time-on-a-phone).
 
