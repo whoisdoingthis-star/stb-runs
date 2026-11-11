@@ -706,3 +706,36 @@ html.big .duty-actions { grid-template-columns: 1fr; }
 .sg-between { background: var(--warn); }
 .sg-pause { background: var(--warn-bg); }
 .sg-wrap { background: var(--line); }
+
+/* ---- Stan (decision 0021): sized by --stan; mouth lights show how he's guiding ---- */
+.stan { display: inline-block; width: var(--stan, 48px); height: calc(var(--stan, 48px) * 1.44); flex: none; line-height: 0; }
+.stan.st-head { height: var(--stan, 48px); }
+.stan svg { width: 100%; height: 100%; overflow: visible; }
+.stan .st-mouth rect { fill: #4ade80; }
+.stan[data-state="route"] .st-mouth rect { fill: #60a5fa; }
+.stan[data-state="point"] .st-mouth rect { fill: #fbbf24; }
+.stan[data-state="wait"] .st-mouth rect { fill: #9ca3af; }
+.stan svg * { transform-box: view-box; }
+.stan .st-bob { animation: st-bob 2.6s ease-in-out infinite; }
+.stan .st-pin { transform-origin: 100px 22px; }
+.stan .st-eyes { transform-origin: 100px 82px; animation: st-blink 5s infinite; }
+.stan.st-wave .st-armR { transform-origin: 156px 172px; animation: st-wave .5s ease-in-out 4 alternate; }
+.stan.st-hop svg { animation: st-hop .45s ease-out 2; }
+.stan.st-point .st-armR { transform-origin: 156px 172px; transform: rotate(-70deg); }
+.stan.st-talking .st-mouth rect { animation: st-talk .32s steps(2) infinite; }
+.stan.st-talking .st-mouth rect:nth-child(2n) { animation-delay: .16s; }
+.stan.st-talking .st-pin { animation: st-pulse .64s ease-in-out infinite; }
+@keyframes st-bob { 50% { transform: translateY(3px); } }
+@keyframes st-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+@keyframes st-wave { from { transform: rotate(0); } to { transform: rotate(-110deg); } }
+@keyframes st-hop { 40% { transform: translateY(-14%); } }
+@keyframes st-talk { 50% { opacity: .25; } }
+@keyframes st-pulse { 50% { transform: scale(1.25); } }
+@media (prefers-reduced-motion: reduce) { .stan *, .stan svg { animation: none !important; } }
+/* The Assistant button: his head instead of the arrow icon */
+.ab-btn .stan { margin: -6px 0; }
+.ab-btn[aria-pressed="true"]:has(.stan) { border-color: #fdb704; box-shadow: 0 0 0 2px #fdb704 inset; }
+.da-ctl .da-stan { flex: 1.6 1 0; display: flex; align-items: center; gap: 8px; margin-right: auto; font-weight: 700; font-size: var(--t-s); color: var(--muted); min-width: 0; }
+html.big .da-ctl .da-stan { font-size: 17px; }
+#toast > span.stan { flex: none; margin: -8px 10px -8px -4px; }
+.duty-hello { display: flex; gap: 12px; align-items: center; }

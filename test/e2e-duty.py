@@ -30,9 +30,11 @@ with sync_playwright() as p:
       localStorage.setItem('stb.demo.runs', JSON.stringify(runs));
       for (const k of Object.keys(localStorage)) if (k.startsWith('stb.run.')) { const v = JSON.parse(localStorage.getItem(k)); v.run.delivery_date = today; localStorage.setItem(k, JSON.stringify(v)); }
     }""")
-    page.goto('http://localhost:8765/#/'); page.reload(); page.wait_for_selector('.duty-card')
+    page.goto('http://localhost:8765/#/'); page.reload(); page.wait_for_selector('.duty-card'); page.wait_for_selector('.splash', state='detached', timeout=5000)
     duty = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.duty') || '[]')")
 
+    check('the first time, Stan says hello on the duty card', page.locator('.duty-card .stan.st-wave').count() == 1 and 'Stan' in page.inner_text('.duty-card'))
+    if SHOTS: page.locator('.duty-card').screenshot(path=f'{SHOTS}/duty-hello.png')
     check('the Runs page starts Off duty, with an On duty button', 'Off duty' in page.inner_text('.duty-card') and page.locator('.duty-btn').is_visible())
     page.click('.duty-btn'); page.wait_for_selector('.duty-card.on')
     check('On duty starts the shift timer at 0:00', page.inner_text('.duty-timer') == '0:00', page.inner_text('.duty-card'))
@@ -58,8 +60,10 @@ with sync_playwright() as p:
         if first:
             check('the first tick switches to On the run', duty()[-1]['state'] == 'on_run' and duty()[-1]['source'] == 'tick', json.dumps(duty()[-1]))
             first = False
-    page.wait_for_timeout(900)
+    page.wait_for_selector('#toast .stan', timeout=3000)
+    if SHOTS: page.screenshot(path=f'{SHOTS}/toast-stan.png')
     toast = page.inner_text('#toast') if page.locator('#toast').is_visible() else ''
+    check('Stan hops in the run-done message', page.locator('#toast .stan.st-hop').count() == 1)
     check('finishing Run 11 moves on to Run 6 by itself', 'Run 11 done' in toast and 'Run 6' in toast, toast)
     last = duty()[-1]
     check('the move-on is recorded, so the gap is counted', last['state'] == 'on_run' and last['source'] == 'move_on' and last['run_id'] == ids[1], json.dumps(last))
@@ -73,6 +77,7 @@ with sync_playwright() as p:
     if SHOTS: page.locator('.duty-card').screenshot(path=f'{SHOTS}/duty-big.png')
     page.click('.duty-actions >> text=Off duty'); page.wait_for_selector('.sheet')
     page.locator('.sheet').get_by_role('button', name='Off duty', exact=True).click(); page.wait_for_selector('.duty-card.off')
+    check('after the first shift Stan steps back from the duty card', page.locator('.duty-card .stan').count() == 0)
     check('Off duty ends the shift', duty()[-1]['state'] == 'off_duty' and page.locator('.duty-btn').is_visible())
     check('no page errors', not errors, errors)
     b.close()

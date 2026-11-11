@@ -7,6 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
+import { stan, stanState, stanTalk, stanOn, setStan } from './stan.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -109,10 +110,10 @@ function toggleBig() {
   return next;
 }
 
-function toast(msg, action) {
+function toast(msg, action, opts = {}) {
   const t = document.getElementById('toast');
   const actions = (Array.isArray(action) ? action : [action]).filter(Boolean);
-  t.replaceChildren(h('span', null, msg), ...actions.map((a) => h('button', { onclick: () => { t.hidden = true; a.fn(); } }, a.label)));
+  t.replaceChildren(...(opts.stan && stanOn() ? [stan({ pose: opts.stan, size: 30 })] : []), h('span', null, msg), ...actions.map((a) => h('button', { onclick: () => { t.hidden = true; a.fn(); } }, a.label)));
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, actions.length ? 6000 : 3500);
@@ -291,7 +292,7 @@ function goOffDuty(after) {
   const start = shiftStart(app.store.myDuty());
   const close = openSheet('Go off duty?',
     h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
-    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty. Shift ${start ? clock(Date.now() - start) : ''}. Thanks!`); after?.(); } }, 'Off duty'),
+    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); } }, 'Off duty'),
     h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
 }
 /** The duty card on the Runs page: On duty button, or the shift timer and where I am. */
@@ -304,8 +305,10 @@ function dutyCard(todayRuns, rerender) {
     mine.some((r) => !runComplete(r)) ? h('button', { class: 'btn small primary', onclick: () => { location.hash = `#/r/${mine.filter((r) => !runComplete(r)).map((r) => r.id).join('+')}`; } }, 'Continue') : null) : null;
   const pickBtn = todayRuns.length ? h('button', { class: 'btn', onclick: () => openMyRuns(todayRuns, rerender) }, mine.length ? 'Change my runs' : 'Choose my runs') : null;
   if (!st?.onDuty) {
-    const hint = h('p', { class: 'muted duty-hint' }, 'Tap when you get to the depot. It counts sorting and loading too.');
-    card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), hint,
+    // First time ever: Stan says hello and explains (once; after the first On duty he steps back).
+    const firstTime = stanOn() && !(() => { try { return localStorage.getItem('stb.duty'); } catch { return null; } })();
+    const hint = h('p', { class: 'muted duty-hint' }, firstTime ? 'Hi, I’m Stan! Tap On duty when you get to the depot, and I’ll count your time from there, sorting and loading too.' : 'Tap when you get to the depot. It counts sorting and loading too.');
+    card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), firstTime ? h('div', { class: 'duty-hello' }, stan({ pose: 'wave', size: 44 }), hint) : hint,
       h('button', { class: 'btn primary big duty-btn', onclick: async () => { noteDuty('on_duty', {}, await quietFix()); rerender(); } }, 'On duty'),
       mineRow, pickBtn].filter(Boolean));
     // At the depot already? Say so (only if GPS is already allowed, and the depot is set in Dispatch).
@@ -465,6 +468,7 @@ function openSettings(fileInput) {
       choiceRow('Text', [['normal', 'Normal'], ['big', 'Big']], bigOn() ? 'big' : 'normal', (v) => { if ((v === 'big') !== bigOn()) { toggleBig(); close(); route().then(() => openSettings(document.getElementById('pdf'))); } }),
       bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => setPref('stb-layout', v)),
       choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); }),
+      choiceRow('Stan', [['on', 'Show'], ['off', 'Hide']], stanOn() ? 'on' : 'off', (v) => setStan(v === 'on')),
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
     (close) => h('div', { class: 'menu-group' },
       menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays each time you open the app' }),
@@ -847,7 +851,9 @@ async function viewRun(ids) {
   const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, icon('undo'), 'Undo');
   const abPhoto = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Take a delivery photo', onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, icon('camera'));
   const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, icon('warn'));
-  const abNav = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Driver Assistant', 'aria-pressed': 'false', onclick: () => assistant(!da.on, true) }, icon('nav'), h('span', { class: 'ab-lbl' }, 'Assistant'));
+  const navStan = stanOn() ? stan({ head: true, size: 30 }) : null;
+  const abNav = h('button', { class: 'ab-btn', hidden: true, 'aria-label': navStan ? 'Stan, the Driver Assistant' : 'Driver Assistant', 'aria-pressed': 'false', onclick: () => assistant(!da.on, true) },
+    navStan || icon('nav'), h('span', { class: 'ab-lbl' }, navStan ? 'Stan' : 'Assistant'));
   const abNext = h('button', { class: 'ab-btn primary', onclick: () => goNext(true) }, 'Next ↓');
   const actionbar = h('div', { class: 'actionbar', role: 'region', 'aria-label': 'Last delivery and next stop' },
     h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNav, abNext);
@@ -901,9 +907,13 @@ async function viewRun(ids) {
   } }, da.voice ? '🔊' : '🔇');
   const daMaps = h('button', { class: 'ab-btn', 'aria-label': 'Directions to the next stop in Google Maps', onclick: () => directions() }, 'Maps');
   const daClose = h('button', { class: 'ab-btn', 'aria-label': 'Close the Driver Assistant', onclick: () => assistant(false, true) }, '✕');
+  // Stan in the panel: his mouth lights and a word say how he's guiding (turn by turn, pointing, waiting for GPS).
+  const daStanFace = stanOn() ? stan({ head: true, size: 34 }) : null;
+  const daStanText = h('span', { class: 'da-stan-text' });
+  const daStan = h('div', { class: 'da-stan' }, daStanFace, daStanText);
   const daPanel = h('div', { class: 'da', hidden: true, role: 'region', 'aria-label': 'Driver Assistant', 'aria-live': 'polite' },
     h('div', { class: 'da-main' }, daArrow, h('div', { class: 'da-words' }, h('div', { class: 'da-top' }, daDist, daText), daNext, daNotes)),
-    h('div', { class: 'da-ctl' }, daVoice, daMaps, daClose));
+    h('div', { class: 'da-ctl' }, daStan, daVoice, daMaps, daClose));
 
   let daVoiceName = null;
   function speak(text) {
@@ -913,6 +923,9 @@ async function viewRun(ids) {
     daVoiceName ||= ['en-NZ', 'en-AU', 'en-GB', 'en'].map((l) => voices.find((v) => v.lang?.replace('_', '-').startsWith(l))).find(Boolean) || null;
     if (daVoiceName) u.voice = daVoiceName;
     u.lang = daVoiceName?.lang || 'en-NZ'; u.rate = 1;
+    if (stanOn()) u.pitch = 1.15; // a touch younger: it's Stan talking
+    const talk = (on) => { stanTalk(daStanFace, on); stanTalk(navStan, on); };
+    u.onstart = () => talk(true); u.onend = () => talk(false); u.onerror = () => talk(false);
     speechSynthesis.speak(u);
   }
   // iPhone only lets a page speak after a tap: the first tap anywhere while it's on unlocks it.
@@ -965,6 +978,9 @@ async function viewRun(ids) {
       : v.mode === 'gps' ? v.label : v.side ? `On your ${v.side}` : '';
     daNotes.textContent = (v.notes || []).join(' · ');
     daNotes.hidden = !v.notes?.length;
+    const state = v.routed ? 'route' : v.mode === 'turn' || v.mode === 'stop' ? 'point' : 'wait';
+    daStanText.textContent = { route: 'Turn by turn', point: 'Pointing the way', wait: v.mode === 'gps' ? 'Waiting for GPS' : v.mode === 'nopos' ? 'No position yet' : 'All done here' }[state];
+    stanState(daStanFace, state); stanState(navStan, state);
   }
   function assistant(on, byHand) {
     if (on === da.on) return;
@@ -979,7 +995,7 @@ async function viewRun(ids) {
       da.off = geo.onFix(daTick);
       guide.setStop(null);
       daTick(geo.last);
-    } else if ('speechSynthesis' in window) speechSynthesis.cancel();
+    } else { if ('speechSynthesis' in window) speechSynthesis.cancel(); stanTalk(daStanFace, false); stanTalk(navStan, false); }
     drawBar(body.querySelector('.tile.next'));
   }
 
@@ -1003,7 +1019,7 @@ async function viewRun(ids) {
   const offMotion = geo.onFix((f) => {
     const st = duty();
     if (!st?.onDuty || st.state === 'on_run') return;
-    if (motion.update(f)) { noteDuty('on_run', { source: 'auto', run_id: firstOpen() }, f); toast('On the run. Drive safe!'); }
+    if (motion.update(f)) { noteDuty('on_run', { source: 'auto', run_id: firstOpen() }, f); toast('On the run. Drive safe!', null, { stan: 'wave' }); }
   });
   function runDoneHere(runId) {
     const st = status();
@@ -1030,17 +1046,17 @@ async function viewRun(ids) {
           if (seg) [...seg.children].forEach((b, i) => b.setAttribute('aria-pressed', String(['all', ...here][i] === next)));
           render();
         }
-        toast(`✓ ${name} done. On to ${nextName}.`);
+        toast(`✓ ${name} done. On to ${nextName}.`, null, { stan: 'hop' });
         setTimeout(() => goNext(true), 600);
       } else {
         const go = () => { if (onDuty()) noteDuty('on_run', { source: 'move_on', run_id: next }, geo.last); location.hash = `#/r/${mine.filter((id) => !finished(id)).join('+')}`; };
-        toast(`✓ ${name} done. Next: ${nextName}.`, { label: `Go to ${nextName}`, fn: go });
+        toast(`✓ ${name} done. Next: ${nextName}.`, { label: `Go to ${nextName}`, fn: go }, { stan: 'hop' });
       }
       return;
     }
     if (onDuty() && (!mine.length || mine.every(finished))) {
-      toast(`✓ ${name} done. That’s all your runs.`, { label: 'Off duty', fn: () => goOffDuty() });
-    } else toast(`✓ ${name} done.`);
+      toast(`✓ ${name} done. That’s all your runs.`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
+    } else toast(`✓ ${name} done.`, null, { stan: 'hop' });
   }
   const updateSync = (n = app.store.pendingCount()) => {
     if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'st'; return; }
