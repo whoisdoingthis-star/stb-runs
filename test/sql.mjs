@@ -1,4 +1,4 @@
-import { EVENT_COLUMNS } from '../js/store.js';
+import { EVENT_COLUMNS, DUTY_COLUMNS } from '../js/store.js';
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'fs';
 const db = new PGlite();
@@ -163,3 +163,17 @@ await db.query(`insert into person_sequences(route, user_id, address_keys, updat
 check('a driver saves their own order', (await db.query(`select count(*)::int n from person_sequences where route='HOWICK06'`)).rows[0].n === 1);
 blocked = false; try { await db.query(`insert into person_sequences(route, user_id, address_keys) values ('HOWICK06', '22222222-2222-2222-2222-222222222222', '[]')`); } catch { blocked = true; }
 check('nobody can save an order in someone else’s name', blocked);
+
+// ---- On Duty ----
+await as('lisa@example.com');
+await db.query(`insert into duty_events(id, user_name, state, device_time) values (gen_random_uuid(), 'Lisa', 'on_duty', now())`);
+check('a driver goes on duty', (await db.query(`select count(*)::int n from duty_events where user_name='Lisa'`)).rows[0].n === 1);
+blocked = false; try { await db.query(`update duty_events set state='off_duty'`); const n = (await db.query(`select count(*)::int n from duty_events where state='off_duty'`)).rows[0].n; blocked = n === 0; } catch { blocked = true; }
+check('duty changes are never edited', blocked);
+blocked = false; try { await db.query(`insert into app_settings(key, value) values ('depot', '{"lat":-36.9,"lng":174.9}')`); } catch { blocked = true; }
+check('only a dispatcher sets the depot', blocked);
+await as('mike@example.com');
+await db.query(`insert into app_settings(key, value, updated_by) values ('depot', '{"lat":-36.9,"lng":174.9,"radius_m":150}', 'Mike')`);
+check('a dispatcher sets the depot', (await db.query(`select value->>'radius_m' r from app_settings where key='depot'`)).rows[0].r === '150');
+const dutyCols = (await db.query(`select column_name c from information_schema.columns where table_name='duty_events'`)).rows.map((r) => r.c);
+check('every duty field the app sends is a duty_events column', DUTY_COLUMNS.every((c) => dutyCols.includes(c)));

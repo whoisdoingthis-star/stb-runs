@@ -7,6 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
+import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -264,11 +265,103 @@ function dayName(iso) {
   return iso === t ? `Today · ${fmtDate(iso)}` : iso === tomorrow ? `Tomorrow · ${fmtDate(iso)}` : fmtDate(iso);
 }
 
+// ---- On Duty and My runs (decision 0020) -------------------------------
+// My runs: the runs I'm doing today, in the order I'll do them. Kept on this phone for the day.
+function myRuns() {
+  try { const v = JSON.parse(localStorage.getItem('stb.myruns') || 'null'); return v && v.date === nzToday() ? v.ids : []; } catch { return []; }
+}
+function setMyRuns(ids) { try { localStorage.setItem('stb.myruns', JSON.stringify({ date: nzToday(), ids })); } catch { /* private mode */ } }
+const duty = () => currentDuty(app.store.myDuty());
+const onDuty = () => !!duty()?.onDuty;
+/** Note a duty change, with where we are if we know (no new GPS prompt). */
+function noteDuty(state, extra = {}, fix) {
+  const f = fix && Date.now() - fix.t < 120000 ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc } : {};
+  return app.store.addDuty(state, { ...f, ...extra });
+}
+/** Already allowed to use GPS? Then one quick fix, else nothing (never asks on the Runs page). */
+async function quietFix() {
+  try {
+    const p = await navigator.permissions?.query({ name: 'geolocation' });
+    if (p?.state !== 'granted') return null;
+    return await new Promise((ok) => navigator.geolocation.getCurrentPosition(
+      (x) => ok({ lat: x.coords.latitude, lng: x.coords.longitude, acc: x.coords.accuracy, t: Date.now() }), () => ok(null), { maximumAge: 60000, timeout: 8000 }));
+  } catch { return null; }
+}
+function goOffDuty(after) {
+  const start = shiftStart(app.store.myDuty());
+  const close = openSheet('Go off duty?',
+    h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
+    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty. Shift ${start ? clock(Date.now() - start) : ''}. Thanks!`); after?.(); } }, 'Off duty'),
+    h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
+}
+/** The duty card on the Runs page: On duty button, or the shift timer and where I am. */
+function dutyCard(todayRuns, rerender) {
+  const st = duty();
+  const card = h('section', { class: `duty-card ${st?.onDuty ? 'on' : 'off'}`, 'aria-live': 'polite' });
+  const mine = myRuns().map((id) => todayRuns.find((r) => r.id === id)).filter(Boolean);
+  const mineRow = mine.length ? h('div', { class: 'my-runs' },
+    h('span', null, `My runs: ${mine.map((r) => `${runComplete(r) ? '✓ ' : ''}${shortRoute(r.route)}`).join(' → ')}`),
+    mine.some((r) => !runComplete(r)) ? h('button', { class: 'btn small primary', onclick: () => { location.hash = `#/r/${mine.filter((r) => !runComplete(r)).map((r) => r.id).join('+')}`; } }, 'Continue') : null) : null;
+  const pickBtn = todayRuns.length ? h('button', { class: 'btn', onclick: () => openMyRuns(todayRuns, rerender) }, mine.length ? 'Change my runs' : 'Choose my runs') : null;
+  if (!st?.onDuty) {
+    const hint = h('p', { class: 'muted duty-hint' }, 'Tap when you get to the depot. It counts sorting and loading too.');
+    card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), hint,
+      h('button', { class: 'btn primary big duty-btn', onclick: async () => { noteDuty('on_duty', {}, await quietFix()); rerender(); } }, 'On duty'),
+      mineRow, pickBtn].filter(Boolean));
+    // At the depot already? Say so (only if GPS is already allowed, and the depot is set in Dispatch).
+    app.store.getSetting('depot').then(async (dep) => {
+      if (!dep?.lat) return;
+      const f = await quietFix();
+      if (f && distanceM(f, dep) <= (dep.radius_m || 150) + Math.min(f.acc || 0, 100)) { hint.textContent = 'You’re at the depot. Tap On duty to start your shift.'; card.classList.add('at-depot'); }
+    }).catch(() => {});
+    return card;
+  }
+  const start = shiftStart(app.store.myDuty());
+  const where = st.run_id ? todayRuns.find((r) => r.id === st.run_id) : null;
+  const timer = h('span', { class: 'duty-timer' }, clock(Date.now() - start));
+  card.append(...[
+    h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
+    h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
+    mineRow, h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
+  card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
+  return card;
+}
+/** Pick today's runs in the order you'll do them; the app moves on to the next one by itself. */
+function openMyRuns(todayRuns, done) {
+  let order = myRuns().filter((id) => todayRuns.some((r) => r.id === id));
+  const list = h('div', { class: 'myruns-pick' });
+  const draw = () => list.replaceChildren(...[...todayRuns].sort((a, b) => a.route.localeCompare(b.route)).map((r) => {
+    const n = order.indexOf(r.id) + 1;
+    return h('button', { class: `btn big myrun ${n ? 'on' : ''}`, 'aria-pressed': String(!!n),
+      onclick: () => { order = n ? order.filter((x) => x !== r.id) : [...order, r.id]; draw(); } },
+    h('span', { class: 'myrun-n' }, n ? String(n) : ''), `${shortRoute(r.route)}${runComplete(r) ? ' (done)' : ''}`);
+  }));
+  draw();
+  const close = openSheet('My runs today',
+    h('p', { class: 'muted' }, 'Tap your runs in the order you’ll do them. When one is finished, the app moves on to the next.'),
+    list,
+    h('button', { class: 'btn primary big', style: 'margin-top:10px', onclick: () => {
+      setMyRuns(order);
+      close();
+      const left = order.filter((id) => !runComplete(todayRuns.find((r) => r.id === id) || {}));
+      if (left.length) location.hash = `#/r/${left.join('+')}`; else done?.();
+    } }, 'Start my runs'),
+    order.length ? h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => { setMyRuns([]); close(); done?.(); } }, 'Clear my runs') : null);
+}
+
 let homeTab = 'current'; // Runs to do | History (stays put while the app is open)
 async function viewHome() {
   const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, class: 'file-input', id: 'pdf' });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles([...fileInput.files]); });
   const list = h('div', null, h('p', { class: 'muted' }, 'Loading runs…'));
+  const dutySlot = h('div');
+  let dutyEl = null;
+  const drawDuty = (runs) => {
+    if (dutyEl?._timer) clearInterval(dutyEl._timer);
+    const today = nzToday();
+    dutyEl = dutyCard(runs.filter((r) => r.delivery_date === today), () => renderList());
+    dutySlot.replaceChildren(dutyEl);
+  };
   mount(h('div', { class: 'page home' },
     h('header', { class: 'home-top' },
       h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
@@ -277,6 +370,7 @@ async function viewHome() {
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: saved on this phone only.') : null,
     app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
     fileInput,
+    dutySlot,
     list));
 
   async function renderList() {
@@ -285,6 +379,7 @@ async function viewHome() {
       list.replaceChildren(h('div', { class: 'banner bad' }, `Could not load runs: ${e.message}`));
       return;
     }
+    drawDuty(runs);
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
         h('p', null, app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.'),
@@ -360,7 +455,7 @@ async function viewHome() {
   // New or replaced sheets (the evening fetch, a re-fetch, someone's upload) show up by themselves.
   let t;
   const unwatch = app.store.watchRuns(() => { clearTimeout(t); t = setTimeout(renderList, 1500); });
-  app.cleanup = () => { unwatch(); clearTimeout(t); };
+  app.cleanup = () => { unwatch(); clearTimeout(t); if (dutyEl?._timer) clearInterval(dutyEl._timer); };
 }
 
 // Settings (⚙ on the Runs page): reading, getting sheets, account.
@@ -901,6 +996,52 @@ async function viewRun(ids) {
 
   const geo = new Geo(() => { gpsChip.textContent = geo.label(); gpsChip.className = `st ${geo.state === 'ok' ? 'good' : geo.state === 'denied' ? 'warn' : ''}`; });
   geo.start();
+
+  // ---- On duty -> On the run (decision 0020): driving off, or the first tick, whichever comes first.
+  const firstOpen = () => data.find((d) => !runDoneHere(d.run.id))?.run.id || data[0].run.id;
+  const motion = new MotionWatch();
+  const offMotion = geo.onFix((f) => {
+    const st = duty();
+    if (!st?.onDuty || st.state === 'on_run') return;
+    if (motion.update(f)) { noteDuty('on_run', { source: 'auto', run_id: firstOpen() }, f); toast('On the run. Drive safe!'); }
+  });
+  function runDoneHere(runId) {
+    const st = status();
+    const d = data.find((x) => x.run.id === runId);
+    return !!d && (!!d.run.closed_at || (d.lines.length > 0 && d.lines.every((l) => st[`${l.run_id}::${l.line_key}`]?.done)));
+  }
+  // A run just finished: on to the next of My runs (here in this list, or open it), or offer Off duty.
+  async function runFinished(runId) {
+    const name = shortRoute(data.find((d) => d.run.id === runId).run.route);
+    const mine = myRuns();
+    const here = data.map((d) => d.run.id);
+    let all = [];
+    try { all = await app.store.listRuns(); } catch { /* offline: go by what's open */ }
+    const finished = (id) => (here.includes(id) ? runDoneHere(id) : runComplete(all.find((r) => r.id === id) || {}));
+    const at = mine.indexOf(runId);
+    const next = [...mine.slice(at + 1), ...mine.slice(0, Math.max(at, 0))].find((id) => id !== runId && !finished(id));
+    if (next) {
+      const nextRun = data.find((d) => d.run.id === next)?.run || all.find((r) => r.id === next);
+      const nextName = nextRun ? shortRoute(nextRun.route) : 'your next run';
+      if (here.includes(next)) {
+        if (onDuty()) noteDuty('on_run', { source: 'move_on', run_id: next }, geo.last);
+        if (S.show !== 'all' && S.show !== next) {
+          S.show = next;
+          if (seg) [...seg.children].forEach((b, i) => b.setAttribute('aria-pressed', String(['all', ...here][i] === next)));
+          render();
+        }
+        toast(`✓ ${name} done. On to ${nextName}.`);
+        setTimeout(() => goNext(true), 600);
+      } else {
+        const go = () => { if (onDuty()) noteDuty('on_run', { source: 'move_on', run_id: next }, geo.last); location.hash = `#/r/${mine.filter((id) => !finished(id)).join('+')}`; };
+        toast(`✓ ${name} done. Next: ${nextName}.`, { label: `Go to ${nextName}`, fn: go });
+      }
+      return;
+    }
+    if (onDuty() && (!mine.length || mine.every(finished))) {
+      toast(`✓ ${name} done. That’s all your runs.`, { label: 'Off duty', fn: () => goOffDuty() });
+    } else toast(`✓ ${name} done.`);
+  }
   const updateSync = (n = app.store.pendingCount()) => {
     if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'st'; return; }
     syncChip.textContent = n ? `${n} to send` : 'All sent';
@@ -926,7 +1067,13 @@ async function viewRun(ids) {
       if (fresh) Object.assign(e, { lat: geo.last.lat, lng: geo.last.lng, accuracy_m: geo.last.acc, fix_age_ms: now - geo.last.t });
       return e;
     });
+    const wasDone = done ? [...new Set(lines.map((l) => l.run_id))].filter(runDoneHere) : [];
     S.events.push(...evs);
+    if (done) {
+      const st = duty();
+      if (st?.onDuty && st.state !== 'on_run') noteDuty('on_run', { source: 'tick', run_id: lines[0].run_id }, geo.last);
+      for (const id of new Set(lines.map((l) => l.run_id))) if (!wasDone.includes(id) && runDoneHere(id)) setTimeout(() => runFinished(id), 300);
+    }
     if (done) for (const l of lines) { da.myTicks[l.route] = (da.myTicks[l.route] || 0) + 1; if (da.myTicks[l.route] === 10) setPref(`stb-knows-${l.route}`, '1'); }
     S.flash = done ? flashKey : null;
     app.store.addEvents(evs, !fresh);
@@ -1649,7 +1796,7 @@ async function viewRun(ids) {
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onCancel);
     document.removeEventListener('touchmove', blockScroll);
-    geo.stop(); unsub(); offSync(); clearInterval(poll); clearInterval(clock); clearTimeout(noteTimer); rhWatch?.disconnect();
+    geo.stop(); offMotion(); unsub(); offSync(); clearInterval(poll); clearInterval(clock); clearTimeout(noteTimer); rhWatch?.disconnect();
     window.removeEventListener('online', refresh);
     window.removeEventListener('pagehide', unsub);
     document.removeEventListener('visibilitychange', refresh);

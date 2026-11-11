@@ -46,7 +46,7 @@ class Base {
   onSync(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emitSync() { for (const fn of this.listeners) fn(this.pendingCount()); }
   pending() { return LS.get('stb.pending', []); }
-  pendingCount() { return this.pending().length + Object.keys(this.pendingSeqs()).length; }
+  pendingCount() { return this.pending().length + Object.keys(this.pendingSeqs()).length + this.pendingDuty().length; }
   cacheRun(id, data) { LS.set(`stb.run.${id}`, data); }
   cachedRun(id) { return LS.get(`stb.run.${id}`, null); }
   cacheEvents(id, evs) { LS.set(`stb.events.${id}`, evs); }
@@ -116,6 +116,21 @@ class Base {
     LS.set('stb.seqpending', { ...this.pendingSeqs(), [route]: v });
     this.flush();
   }
+  // ---- On Duty (decision 0020): my own duty changes, kept on the phone, sent when there is signal ----
+  pendingDuty() { return LS.get('stb.dutypending', []); }
+  /** My duty changes from the last 36 hours, oldest first. */
+  myDuty() {
+    const since = Date.now() - 36 * 3600e3;
+    return LS.get('stb.duty', []).filter((e) => Date.parse(e.device_time) > since);
+  }
+  addDuty(state, extra = {}) {
+    const ev = { id: uuid(), user_name: this.me?.name || 'Me', state, source: 'tap', device_time: new Date().toISOString(), ...extra };
+    for (const k of Object.keys(ev)) if (ev[k] === undefined || ev[k] === null) delete ev[k];
+    LS.set('stb.duty', [...this.myDuty(), ev]);
+    LS.set('stb.dutypending', [...this.pendingDuty(), ev]);
+    this.flush();
+    return ev;
+  }
   sendable() {
     const now = Date.now();
     return this.pending().filter((e) => !e._hold || now - e._hold > HOLD_MS).map((e) => {
@@ -127,6 +142,7 @@ class Base {
 }
 
 const HOLD_MS = 10000;
+export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m'];
 export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device', 'outcome', 'reason', 'qty_delivered', 'method'];
 
 // ---------------------------------------------------------------------------
@@ -181,8 +197,12 @@ export class LocalStore extends Base {
     const sent = new Set(this.sendable().map((e) => e.id));
     LS.set('stb.pending', this.pending().filter((e) => !sent.has(e.id)));
     LS.set('stb.seqpending', {});
+    LS.set('stb.dutypending', []);
     this.emitSync();
   }
+  async loadDuty() { return this.myDuty(); }
+  async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
+  async setSetting(key, value) { LS.set(`stb.setting.${key}`, value); }
   // Demo mode: tabs on the same device talk to each other, so a second tab
   // behaves like a second driver (handy for trying out working a run together).
   bc() { if (!this._bc && 'BroadcastChannel' in window) this._bc = new BroadcastChannel('stb-demo'); return this._bc; }
@@ -487,6 +507,38 @@ export class SupabaseStore extends Base {
     if (error) throw error;
     LS.set(`stb.codes.${route}`, codes);
   }
+  async flushDuty() {
+    const batch = this.pendingDuty().map((e) => Object.fromEntries(DUTY_COLUMNS.filter((k) => e[k] !== undefined).map((k) => [k, e[k]])));
+    if (!batch.length) return;
+    const { error } = await this.sb.from('duty_events').upsert(batch, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) throw error;
+    const sent = new Set(batch.map((e) => e.id));
+    LS.set('stb.dutypending', this.pendingDuty().filter((e) => !sent.has(e.id)));
+  }
+  /** Everyone's duty changes between two times (for Dispatch), or mine today if the table isn't there yet. */
+  async loadDuty(from, to) {
+    try {
+      let q = this.sb.from('duty_events').select('*').order('device_time');
+      if (from) q = q.gte('device_time', from);
+      if (to) q = q.lt('device_time', to);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data;
+    } catch { return this.myDuty(); }
+  }
+  async getSetting(key) {
+    try {
+      const { data, error } = await this.sb.from('app_settings').select('value').eq('key', key).maybeSingle();
+      if (error) throw error;
+      if (data) LS.set(`stb.setting.${key}`, data.value);
+      return data ? data.value : null;
+    } catch { return LS.get(`stb.setting.${key}`, null); }
+  }
+  async setSetting(key, value, by) {
+    const { error } = await this.sb.from('app_settings').upsert({ key, value, updated_by: by, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    LS.set(`stb.setting.${key}`, value);
+  }
   async flushSeqs() {
     for (const [route, v] of Object.entries(this.pendingSeqs())) {
       // A driver's order goes to their own row; if that can't be saved it waits on the phone
@@ -506,6 +558,7 @@ export class SupabaseStore extends Base {
     if (this.flushing || !navigator.onLine) return;
     this.flushing = true;
     try { await this.flushSeqs(); } catch { /* offline */ }
+    try { await this.flushDuty(); } catch { /* offline */ }
     this.flushing = false;
     const batch = this.sendable();
     if (!batch.length) { this.emitSync(); return; }

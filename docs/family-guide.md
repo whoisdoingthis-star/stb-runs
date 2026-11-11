@@ -26,6 +26,13 @@ These are remembered on that phone only.
 - **⚙ Settings**: text size, colours, tiles, the opening's sound, **Get Runs from RouteSmart** (use it if a change is phoned in), **Upload a run sheet**, change password, sign out.
 - Two tabs at the top: **Runs to do** shows only today's and upcoming runs that aren't finished. **History** has every finished run (all stops ticked, or closed by Mike after a paper run) and earlier days. A run moves to History by itself once it's done, so the screen stays clean. You can still open a run from History.
 
+### On duty and My runs
+- When you get to the depot, tap **On duty** (the big button at the top of the Runs page). A clock starts: it counts sorting and loading too. If the phone knows you're at the depot it says so.
+- It changes to **On the run** by itself when you drive off, or when you tick your first stop.
+- **Choose my runs**: tap your runs in the order you'll do them (a number appears on each), then **Start my runs**. When you finish one, the app says "✓ Run 11 done. On to Run 6" and carries on with the next.
+- Helping someone else finish theirs? Just open their run and tick. When it's done, the app offers **Go to** your next run.
+- At the end, tap **Off duty**. After your last run the app asks if you're finished.
+
 ## Doing a run
 If you do a run on the **paper sheet**, that's fine: Mike closes it in Dispatch afterwards and it shows on the Runs page as **✓ Closed, done on paper by** you. You can still open it.
 

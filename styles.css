@@ -673,3 +673,36 @@ html.big .da-next, html.big .da-notes { font-size: 19px; }
 .da-arrow.arrived svg { display: none; }
 .da-arrow.arrived .da-here { display: block; }
 .ab-btn[aria-pressed="true"] { border-color: var(--next); color: var(--next); background: color-mix(in srgb, var(--next) 18%, transparent); }
+
+/* ---- On Duty card and My runs (decision 0020) ---- */
+.duty-card { background: var(--card); border: 2px solid var(--edge); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px; display: grid; gap: 8px; }
+.duty-card.on { border-color: var(--done-line); background: var(--done-bg); }
+.duty-card.at-depot { border-color: var(--info); }
+.duty-state { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: var(--t-l); font-weight: 800; }
+.duty-timer { font-variant-numeric: tabular-nums; font-size: var(--t-xl); }
+.duty-hint { margin: 0; font-size: var(--t-s); }
+.duty-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.my-runs { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; }
+.myruns-pick { display: grid; gap: 8px; }
+.myrun { display: flex; align-items: center; gap: 12px; justify-content: flex-start; }
+.myrun.on { border-color: var(--done-line); background: var(--done-bg); }
+.myrun-n { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--edge); font-weight: 800; }
+.myrun.on .myrun-n { background: var(--done); border-color: var(--done); color: var(--card); }
+html.big .duty-hint { font-size: 18px; }
+html.big .duty-actions { grid-template-columns: 1fr; }
+/* Dispatch: shift bars (no green except own delivering; colour is never the only cue: hover text and the line under each bar) */
+.dz-shift { margin: 0 0 14px; }
+.dz-shift-head { margin-bottom: 4px; }
+.dz-duty-now { color: var(--done); font-weight: 700; }
+.dz-shift-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; border: 1px solid var(--edge); margin-bottom: 4px; }
+.dz-shift-bar i, .dz-shift-key i { display: block; height: 100%; }
+.dz-shift-key { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0; }
+.dz-shift-key span { display: inline-flex; align-items: center; gap: 6px; }
+.dz-shift-key i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--edge); }
+.sg-depot { background: #64748b; }
+.sg-travel { background: var(--info-bg); background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(29,78,216,.35) 4px 6px); }
+.sg-run { background: var(--done-line); }
+.sg-help { background: var(--next); }
+.sg-between { background: var(--warn); }
+.sg-pause { background: var(--warn-bg); }
+.sg-wrap { background: var(--line); }

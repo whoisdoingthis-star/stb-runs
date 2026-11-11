@@ -13,6 +13,11 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 - **Delivery score (DIFOTIS)** per run: delivered, in full (not short), on time (inside the address's time policies, or on the day), in spec (no wet, damaged or wrong-paper complaint for that day), and couldn't deliver. See [business rules](business-rules.md#delivery-outcomes).
 - **Items to collect** and **Recent photos**.
 
+### Shifts and the depot (Overview)
+- **Shifts**: one bar per person for the day: depot (grey), driving to a run (striped), own runs (green), helping (purple), between runs (orange), stopped (pale yellow), after the last stop. Hover a piece for its times. Under it: the totals, and each run's time including getting there.
+- People who didn't tap On duty show from first to last tick; a shift with no Off duty says so.
+- **Depot**: *Set the depot…* takes a long Google Maps link (open a short goo.gl link first, then copy the address bar) or **Use my location** while standing there. Phones use it to say "You're at the depot".
+
 ## Complaints
 - The **Overview** lists the complaints on today's sheet with a one-line summary: what happened and when ("Missed delivery on Sat 7 Nov"), the delivery record (who ticked it and when, with 📷 if there's a photo, or "Before the app"), and the customer's history ("2nd of 2 from this address · previous Fri 2 Oct").
 - The **Complaints** page is the full register: every complaint from every sheet, kept once. Filter by period, run, kind, status, or search an address, driver or note.

@@ -136,6 +136,14 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 - Only dispatchers can close or reopen a run, set its driver, or enter paper ticks (enforced by the database).
 - Paper ticks have no GPS, so they never feed learned letterbox positions or delivery order; they do count in DIFOTIS (on time = the finish time entered).
 
+## On duty and shifts (Mike, 12 Nov 2026)
+- **On duty** is tapped at the depot, so sorting and loading count. **On the run** happens by itself: about 30 seconds of driving (above 15 km/h) with the run open, or the first tick. **Off duty** at the end. ([decision 0020](decisions/0020-on-duty-and-shifts.md))
+- **My runs**: the runs you're doing today, in your order. When one is finished the app moves on to the next and notes the time.
+- **No minute goes missing.** A shift is split into depot, driving to a run, own runs, helping, stopped (10 minutes or more with no tick), between runs and after the last stop. The gap after helping someone counts as driving to your next run.
+- **Helping** shows on the helper's shift as *Helping (Moana)*; it doesn't change the run owner's figures. A run belongs to the driver it was closed with, else whoever ticked most of it.
+- Forgot Off duty: the shift ends at the last tick (after 12 hours). Ticks after Off duty aren't part of the shift.
+- **The depot** is set in Dispatch; within 150 m (changeable) counts as at the depot.
+
 ## Tracing a tile back to the sheet
 Every run keeps the SHA-256 fingerprint of the PDF it was read from (`runs.source_hash`), and every tile keeps each sheet line it came from: page, row, publication, quantity and the text exactly as printed. Lines are combined into one tile for the driver, never lost. (Governance baseline v0.5, adopted 9 Nov 2026)
 

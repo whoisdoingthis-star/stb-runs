@@ -23,6 +23,9 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `complaints` | The complaints register: one entry per complaint (address, paper, kind, date it happened) | Filled by a trigger on `run_lines` from complaint flags; first and last sheet that listed it; status (open, disputed, accepted, closed) and notes set by dispatchers. |
 | `dispatch_history` | Every change to people, locations, assignments and policies | Who, when, what (the row as JSON). Filled by triggers; the register filling itself isn't logged. |
 
+| `duty_events` | Each change of a person's duty: `state` (on_duty, on_run, between, off_duty), `run_id`, `source` (tap, auto = driving, tick, move_on, dispatch), `device_time`, position. Added, never edited. Members add their own; everyone on the list reads. ([decision 0020](decisions/0020-on-duty-and-shifts.md)) |
+| `app_settings` | Small settings by `key`, `value` as JSON. `depot` = `{ lat, lng, radius_m }`. Dispatchers write; everyone on the list reads. |
+
 ## Views
 - `line_status`: latest tick state per tile, with its outcome, reason, quantity delivered and method.
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.

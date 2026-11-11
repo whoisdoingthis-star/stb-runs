@@ -34,6 +34,7 @@ async function leaflet() {
 }
 
 import { runComplete } from './rows.js';
+import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
   if (app.store.mode !== 'shared') {
@@ -84,6 +85,11 @@ export async function viewDispatch(ctx, tab = 'overview') {
     D.clashes = (await sb.from('policy_clashes').select('*')).data || [];
     D.photos = ph.data || [];
     D.history = hi.data || [];
+    // Shifts (decision 0020): everyone's duty changes around the focus day, and where the depot is.
+    const from = new Date(Date.parse(`${focus}T00:00:00Z`) - 14 * 3600e3);
+    const nzDay = (t) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(t));
+    D.duty = (await app.store.loadDuty(from.toISOString(), new Date(from.getTime() + 40 * 3600e3).toISOString())).filter((e) => nzDay(e.device_time) === focus);
+    D.depot = await app.store.getSetting('depot');
   }
   // The delivery day the overview is about: today or the next one loaded, else the latest.
   function focusDate() {
@@ -306,12 +312,73 @@ export async function viewDispatch(ctx, tab = 'overview') {
         h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–'));
     const scoreCard = rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null;
     const itemsCard = card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–'));
+    const shiftsCard = card('Shifts', shiftsView(rs));
+    const depotCard = card('Depot', D.depot?.lat
+      ? h('p', null, `Set${D.depot.updated_by ? ` by ${D.depot.updated_by}` : ''}: ${D.depot.lat.toFixed(5)}, ${D.depot.lng.toFixed(5)} (within ${D.depot.radius_m || 150} m counts as at the depot). `,
+        h('a', { href: `https://www.google.com/maps/search/?api=1&query=${D.depot.lat},${D.depot.lng}`, target: '_blank', rel: 'noopener' }, 'Check on the map'))
+      : h('p', { class: 'warn' }, 'Not set yet. Phones can’t tell drivers they’re at the depot until it is.'),
+      h('button', { class: 'btn', onclick: () => setDepot() }, D.depot?.lat ? 'Change the depot…' : 'Set the depot…'));
     const photosCard = card('Recent photos', D.photos.length ? h('ul', { class: 'dz-attn' }, D.photos.map((ph) => h('li', null, `${fmtStamp(ph.taken_at)} · ${ph.address_key.split('|').slice(1).reverse().join(' ')} · ${ph.user_name || ''}`)))
         : h('p', { class: 'muted' }, 'No delivery photos yet.'));
     // Two columns on a laptop: the day's work on the left, what needs a look on the right (first on a phone).
     return h('div', { class: 'dz-over' },
-      h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard),
-      h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), scoreCard));
+      h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard, depotCard),
+      h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), shiftsCard, scoreCard));
+  }
+
+  // ---- Shifts: each person's morning as one bar, every minute accounted for (decision 0020)
+  function shiftsView(rs) {
+    const ticks = D.status.filter((x) => x.done && x.method !== 'paper' && x.user_name);
+    const owners = runOwners(rs, D.status);
+    const people = [...new Set([...D.duty.map((e) => e.user_name), ...ticks.map((x) => x.user_name)].filter(Boolean))].sort();
+    if (!people.length) return h('p', { class: 'muted' }, 'Nobody has gone on duty or ticked a stop this day yet.');
+    const name = (id) => shortRoute(rs.find((r) => r.id === id)?.route || '') || 'a run';
+    const hm = (t) => new Date(t).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+    const rows = people.map((p) => {
+      const duty = D.duty.filter((e) => e.user_name === p);
+      const x = shiftSegments({ duty, ticks: ticks.filter((k) => k.user_name === p), owners, me: p });
+      if (!x.start) return null;
+      const span = Math.max(1, x.end - x.start);
+      const now = currentDuty(duty);
+      const tip = (sg) => `${SEGMENT_LABEL[sg.kind]}${sg.run_id ? ` (${name(sg.run_id)})` : ''}: ${hm(sg.start)}–${hm(sg.end)}, ${clock(sg.end - sg.start)}`;
+      const parts = ['depot', 'travel', 'run', 'help', 'between', 'pause', 'wrap'].filter((k) => x.totals[k] >= 60000).map((k) => `${SEGMENT_LABEL[k]} ${clock(x.totals[k])}`);
+      return h('div', { class: 'dz-shift' },
+        h('div', { class: 'dz-shift-head' }, h('b', null, p),
+          ` ${hm(x.start)}–${x.open ? 'now' : hm(x.end)} · ${clock(x.totals.shift)}`,
+          x.forgot ? h('span', { class: 'small warn' }, ' · didn’t tap Off duty (ends at the last tick)') : null,
+          x.open ? h('span', { class: 'dz-duty-now' }, ` · ${DUTY_LABEL[now.state]}${now.run_id ? `: ${name(now.run_id)}` : ''}`) : null,
+          duty.length ? null : h('span', { class: 'small muted' }, ' · didn’t tap On duty (from first to last tick)')),
+        h('div', { class: 'dz-shift-bar', role: 'img', 'aria-label': x.segments.map(tip).join('; ') },
+          x.segments.map((sg) => h('i', { class: `sg-${sg.kind}`, title: tip(sg), style: `width:${(100 * (sg.end - sg.start)) / span}%` }))),
+        h('div', { class: 'small muted' }, parts.join(' · ')),
+        Object.keys(x.perRun).length ? h('div', { class: 'small' }, Object.entries(x.perRun).map(([id, d]) => `${name(id)} ${clock(d)}${owners[id] && owners[id] !== p ? ` (helping ${owners[id]})` : ''}`).join(' · ')) : null);
+    }).filter(Boolean);
+    return h('div', null, rows,
+      h('div', { class: 'dz-shift-key small' }, ['depot', 'travel', 'run', 'help', 'between', 'pause', 'wrap'].map((k) => h('span', null, h('i', { class: `sg-${k}` }), SEGMENT_LABEL[k]))),
+      h('p', { class: 'small muted' }, 'Driving to a run includes the gap after helping someone, up to your next run’s first tick. Times for each run include getting there.'));
+  }
+
+  // ---- Depot: paste a Maps link, or stand there and use this phone's location
+  function setDepot() {
+    const input = h('input', { type: 'text', placeholder: 'Paste a Google Maps link, or -36.91, 174.93', value: D.depot?.lat ? `${D.depot.lat}, ${D.depot.lng}` : '' });
+    const radius = h('select', null, [100, 150, 250, 400].map((m) => h('option', { value: m, selected: (D.depot?.radius_m || 150) === m }, `${m} m`)));
+    const msg = h('p', { class: 'small muted' }, 'Short links (goo.gl) can’t be read here: open the link, then copy the long address from the browser and paste that. Or stand at the depot and tap Use my location.');
+    const close = openSheet('Where is the depot?',
+      h('label', { class: 'field' }, h('span', null, 'Maps link or position'), input),
+      h('label', { class: 'field' }, h('span', null, 'Counts as at the depot within'), radius),
+      msg,
+      h('div', { class: 'dz-actions' },
+        h('button', { class: 'btn', onclick: () => navigator.geolocation.getCurrentPosition(
+          (x) => { input.value = `${x.coords.latitude.toFixed(6)}, ${x.coords.longitude.toFixed(6)}`; msg.textContent = `Got it (to about ${Math.round(x.coords.accuracy)} m). Tap Save.`; },
+          () => { msg.textContent = 'Couldn’t get this phone’s location. Allow location for this site, or paste a link.'; }, { enableHighAccuracy: true, timeout: 15000 }) }, 'Use my location'),
+        h('button', { class: 'btn primary', onclick: async () => {
+          const p = parseLatLng(input.value);
+          if (!p || p.short) { msg.textContent = p?.short ? 'That’s a short link: open it, then paste the long one from the address bar.' : 'That doesn’t look like a Maps link or a position.'; msg.className = 'small bad'; return; }
+          try {
+            await app.store.setSetting('depot', { ...p, radius_m: Number(radius.value), updated_by: by() }, by());
+            close(); toast('Depot saved.'); await refresh();
+          } catch (e) { msg.textContent = `Couldn’t save: ${e.message}`; msg.className = 'small bad'; }
+        } }, 'Save')));
   }
 
   // ================= Complaints =================

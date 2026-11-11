@@ -8,7 +8,7 @@ const T = {
   runs: [{ id: 'r6', route: 'HOWICK06', delivery_date: '2026-11-09', summary: { lines: 98, copies: 115, byPub: { NZH: 100, NZHR: 13, WD: 2 }, dockets: 2 }, checks: [{ ok: true, label: 'NZH' }], warnings: [], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 1, items: ['13 Ambrose Lane: NZH ×1 → NZH ×2'] } }, { id: 'r8', route: 'HOWICK08', delivery_date: '2026-11-09', summary: { lines: 66, copies: 70, byPub: { NZH: 70 } }, checks: [{ ok: true }], warnings: ['x'], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 0, items: [] } }],
   complaint_register: [{ id: 'c1', address_key: 'K|BROOMFIELDS ROAD|70', route: 'HOWICK13', number: '70', street: 'BROOMFIELDS ROAD', kind: 'MISSED', happened_on: '2026-11-07', publication: 'NZH', service: 'WKLY7', description: 'Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)', reported_on: '2026-11-09', last_seen_on: '2026-11-09', status: 'open', customer_complaints: 2, customer_complaint_no: 2, previous_complaint_on: '2026-10-02', delivered_by: null }, { id: 'c2', address_key: 'K|CLIFTON ROAD|401', route: 'HOWICK13', number: '401', street: 'CLIFTON ROAD', kind: 'MISSED', happened_on: '2026-11-10', publication: 'NZH', description: 'Missed delivery on Tue 10 Nov', reported_on: '2026-11-09', last_seen_on: '2026-11-09', status: 'open', customer_complaints: 1, customer_complaint_no: 1, delivered_by: 'Lisa', delivered: true, delivered_at: '2026-11-09T16:42:00Z', photos_that_day: 1 }],
   complaints: [], policy_clashes: [], tap_events: [], run_progress: [{ run_id: 'r8', done: 1, not_delivered: 0 }],
-  line_status: [{ run_id: 'r6', line_key: 'a', done: true, user_name: 'Mike', device_time: '2026-11-09T05:10:00Z' }, { run_id: 'r8', line_key: 'K|AMON|101', done: true, outcome: 'delivered', user_name: 'Lisa', device_time: '2026-11-09T05:10:00Z' }],
+  line_status: [{ run_id: 'r6', line_key: 'a', done: true, user_name: 'Mike', device_time: '2026-11-08T16:10:00Z' }, { run_id: 'r8', line_key: 'K|AMON|101', done: true, outcome: 'delivered', user_name: 'Lisa', device_time: '2026-11-08T17:10:00Z' }],
   run_lines: [{ run_id: 'r6', number: '70', street: 'BROOMFIELDS ROAD', flags: [{ type: 'complaint' }] },
     { run_id: 'r8', line_key: 'K|AMON|101', address_key: 'K|AMON|101', number: '101', street: 'AMON', flags: [] },
     { run_id: 'r8', line_key: 'K|AMON|102', address_key: 'K|AMON|102', number: '102', street: 'AMON', flags: [] },
@@ -19,6 +19,14 @@ const T = {
     { address_key: 'HOWICK|UXBRIDGE ROAD|25', area: 'HOWICK', street: 'UXBRIDGE ROAD', number: '25', routes: ['HOWICK06'], first_seen: '2026-11-06', last_seen: '2026-11-09', gps_lat: -36.899, gps_lng: 174.931, gps_taps: 1, gps_accuracy_m: 12 },
   ],
 };
+// A morning like Mike's on 12 Nov (here on 9 Nov): depot 4:40, Run 6, helping Mum on Run 11, a gap, Run 13 by Lisa's runs.
+T.runs.push({ id: 'r11', route: 'HOWICK11', delivery_date: '2026-11-09', summary: { lines: 40, copies: 40 }, checks: [{ ok: true }], warnings: [], updated_at: '2026-11-08T06:53:00Z', source: 'auto' });
+const nz = (hm) => new Date(`2026-11-09T${hm}:00+13:00`).toISOString();
+const span = (run_id, who, a, b) => { const out = []; for (let t = Date.parse(nz(a)); t <= Date.parse(nz(b)); t += 60000) out.push({ run_id, line_key: `${run_id}-${t}`, done: true, outcome: 'delivered', user_name: who, device_time: new Date(t).toISOString() }); return out; };
+T.line_status.push(...span('r6', 'Mike', '05:02', '05:35'), ...span('r11', 'Moana', '04:55', '05:36'), ...span('r11', 'Mike', '05:38', '05:41'), ...span('r8', 'Lisa', '05:52', '06:20'));
+T.duty = [{ user_name: 'Mike', state: 'on_duty', device_time: nz('04:40') }, { user_name: 'Mike', state: 'on_run', run_id: 'r6', source: 'auto', device_time: nz('04:58') }, { user_name: 'Mike', state: 'off_duty', device_time: nz('06:25') },
+  { user_name: 'Lisa', state: 'on_duty', device_time: nz('05:20') }];
+T.settings = {};
 const view = (t) => t === 'address_register' ? T.addresses.map((a) => ({ ...a, operating_name: T.operating_locations.find((o) => o.id === a.operating_location_id)?.name, service_name: T.service_locations.find((s) => s.id === a.service_location_id)?.name })) : T[t];
 window.calls = [];
 function from(t) {
@@ -56,6 +64,6 @@ const fmtDate = (iso) => iso;
 const changeSummary = (r, ch) => `${shortRoute(r)}: ${ch.count} changed`;
 window.confirm = () => true;
 const openSheet = (title, ...content) => { const close = () => panel.remove(); const panel = h('div', { class: 'sheet-backdrop' }, h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-head' }, h('h2', null, title)), ...content.map((c) => (typeof c === 'function' ? c(close) : c)))); document.body.append(panel); return close; };
-await viewDispatch({ app: { store: { mode: 'shared', sb }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary, openSheet }, location.hash.slice(1) || 'overview');
+await viewDispatch({ app: { store: { mode: 'shared', sb, loadDuty: async () => T.duty, getSetting: async (k) => T.settings[k] || null, setSetting: async (k, v) => { T.settings[k] = v; } }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary, openSheet }, location.hash.slice(1) || 'overview');
 window.ready = true;
 </script></body></html>

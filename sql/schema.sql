@@ -857,3 +857,39 @@ create policy person_sequences_read on public.person_sequences for select to aut
 drop policy if exists person_sequences_own on public.person_sequences;
 create policy person_sequences_own on public.person_sequences for all to authenticated
   using (public.is_member() and user_id = auth.uid()) with check (public.is_member() and user_id = auth.uid());
+
+-- ---- On Duty (Mike, 12 Nov 2026; docs/decisions/0020-on-duty-and-shifts.md) ----
+-- Each change of a person's duty status, never edited: on_duty (tapped at the depot),
+-- on_run (drove off / moved on to a run, with run_id), between, off_duty.
+create table if not exists public.duty_events (
+  id          uuid primary key,
+  user_id     uuid not null default auth.uid(),
+  user_name   text,
+  state       text not null check (state in ('on_duty', 'depot', 'on_run', 'between', 'off_duty')),
+  run_id      text references public.runs (id) on delete set null,
+  source      text not null default 'tap' check (source in ('tap', 'auto', 'tick', 'move_on', 'dispatch')),
+  device_time timestamptz not null,
+  server_time timestamptz not null default now(),
+  lat double precision, lng double precision, accuracy_m double precision
+);
+create index if not exists duty_events_day on public.duty_events (device_time);
+alter table public.duty_events enable row level security;
+drop policy if exists duty_events_read on public.duty_events;
+create policy duty_events_read on public.duty_events for select to authenticated using (public.is_member());
+drop policy if exists duty_events_add on public.duty_events;
+create policy duty_events_add on public.duty_events for insert to authenticated
+  with check (public.is_member() and (user_id = auth.uid() or public.is_dispatcher()));
+-- No update or delete policy: like ticks, duty changes are only ever added.
+
+-- ---- App settings (dispatchers set, everyone reads): the depot's location for now.
+create table if not exists public.app_settings (
+  key        text primary key,
+  value      jsonb not null,
+  updated_by text,
+  updated_at timestamptz not null default now()
+);
+alter table public.app_settings enable row level security;
+drop policy if exists app_settings_read on public.app_settings;
+create policy app_settings_read on public.app_settings for select to authenticated using (public.is_member());
+drop policy if exists app_settings_write on public.app_settings;
+create policy app_settings_write on public.app_settings for all to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());
