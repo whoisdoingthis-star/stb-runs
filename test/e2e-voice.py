@@ -67,15 +67,15 @@ with sync_playwright() as p:
     page.mouse.click(5, 5)  # a tap, as on a real phone, unlocks sound
     drive(5, 0); drive(20, 0, 2800); drive(40, 0, 2500)
     st = page.evaluate(STATE); said = page.evaluate('__said')
-    check('Stan says the Assistant\u2019s lines in his own voice, not the phone\u2019s', st['played'] >= 1 and not said, f"{st} phone said {said}")
-    check('the stop\u2019s likely lines were got ready early', st['lines'] >= 3, str(st))
+    check('Stan says the Assistant’s lines in his own voice, not the phone’s', st['played'] >= 1 and not said, f"{st} phone said {said}")
+    check('the stop’s likely lines were got ready early', st['lines'] >= 3, str(st))
 
     page.goto(BASE + '/demo/#/'); page.wait_for_selector('.duty-card'); page.wait_for_selector('.splash', state='detached', timeout=6000)
     page.locator('[aria-label="Settings"]').click(); page.wait_for_selector('.voice-status')
     check('Settings shows his voice is ready', 'ready on this phone' in page.inner_text('.voice-status'), page.inner_text('.voice-status'))
     page.locator('.sheet').screenshot(path='/tmp/voice-settings.png')
     page.locator('.sheet button', has_text='Phone').click(); page.wait_for_selector('.voice-status')
-    check('Voice: Phone\u2019s switches back to the phone\u2019s voice', page.evaluate("localStorage.getItem('stb-voice')") == 'phone' and 'phone' in page.inner_text('.voice-status').lower())
+    check('Voice: Phone’s switches back to the phone’s voice', page.evaluate("localStorage.getItem('stb-voice')") == 'phone' and 'phone' in page.inner_text('.voice-status').lower())
     check('no page errors', not errors, str(errors))
     b.close()
 
