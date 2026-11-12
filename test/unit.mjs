@@ -52,3 +52,16 @@ t('Different publications at one address share a tile, NZH first', () => { const
   t('Stan’s tip changes the next day', () => assert.notEqual(tipOfDay(new Date('2026-11-12T00:00:00Z')), tipOfDay(new Date('2026-11-13T00:00:00Z'))));
   t('Stan’s tips are short', () => assert.ok(DISPATCH_TIPS.every((x) => x.length <= 120)));
 }
+
+// ---- Stan's own voice: how a line is split and said (decision 0023) ----
+{
+  const { speakable, STAN } = await import('../js/stanvoice.js');
+  const parts = speakable('In 200 m, turn left onto Moore St. Then, 2 papers: Herald box.');
+  t('Stan pauses at commas and full stops', () => assert.deepEqual(parts.map((p) => p.text), ['In 200 metres,', 'turn left onto Moore Street.', 'Then,', '2 papers:', 'Herald box.']));
+  t('a full stop is a longer pause than a comma', () => assert.ok(parts[1].pause > parts[0].pause));
+  t('Stan says road names in full', () => assert.equal(speakable('27 Luplau Cres').map((p) => p.text).join(' '), '27 Luplau Crescent'));
+  t('Stan says kilometres in full', () => assert.equal(speakable('1.2 km').map((p) => p.text).join(' '), '1.2 kilometres'));
+  t('St Heliers keeps its Saint-style St (only "Name St" becomes Street)', () => assert.equal(speakable('St Heliers Bay Rd')[0].text, 'St Heliers Bay Road'));
+  t('nothing to say is nothing', () => assert.deepEqual(speakable('  ... '), []));
+  t('Stan’s chosen voice is recorded', () => assert.deepEqual([STAN.voice, STAN.speaker], ['vctk', 'p316']));
+}

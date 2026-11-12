@@ -123,6 +123,15 @@ export class Guide {
     this.leg = stop ? { stop, route: null, routing: false, routedAt: 0, said: new Set(), off: 0, startedAt: Date.now() } : null;
   }
 
+  /** Lines this leg will probably say, so Stan's voice can get them ready before they're needed. */
+  likelyLines() {
+    const L = this.leg; if (!L) return [];
+    const s = L.stop; const name = s.spoken || s.label;
+    const notes = s.notes?.length ? ` ${s.notes.join('. ')}.` : '';
+    return [`Next stop, ${name}.`, ...['', ', on your left', ', on your right'].map((side) => `Arriving. ${name}${side}.${notes}`),
+      ...(L.route?.steps || []).slice(0, 6).map((st) => `${st.text}.`)];
+  }
+
   courseFrom(fix) {
     if (fix.heading != null && (fix.speed ?? 0) > 2) this.course = fix.heading;
     else if (this.prev && distance(this.prev, fix) > 8) this.course = bearing(this.prev, fix);

@@ -59,3 +59,14 @@ await t('notes read out: papers, sheet note, stop', () => {
 });
 
 if (failed) { console.log(`${failed} failed`); process.exit(1); }
+
+// ---- lines Stan's voice gets ready early (decision 0023) ----
+{
+  const { Guide } = await import('../js/assistant.js');
+  const g = new Guide({});
+  g.setStop({ key: 'k1', label: '27 Luplau Crescent', spoken: '27 Luploe Crescent', notes: ['2 papers'], at: { lat: -36.9, lng: 174.93 } });
+  const lines = g.likelyLines();
+  t('Stan gets the next-stop and arriving lines ready early', () => { assert.ok(lines.includes('Next stop, 27 Luploe Crescent.')); assert.ok(lines.includes('Arriving. 27 Luploe Crescent, on your left. 2 papers.')); });
+  g.setStop(null);
+  t('no stop, nothing to get ready', () => assert.deepEqual(g.likelyLines(), []));
+}

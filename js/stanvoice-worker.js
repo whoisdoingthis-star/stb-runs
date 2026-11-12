@@ -94,8 +94,17 @@ async function say({ id, text, lengthScale, noiseScale, noiseW }) {
   postMessage({ type: 'audio', id, pcm, sampleRate: config.audio.sample_rate }, [pcm.buffer]);
 }
 
-let chain = Promise.resolve(); // one line at a time
+// One line at a time; something to say now goes ahead of lines being got ready early.
+const todo = []; let busy = false;
+async function next() {
+  if (busy || !todo.length) return;
+  busy = true;
+  const i = todo.findIndex((j) => j.urgent);
+  const job = todo.splice(i >= 0 ? i : 0, 1)[0];
+  try { await say(job); } catch (e) { postMessage({ type: 'error', id: job.id, message: String(e.message || e) }); }
+  busy = false; next();
+}
 onmessage = ({ data }) => {
   if (data.type === 'init') init(data).catch((e) => postMessage({ type: 'error', message: String(e.message || e) }));
-  if (data.type === 'say') chain = chain.then(() => say(data)).catch((e) => postMessage({ type: 'error', id: data.id, message: String(e.message || e) }));
+  if (data.type === 'say') { todo.push(data); next(); }
 };

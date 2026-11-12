@@ -8,6 +8,7 @@ import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js';
+import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -266,6 +267,52 @@ function dayName(iso) {
   return iso === t ? `Today · ${fmtDate(iso)}` : iso === tomorrow ? `Tomorrow · ${fmtDate(iso)}` : fmtDate(iso);
 }
 
+// ---- Stan's own voice (decision 0023) ------------------------------------
+const wantStanVoice = () => stanOn() && voicePref() === 'stan' && typeof Worker !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext);
+/** On Wi-Fi (as far as the phone will say)? Only Android tells us; iPhones don't, so there we ask first. */
+const onWifi = () => { const c = navigator.connection; return !!c && c.type === 'wifi' && !c.saveData; };
+/**
+ * When the app opens: load Stan's voice in the background so it's ready before the first stop.
+ * Already on this phone -> just load it (no data used). Not yet -> download by itself on Wi-Fi,
+ * otherwise offer it once a day (it's about 100 MB).
+ */
+async function loadStanVoice({ ask = true } = {}) {
+  if (!wantStanVoice()) return;
+  const v = stanVoice();
+  if (v.state === 'ready' || v.state === 'loading') return;
+  const have = await voiceDownloaded();
+  if (have || onWifi()) { v.prepare().catch(() => {}); return; }
+  const today = nzToday();
+  if (!ask || pref('stb-voice-asked', '') === today) return;
+  setPref('stb-voice-asked', today);
+  toast('Stan has his own voice now. It\u2019s a 100 MB download: best on Wi-Fi.', { label: 'Get it', fn: () => getStanVoice() }, { stan: 'wave' });
+}
+function getStanVoice() {
+  const v = stanVoice();
+  const off = v.on((x) => {
+    if (x.state === 'ready') { off(); toast('Stan\u2019s voice is ready.', null, { stan: 'hop' }); x.say('G\u2019day! I\u2019m Stan.').catch(() => {}); }
+    if (x.state === 'failed') { off(); toast('Couldn\u2019t get Stan\u2019s voice. He\u2019ll use the phone\u2019s voice for now.'); }
+  });
+  v.prepare().catch(() => {});
+}
+/** The line under Settings -> Voice: what's happening with Stan's voice, kept up to date. */
+function voiceStatus() {
+  const el = h('div', { class: 'small muted voice-status', style: 'padding:0 12px 8px' });
+  const v = stanVoice();
+  const draw = async () => {
+    if (!el.isConnected && el._drawn) return off();
+    el._drawn = true;
+    if (voicePref() !== 'stan') { el.replaceChildren('Using the phone\u2019s own voice.'); return; }
+    if (v.state === 'ready') el.replaceChildren('Stan\u2019s voice is ready on this phone.');
+    else if (v.state === 'loading') el.replaceChildren(`Getting Stan\u2019s voice\u2026 ${Math.round(v.progress * 100)}%`);
+    else if (v.state === 'failed') el.replaceChildren('Couldn\u2019t load Stan\u2019s voice (using the phone\u2019s voice). ', h('button', { class: 'btn small', onclick: () => getStanVoice() }, 'Try again'));
+    else if (await voiceDownloaded()) { el.replaceChildren('Stan\u2019s voice is on this phone.'); v.prepare().catch(() => {}); }
+    else el.replaceChildren('Stan\u2019s voice isn\u2019t on this phone yet (100 MB, best on Wi-Fi). ', h('button', { class: 'btn small primary', onclick: () => getStanVoice() }, 'Get it'));
+  };
+  const off = v.on(draw); draw();
+  return el;
+}
+
 // ---- On Duty and My runs (decision 0020) -------------------------------
 // My runs: the runs I'm doing today, in the order I'll do them. Kept on this phone for the day.
 function myRuns() {
@@ -354,6 +401,7 @@ function openMyRuns(todayRuns, done) {
 
 let homeTab = 'current'; // Runs to do | History (stays put while the app is open)
 async function viewHome() {
+  loadStanVoice(); // in the background, so he's ready before the first stop
   const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, class: 'file-input', id: 'pdf' });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles([...fileInput.files]); });
   const list = h('div', null, h('p', { class: 'muted' }, 'Loading runs…'));
@@ -469,6 +517,8 @@ function openSettings(fileInput) {
       bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => setPref('stb-layout', v)),
       choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); }),
       choiceRow('Stan', [['on', 'Show'], ['off', 'Hide']], stanOn() ? 'on' : 'off', (v) => setStan(v === 'on')),
+      stanOn() ? choiceRow('Voice', [['stan', 'Stan\u2019s'], ['phone', 'Phone\u2019s']], voicePref(), (v) => { setVoicePref(v); close(); openSettings(fileInput); if (v === 'stan') loadStanVoice({ ask: false }); }) : null,
+      stanOn() ? voiceStatus() : null,
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
     (close) => h('div', { class: 'menu-group' },
       menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays each time you open the app' }),
@@ -903,7 +953,7 @@ async function viewRun(ids) {
   const daNotes = h('div', { class: 'da-notes' });
   const daVoice = h('button', { class: 'ab-btn', 'aria-label': 'Voice on or off', onclick: () => {
     da.voice = !da.voice; setPref('stb-da-voice', da.voice ? 'on' : 'off'); daVoice.textContent = da.voice ? '🔊' : '🔇';
-    if (da.voice) speak('Voice on.'); else if ('speechSynthesis' in window) speechSynthesis.cancel();
+    if (da.voice) speak('Voice on.'); else hush();
   } }, da.voice ? '🔊' : '🔇');
   const daMaps = h('button', { class: 'ab-btn', 'aria-label': 'Directions to the next stop in Google Maps', onclick: () => directions() }, 'Maps');
   const daClose = h('button', { class: 'ab-btn', 'aria-label': 'Close the Driver Assistant', onclick: () => assistant(false, true) }, '✕');
@@ -916,20 +966,34 @@ async function viewRun(ids) {
     h('div', { class: 'da-ctl' }, daStan, daVoice, daMaps, daClose));
 
   let daVoiceName = null;
+  const sv = stanVoice();
+  loadStanVoice({ ask: false });
+  const hush = () => { sv.cancel(); if ('speechSynthesis' in window) speechSynthesis.cancel(); };
   function speak(text) {
-    if (!da.voice || !text || !('speechSynthesis' in window)) return;
+    if (!da.voice || !text) return;
+    const talk = (on) => { stanTalk(daStanFace, on); stanTalk(navStan, on); };
+    // Stan's own voice when it's loaded; the phone's voice until then (or if it stumbles).
+    if (wantStanVoice() && sv.state === 'ready') { sv.say(text, { onstart: () => talk(true), onend: () => talk(false) }).catch(() => speakPhone(text, talk)); return; }
+    speakPhone(text, talk);
+  }
+  function speakPhone(text, talk) {
+    if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text);
     const voices = speechSynthesis.getVoices();
     daVoiceName ||= ['en-NZ', 'en-AU', 'en-GB', 'en'].map((l) => voices.find((v) => v.lang?.replace('_', '-').startsWith(l))).find(Boolean) || null;
     if (daVoiceName) u.voice = daVoiceName;
     u.lang = daVoiceName?.lang || 'en-NZ'; u.rate = 1;
     if (stanOn()) u.pitch = 1.15; // a touch younger: it's Stan talking
-    const talk = (on) => { stanTalk(daStanFace, on); stanTalk(navStan, on); };
     u.onstart = () => talk(true); u.onend = () => talk(false); u.onerror = () => talk(false);
     speechSynthesis.speak(u);
   }
   // iPhone only lets a page speak after a tap: the first tap anywhere while it's on unlocks it.
-  const primeVoice = () => { if (da.on && !da.primed && 'speechSynthesis' in window) { da.primed = true; speechSynthesis.speak(new SpeechSynthesisUtterance('')); } };
+  const primeVoice = () => {
+    if (!da.on || da.primed) return;
+    da.primed = true;
+    if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    if (wantStanVoice()) try { sv.audio(); } catch { /* no Web Audio: phone voice */ }
+  };
   document.addEventListener('pointerdown', primeVoice, true);
 
   function stopFor(el) {
@@ -962,6 +1026,9 @@ async function viewRun(ids) {
     if (!fix || Date.now() - fix.t > 30000) { drawDA({ mode: 'gps', label: st.label, notes: st.notes }); return; }
     const { view, say } = guide.update(fix);
     say.forEach(speak);
+    // Get this stop's likely lines ready while driving to it, so Stan speaks the moment he's needed.
+    const warmKey = `${st.key}|${view.routed ? 'r' : ''}`;
+    if (da.voice && da.warmed !== warmKey && wantStanVoice() && sv.state === 'ready') { da.warmed = warmKey; guide.likelyLines().forEach((l) => sv.warm(l)); }
     drawDA(view);
   }
   function drawDA(v) {
@@ -991,11 +1058,11 @@ async function viewRun(ids) {
     if (byHand) setPref('stb-da', on ? 'on' : 'off');
     da.off?.(); da.off = null;
     if (on) {
-      if (byHand) { da.primed = true; speak('Driver Assistant on.'); }
+      if (byHand) { da.primed = true; if (wantStanVoice()) try { sv.audio(); } catch { /* phone voice */ } speak('Driver Assistant on.'); }
       da.off = geo.onFix(daTick);
       guide.setStop(null);
       daTick(geo.last);
-    } else { if ('speechSynthesis' in window) speechSynthesis.cancel(); stanTalk(daStanFace, false); stanTalk(navStan, false); }
+    } else { hush(); stanTalk(daStanFace, false); stanTalk(navStan, false); }
     drawBar(body.querySelector('.tile.next'));
   }
 

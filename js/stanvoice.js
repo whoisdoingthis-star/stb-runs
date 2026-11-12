@@ -23,12 +23,13 @@ export const VOICES = {
 };
 
 /** Stan's settings: which voice and speaker, and how he's shaped. Chosen by Mike in the voice lab. */
-export const STAN = { voice: 'vctk', speaker: 'p326', pitch: 1.12, pace: 1.05, warmth: 4, robot: 0.12 };
+// Mike, 12 Nov 2026, in the voice lab: VCTK speaker p316, pitched right up, a bit slower, warm, full robot shimmer.
+export const STAN = { voice: 'vctk', speaker: 'p316', pitch: 1.35, pace: 1.2, warmth: 8, robot: 0.4 };
 
 const ABBR = [
   [/\b(\d+(?:\.\d+)?)\s?km\b/g, '$1 kilometres'], [/\b(\d+)\s?m\b/g, '$1 metres'],
-  [/\bRd\b\.?/g, 'Road'], [/\bCres\b\.?/g, 'Crescent'], [/\bAve\b\.?/g, 'Avenue'], [/\bPl\b\.?/g, 'Place'],
-  [/\bTce\b\.?/g, 'Terrace'], [/\bHwy\b\.?/g, 'Highway'], [/\b(\w+) St\b\.?/g, '$1 Street'], [/\b(\w+) Dr\b\.?/g, '$1 Drive'],
+  [/\bRd\b/g, 'Road'], [/\bCres\b/g, 'Crescent'], [/\bAve\b/g, 'Avenue'], [/\bPl\b/g, 'Place'],
+  [/\bTce\b/g, 'Terrace'], [/\bHwy\b/g, 'Highway'], [/\b(\w+) St\b/g, '$1 Street'], [/\b(\w+) Dr\b/g, '$1 Drive'],
   [/&/g, ' and '], [/\bNZH\b/g, 'Herald'], [/\s+/g, ' '],
 ];
 /** Text as Stan should say it: abbreviations in full, then split where a person would pause. */
@@ -37,7 +38,8 @@ export function speakable(text) {
   for (const [re, to] of ABBR) s = s.replace(re, to);
   const out = [];
   // A clause ends at , ; : or a dash (short pause) or . ! ? (longer pause).
-  for (const m of s.matchAll(/[^,;:.!?—–]+(?:[,;:—–]|[.!?]+|$)/g)) {
+  // (Only where a space or the end follows, so 1.2 km, 5:30 and 5–7 stay whole.)
+  for (const m of s.matchAll(/.+?(?:[,;:—–]|[.!?]+)(?=\s|$)|.+$/g)) {
     const t = m[0].trim();
     if (!/[A-Za-z0-9]/.test(t)) continue;
     const end = t.slice(-1);
@@ -76,20 +78,20 @@ class StanVoice {
     return this.ready;
   }
 
-  clause(text) {
+  clause(text, urgent) {
     const id = ++this.n;
     const p = new Promise((resolve, reject) => this.jobs.set(id, { resolve, reject }));
     // Make it slower by `pitch` too: playing it back faster raises the pitch and brings the pace back.
-    this.worker.postMessage({ type: 'say', id, text, lengthScale: this.opts.pace * this.opts.pitch, noiseScale: 0.6, noiseW: 0.7 });
+    this.worker.postMessage({ type: 'say', id, urgent: !!urgent, text, lengthScale: this.opts.pace * this.opts.pitch, noiseScale: 0.6, noiseW: 0.7 });
     return p;
   }
   /** Get a line ready (sound made, not played). Kept for the last 40 lines. */
-  warm(text) {
+  warm(text, urgent = false) {
     const key = String(text || '').trim();
     if (!key || this.state !== 'ready') return null;
     if (this.lines.has(key)) { const v = this.lines.get(key); this.lines.delete(key); this.lines.set(key, v); return v; }
     const parts = speakable(key);
-    const made = Promise.all(parts.map((c) => this.clause(c.text))).then((outs) => {
+    const made = Promise.all(parts.map((c) => this.clause(c.text, urgent))).then((outs) => {
       const sr = outs[0]?.sampleRate || this.sampleRate;
       const gaps = parts.map((c, i) => (i === parts.length - 1 ? 0.05 : c.pause) * this.opts.pitch);
       const len = outs.reduce((n, o, i) => n + o.pcm.length + Math.round(gaps[i] * sr), 0);
@@ -110,7 +112,7 @@ class StanVoice {
   }
   /** Speak a line. Resolves when he's finished (or was cancelled). Throws if the voice isn't ready. */
   say(text, { onstart, onend } = {}) {
-    const made = this.warm(text);
+    const made = this.warm(text, true);
     if (!made) return Promise.reject(new Error('Stan’s voice isn’t ready'));
     const gen = this.gen = (this.gen || 0) + 1;
     this.queue = this.queue.then(async () => {
@@ -139,14 +141,16 @@ class StanVoice {
       high.connect(d).connect(mix).connect(comp);
       src.addEventListener('ended', () => lfo.stop());
     }
-    this.src = src;
+    this.src = src; this.played = (this.played || 0) + 1;
     return new Promise((resolve) => { src.onended = () => { if (this.src === src) this.src = null; resolve(); }; onstart?.(); src.start(); });
   }
   cancel() { this.gen = (this.gen || 0) + 1; try { this.src?.stop(); } catch { /* already stopped */ } this.src = null; }
 }
 
 let one = null;
-export function stanVoice(opts) { if (!one) one = new StanVoice(opts); return one; }
+// Tests point it at local copies with globalThis.__stbVoiceOpts (same idea as __stbFakeRoute).
+const testOpts = () => globalThis.__stbVoiceOpts || {};
+export function stanVoice(opts) { if (!one) one = new StanVoice({ ...testOpts(), ...opts }); return one; }
 export { StanVoice };
 
 /** The family's choice (Settings): 'stan' = Stan's own voice, 'phone' = the phone's voice. */
@@ -156,7 +160,8 @@ export function setVoicePref(v) { try { localStorage.setItem('stb-voice', v); } 
 export async function voiceDownloaded(opts = {}) {
   try {
     const c = await caches.open('stb-stan-voice');
-    const v = (opts.voices || VOICES)[opts.voice || STAN.voice];
+    const o = { ...testOpts(), ...opts };
+    const v = (o.voices || VOICES)[o.voice || STAN.voice];
     return !!(await c.match(v.model));
   } catch { return false; }
 }
