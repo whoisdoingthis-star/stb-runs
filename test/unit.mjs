@@ -72,3 +72,12 @@ t('Different publications at one address share a tile, NZH first', () => { const
   const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   t('updating the app only clears old app versions, never Stan’s voice', () => { assert.match(sw, /k\.startsWith\('stb-runs-v'\) && k !== VERSION/); assert.doesNotMatch(sw, /filter\(\(k\) => k !== VERSION\)/); });
 }
+
+// ---- Chat with Stan: his replies (decision 0024) ----
+{
+  const { stanReply, STAN_EMPTY } = await import('../js/stanchat.js');
+  t('Stan asks for a few words when nothing was typed', () => assert.equal(stanReply('   ').text, STAN_EMPTY));
+  t('Stan answers by what the message is about', () => { assert.equal(stanReply('The app crashed when I ticked').topic, 'bug'); assert.equal(stanReply('Can your voice be louder').topic, 'voice'); assert.equal(stanReply('Thanks Stan, love it').topic, 'thanks'); assert.equal(stanReply('Purple unicorns').topic, 'idea'); });
+  t('the same message gets the same reply, and a next one can differ', () => { assert.equal(stanReply('Rain colours', 0).text, stanReply('Rain colours', 0).text); assert.ok(new Set([0, 1, 2, 3, 4].map((n) => stanReply('Rain colours', n).text)).size > 1); });
+  t('Stan never promises an idea will be built', () => { for (const m of ['add maps', 'it broke', 'be faster', 'new colours', 'reorder runs', 'hey stan', 'xyz']) for (let n = 0; n < 6; n++) assert.doesNotMatch(stanReply(m, n).text, /\b(will be (built|added|fixed)|I promise it|definitely)\b/i); });
+}

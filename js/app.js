@@ -9,6 +9,7 @@ import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
+import { stanReply, STAN_HELLO } from './stanchat.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -313,6 +314,53 @@ function voiceStatus() {
   return el;
 }
 
+// The app version this phone is running (from the service worker's cache name), for the ideas register.
+let APP_VERSION = '';
+try { caches.keys().then((ks) => { APP_VERSION = ks.filter((k) => k.startsWith('stb-runs-v')).sort().pop() || ''; }).catch(() => {}); } catch { /* no caches */ }
+// ---- Chat with Stan (decision 0024) --------------------------------------
+/** Stan says a line out loud anywhere in the app: his own voice if it's loaded, else the phone's. */
+function stanSay(text, face) {
+  const talk = (on) => stanTalk(face, on);
+  const v = stanVoice();
+  const phone = () => {
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text); u.pitch = 1.15; u.lang = 'en-NZ';
+    u.onstart = () => talk(true); u.onend = () => talk(false); u.onerror = () => talk(false);
+    speechSynthesis.speak(u);
+  };
+  if (wantStanVoice() && v.state === 'ready') { try { v.audio(); } catch { /* phone voice */ } v.cancel(); v.say(text, { onstart: () => talk(true), onend: () => talk(false) }).catch(phone); } else phone();
+}
+function stanChatButton(screen) {
+  return h('button', { class: 'btn stan-chat-btn', onclick: () => openStanChat(screen) }, stanOn() ? stan({ head: true, size: 28 }) : null, stanOn() ? 'Got an idea? Tell Stan' : 'Send an idea');
+}
+/** Tell Stan an idea, a tweak or a niggle. It goes in the ideas register for Dispatch; he answers out loud. */
+function openStanChat(screen = 'home') {
+  const face = stanOn() ? stan({ pose: 'wave', size: 64 }) : null;
+  const log = h('div', { class: 'chat-log', 'aria-live': 'polite' });
+  const bubble = (who, text) => { const b = h('div', { class: `chat-bubble ${who}` }, text); log.append(b); b.scrollIntoView({ block: 'nearest' }); return b; };
+  const sent = app.store.myIdeas().length;
+  bubble('from-stan', STAN_HELLO);
+  if (sent) bubble('from-stan small', `You\u2019ve told me ${sent} thing${sent === 1 ? '' : 's'} so far. Keep them coming!`);
+  const input = h('textarea', { class: 'chat-input', rows: 2, maxlength: 2000, placeholder: 'Type your idea, tweak or niggle\u2026', 'aria-label': 'Your message to Stan' });
+  const send = () => {
+    const text = input.value.trim();
+    const r = stanReply(text, app.store.myIdeas().length);
+    if (text) {
+      bubble('from-me', text);
+      app.store.addIdea(text, { topic: r.topic, screen, app_version: APP_VERSION });
+      input.value = '';
+    }
+    setTimeout(() => { bubble('from-stan', r.text); stanSay(r.text, face); }, text ? 350 : 0);
+    input.focus();
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  openSheet('Chat with Stan',
+    h('div', { class: 'chat-head' }, face, h('p', { class: 'muted small' }, 'Everything you tell Stan goes in the ideas book. Mike reads them all.')),
+    log,
+    h('div', { class: 'chat-send' }, input, h('button', { class: 'btn primary', onclick: send }, 'Send')));
+  setTimeout(() => input.focus(), 300);
+}
+
 // ---- On Duty and My runs (decision 0020) -------------------------------
 // My runs: the runs I'm doing today, in the order I'll do them. Kept on this phone for the day.
 function myRuns() {
@@ -430,6 +478,7 @@ async function viewHome() {
     app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
     fileInput,
     dutySlot,
+    stanChatButton('home'),
     list));
 
   async function renderList() {
@@ -1609,6 +1658,7 @@ async function viewRun(ids) {
         choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); })),
       (close) => h('div', { class: 'menu-group' },
         menuItem('Find an address…', () => { close(); searchRow.hidden = false; search.focus(); }),
+        menuItem(stanOn() ? 'Tell Stan an idea\u2026' : 'Send an idea\u2026', () => { close(); openStanChat('run'); }, { hint: 'A tweak, a niggle, something new' }),
         menuItem('Text a link to this run', () => { close(); shareRuns(ids, `${label} ${fmtDate(date)}`); }, { hint: 'Anyone in the family can open it and help' }),
         hasLayout ? menuItem('Door codes…', () => { close(); const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route)); if (d) openCodes(d); }) : null,
         menuItem('Refresh', async () => { close(); S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.'); }),

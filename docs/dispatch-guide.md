@@ -16,6 +16,9 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 ### Stan
 Stan shows up when there's nothing to do ("✓ Nothing waiting", "Nothing active"), and the **Stan's tip** card on the Overview has one tip a day with a link to this guide. He's never on the figures. Hide him in the app's **⚙ Settings → Stan** (same browser).
 
+### Stan's ideas book (Overview)
+Everything the family tells Stan (Chat with Stan on the phones): who, when, from which screen. Set each one to **New**, **Planned**, **Done** or **Not now**, and add a note on what was decided. Dealt-with ideas fold away under *Done or not now*.
+
 ### Shifts and the depot (Overview)
 - **Shifts**: one bar per person for the day: depot (grey), driving to a run (striped), own runs (green), helping (purple), between runs (orange), stopped (pale yellow), after the last stop. Hover a piece for its times. Under it: the totals, and each run's time including getting there.
 - People who didn't tap On duty show from first to last tick; a shift with no Off duty says so.

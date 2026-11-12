@@ -893,3 +893,29 @@ drop policy if exists app_settings_read on public.app_settings;
 create policy app_settings_read on public.app_settings for select to authenticated using (public.is_member());
 drop policy if exists app_settings_write on public.app_settings;
 create policy app_settings_write on public.app_settings for all to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());
+
+-- ---- Chat with Stan: the ideas register (Mike, 12 Nov 2026; docs/decisions/0024-chat-with-stan.md) ----
+-- What the family tells Stan: ideas, tweaks, niggles. Dispatchers review them and set a status.
+create table if not exists public.ideas (
+  id          uuid primary key,
+  user_id     uuid not null default auth.uid(),
+  user_name   text,
+  text        text not null check (char_length(text) between 1 and 2000),
+  topic       text,
+  screen      text,
+  app_version text,
+  device_time timestamptz not null,
+  server_time timestamptz not null default now(),
+  status      text not null default 'new' check (status in ('new', 'planned', 'done', 'declined')),
+  note        text,
+  updated_by  text,
+  updated_at  timestamptz
+);
+alter table public.ideas enable row level security;
+drop policy if exists ideas_read on public.ideas;
+create policy ideas_read on public.ideas for select to authenticated using (public.is_member());
+drop policy if exists ideas_add on public.ideas;
+create policy ideas_add on public.ideas for insert to authenticated
+  with check (public.is_member() and user_id = auth.uid() and status = 'new' and note is null);
+drop policy if exists ideas_review on public.ideas;
+create policy ideas_review on public.ideas for update to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());

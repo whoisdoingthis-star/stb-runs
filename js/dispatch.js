@@ -35,6 +35,7 @@ async function leaflet() {
 
 import { runComplete } from './rows.js';
 import { stanSays, tipOfDay } from './stan.js';
+import { IDEA_STATUS } from './stanchat.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
@@ -91,6 +92,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const nzDay = (t) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(t));
     D.duty = (await app.store.loadDuty(from.toISOString(), new Date(from.getTime() + 40 * 3600e3).toISOString())).filter((e) => nzDay(e.device_time) === focus);
     D.depot = await app.store.getSetting('depot');
+    try { D.ideas = await app.store.loadIdeas(); } catch { D.ideas = null; } // null = table not there yet
   }
   // The delivery day the overview is about: today or the next one loaded, else the latest.
   function focusDate() {
@@ -314,6 +316,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const scoreCard = rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null;
     const itemsCard = card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–'));
     const shiftsCard = card('Shifts', shiftsView(rs));
+    const ideasCard = card(`Stan\u2019s ideas book${D.ideas?.some((i) => i.status === 'new') ? ` (${D.ideas.filter((i) => i.status === 'new').length} new)` : ''}`, ideasView());
     const tipCard = card('Stan\u2019s tip', stanSays(h('p', null, tipOfDay(), ' ',
       h('a', { href: 'https://github.com/whoisdoingthis-star/stb-runs/blob/main/docs/dispatch-guide.md', target: '_blank', rel: 'noopener' }, 'More in the Dispatch guide')), { size: 40, cls: 'dz-tip' }));
     const depotCard = card('Depot', D.depot?.lat
@@ -326,7 +329,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     // Two columns on a laptop: the day's work on the left, what needs a look on the right (first on a phone).
     return h('div', { class: 'dz-over' },
       h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard, depotCard, tipCard),
-      h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), shiftsCard, scoreCard));
+      h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), shiftsCard, ideasCard, scoreCard));
   }
 
   // ---- Shifts: each person's morning as one bar, every minute accounted for (decision 0020)
@@ -359,6 +362,30 @@ export async function viewDispatch(ctx, tab = 'overview') {
     return h('div', null, rows,
       h('div', { class: 'dz-shift-key small' }, ['depot', 'travel', 'run', 'help', 'between', 'pause', 'wrap'].map((k) => h('span', null, h('i', { class: `sg-${k}` }), SEGMENT_LABEL[k]))),
       h('p', { class: 'small muted' }, 'Driving to a run includes the gap after helping someone, up to your next run’s first tick. Times for each run include getting there.'));
+  }
+
+  // ---- Stan's ideas book: what the family told Stan, with a status and a note (decision 0024)
+  function ideasView() {
+    if (D.ideas === null) return h('p', { class: 'warn' }, 'The ideas table isn\u2019t in the database yet (run the Chat with Stan block of sql/schema.sql).');
+    if (!D.ideas.length) return stanSays(h('p', { class: 'muted' }, 'No ideas yet. On the phones: Runs page \u2192 Got an idea? Tell Stan.'), { size: 44 });
+    const open = D.ideas.filter((i) => i.status === 'new' || i.status === 'planned');
+    const closed = D.ideas.filter((i) => i.status === 'done' || i.status === 'declined');
+    const row = (i) => {
+      const sel = h('select', { 'aria-label': 'Status', onchange: async () => { try { await app.store.reviewIdea(i.id, { status: sel.value }, by()); toast('Saved.'); await refresh(); } catch (e) { toast(`Couldn\u2019t save: ${e.message}`); } } },
+        Object.entries(IDEA_STATUS).map(([k, v]) => h('option', { value: k, selected: i.status === k }, v)));
+      return h('li', { class: `dz-idea st-${i.status}` },
+        h('div', { class: 'dz-idea-text' }, i.text),
+        h('div', { class: 'small muted' }, `${i.user_name || 'Someone'} \u00b7 ${fmtStamp(i.device_time)}${i.screen ? ` \u00b7 from the ${i.screen} screen` : ''}${i.note ? ` \u00b7 ${i.note}` : ''}`),
+        h('div', { class: 'dz-idea-act' }, sel,
+          h('button', { class: 'btn small', onclick: () => {
+            const box = h('textarea', { rows: 3, style: 'width:100%', 'aria-label': 'Note' }, i.note || '');
+            const close = openSheet('Note on this idea', h('p', { class: 'muted' }, i.text), box,
+              h('button', { class: 'btn primary', style: 'margin-top:8px', onclick: async () => { try { await app.store.reviewIdea(i.id, { note: box.value.trim() || null }, by()); close(); await refresh(); } catch (e) { toast(`Couldn\u2019t save: ${e.message}`); } } }, 'Save'));
+          } }, i.note ? 'Edit note' : 'Add a note')));
+    };
+    return h('div', null,
+      open.length ? h('ul', { class: 'dz-ideas' }, open.map(row)) : h('p', { class: 'ok' }, '\u2713 Every idea has been dealt with.'),
+      closed.length ? h('details', null, h('summary', null, `Done or not now (${closed.length})`), h('ul', { class: 'dz-ideas' }, closed.map(row))) : null);
   }
 
   // ---- Depot: paste a Maps link, or stand there and use this phone's location

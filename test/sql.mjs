@@ -177,3 +177,20 @@ await db.query(`insert into app_settings(key, value, updated_by) values ('depot'
 check('a dispatcher sets the depot', (await db.query(`select value->>'radius_m' r from app_settings where key='depot'`)).rows[0].r === '150');
 const dutyCols = (await db.query(`select column_name c from information_schema.columns where table_name='duty_events'`)).rows.map((r) => r.c);
 check('every duty field the app sends is a duty_events column', DUTY_COLUMNS.every((c) => dutyCols.includes(c)));
+
+// ---- Chat with Stan: the ideas register ----
+await as('lisa@example.com');
+await db.query(`insert into ideas(id, user_name, text, device_time) values (gen_random_uuid(), 'Lisa', 'Rain colours on the tiles', now())`);
+check('anyone in the family can tell Stan an idea', (await db.query(`select count(*)::int n from ideas`)).rows[0].n === 1);
+blocked = false; try { await db.query(`update ideas set status='done'`); blocked = (await db.query(`select count(*)::int n from ideas where status='done'`)).rows[0].n === 0; } catch { blocked = true; }
+check('only a dispatcher reviews ideas', blocked);
+blocked = false; try { await db.query(`insert into ideas(id, text, device_time, status) values (gen_random_uuid(), 'x', now(), 'done')`); } catch { blocked = true; }
+check('a new idea always starts as new', blocked);
+await as('mike@example.com');
+await db.query(`update ideas set status='planned', note='With the weekly report', updated_by='Mike'`);
+check('a dispatcher sets an idea to planned', (await db.query(`select status from ideas`)).rows[0].status === 'planned');
+{
+  const { IDEA_COLUMNS } = await import('../js/store.js');
+  const cols = (await db.query(`select column_name c from information_schema.columns where table_name='ideas'`)).rows.map((r) => r.c);
+  check('every idea field the app sends is an ideas column', IDEA_COLUMNS.every((c) => cols.includes(c)));
+}

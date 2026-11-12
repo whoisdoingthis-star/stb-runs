@@ -46,7 +46,7 @@ class Base {
   onSync(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emitSync() { for (const fn of this.listeners) fn(this.pendingCount()); }
   pending() { return LS.get('stb.pending', []); }
-  pendingCount() { return this.pending().length + Object.keys(this.pendingSeqs()).length + this.pendingDuty().length; }
+  pendingCount() { return this.pending().length + Object.keys(this.pendingSeqs()).length + this.pendingDuty().length + this.pendingIdeas().length; }
   cacheRun(id, data) { LS.set(`stb.run.${id}`, data); }
   cachedRun(id) { return LS.get(`stb.run.${id}`, null); }
   cacheEvents(id, evs) { LS.set(`stb.events.${id}`, evs); }
@@ -131,6 +131,16 @@ class Base {
     this.flush();
     return ev;
   }
+  // ---- Chat with Stan (decision 0024): what I've told Stan, kept on the phone, sent when there's signal ----
+  pendingIdeas() { return LS.get('stb.ideaspending', []); }
+  myIdeas() { return LS.get('stb.ideas', []); }
+  addIdea(text, extra = {}) {
+    const ev = { id: uuid(), user_name: this.me?.name || 'Me', text: String(text).slice(0, 2000), device_time: new Date().toISOString(), ...extra };
+    LS.set('stb.ideas', [...this.myIdeas(), ev].slice(-50));
+    LS.set('stb.ideaspending', [...this.pendingIdeas(), ev]);
+    this.flush();
+    return ev;
+  }
   sendable() {
     const now = Date.now();
     return this.pending().filter((e) => !e._hold || now - e._hold > HOLD_MS).map((e) => {
@@ -142,6 +152,7 @@ class Base {
 }
 
 const HOLD_MS = 10000;
+export const IDEA_COLUMNS = ['id', 'user_name', 'text', 'topic', 'screen', 'app_version', 'device_time'];
 export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m'];
 export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device', 'outcome', 'reason', 'qty_delivered', 'method'];
 
@@ -198,8 +209,11 @@ export class LocalStore extends Base {
     LS.set('stb.pending', this.pending().filter((e) => !sent.has(e.id)));
     LS.set('stb.seqpending', {});
     LS.set('stb.dutypending', []);
+    LS.set('stb.ideaspending', []);
     this.emitSync();
   }
+  async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
+  async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
   async setSetting(key, value) { LS.set(`stb.setting.${key}`, value); }
@@ -507,6 +521,24 @@ export class SupabaseStore extends Base {
     if (error) throw error;
     LS.set(`stb.codes.${route}`, codes);
   }
+  async flushIdeas() {
+    const batch = this.pendingIdeas().map((e) => Object.fromEntries(IDEA_COLUMNS.filter((k) => e[k] !== undefined).map((k) => [k, e[k]])));
+    if (!batch.length) return;
+    const { error } = await this.sb.from('ideas').upsert(batch, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) throw error;
+    const sent = new Set(batch.map((e) => e.id));
+    LS.set('stb.ideaspending', this.pendingIdeas().filter((e) => !sent.has(e.id)));
+  }
+  /** Everyone's ideas, newest first (Dispatch). */
+  async loadIdeas() {
+    const { data, error } = await this.sb.from('ideas').select('*').order('device_time', { ascending: false }).limit(200);
+    if (error) throw error;
+    return data;
+  }
+  async reviewIdea(id, patch, by) {
+    const { error } = await this.sb.from('ideas').update({ ...patch, updated_by: by, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+  }
   async flushDuty() {
     const batch = this.pendingDuty().map((e) => Object.fromEntries(DUTY_COLUMNS.filter((k) => e[k] !== undefined).map((k) => [k, e[k]])));
     if (!batch.length) return;
@@ -559,6 +591,7 @@ export class SupabaseStore extends Base {
     this.flushing = true;
     try { await this.flushSeqs(); } catch { /* offline */ }
     try { await this.flushDuty(); } catch { /* offline */ }
+    try { await this.flushIdeas(); } catch { /* offline */ }
     this.flushing = false;
     const batch = this.sendable();
     if (!batch.length) { this.emitSync(); return; }

@@ -749,3 +749,21 @@ html.big .stan-says .stan { --stan: 72px !important; }
 /* The progress row never widens the page: the time drops to its own line when it's long (finish time). */
 .rh-prog { flex-wrap: wrap; min-width: 0; max-width: min(900px, 100%); row-gap: 2px; }
 .rh-prog .fb-time { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- Chat with Stan (decision 0024) ---- */
+.stan-chat-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 0 0 12px; }
+.chat-head { display: flex; align-items: center; gap: 12px; }
+.chat-head p { margin: 0; }
+.chat-log { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; max-height: 42vh; overflow-y: auto; }
+.chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: var(--t-m); line-height: 1.35; }
+.chat-bubble.from-stan { align-self: flex-start; background: #fdb704; color: #111; border-bottom-left-radius: 6px; font-weight: 600; }
+.chat-bubble.from-stan.small { font-size: var(--t-s); font-weight: 500; opacity: .9; }
+.chat-bubble.from-me { align-self: flex-end; background: var(--info-bg); color: var(--ink); border: 1px solid var(--edge); border-bottom-right-radius: 6px; }
+.chat-send { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input { flex: 1; min-width: 0; font: inherit; font-size: var(--t-m); padding: 10px 12px; border-radius: 12px; border: 2px solid var(--edge); background: var(--card); color: var(--ink); resize: none; }
+html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
+.dz-ideas { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.dz-idea { border-left: 4px solid #fdb704; padding: 4px 0 4px 10px; }
+.dz-idea.st-planned { border-left-color: var(--info); } .dz-idea.st-done { border-left-color: var(--done-line); } .dz-idea.st-declined { border-left-color: var(--line); }
+.dz-idea-text { font-weight: 600; white-space: pre-wrap; }
+.dz-idea-act { display: flex; gap: 8px; align-items: center; margin-top: 4px; }

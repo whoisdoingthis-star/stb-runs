@@ -136,6 +136,10 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 - Only dispatchers can close or reopen a run, set its driver, or enter paper ticks (enforced by the database).
 - Paper ticks have no GPS, so they never feed learned letterbox positions or delivery order; they do count in DIFOTIS (on time = the finish time entered).
 
+## Chat with Stan and the ideas register (Mike, 12 Nov 2026)
+- Anyone in the family can tell Stan an idea, a tweak or a niggle. Every one is kept in the ideas register; Stan answers but never promises it will be built. ([decision 0024](decisions/0024-chat-with-stan.md))
+- Dispatchers review the register and give each idea a status (New, Planned, Done, Not now) and a note on what was decided.
+
 ## On duty and shifts (Mike, 12 Nov 2026)
 - **On duty** is tapped at the depot, so sorting and loading count. **On the run** happens by itself: about 30 seconds of driving (above 15 km/h) with the run open, or the first tick. **Off duty** at the end. ([decision 0020](decisions/0020-on-duty-and-shifts.md))
 - **My runs**: the runs you're doing today, in your order. When one is finished the app moves on to the next and notes the time.

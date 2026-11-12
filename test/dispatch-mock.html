@@ -27,6 +27,10 @@ T.line_status.push(...span('r6', 'Mike', '05:02', '05:35'), ...span('r11', 'Moan
 T.duty = [{ user_name: 'Mike', state: 'on_duty', device_time: nz('04:40') }, { user_name: 'Mike', state: 'on_run', run_id: 'r6', source: 'auto', device_time: nz('04:58') }, { user_name: 'Mike', state: 'off_duty', device_time: nz('06:25') },
   { user_name: 'Lisa', state: 'on_duty', device_time: nz('05:20') }];
 T.settings = {};
+T.ideas = [
+  { id: 'i1', user_name: 'Lisa', text: 'Colour the tiles when it\u2019s raining so we know to bag the papers', screen: 'run', device_time: nz('05:48'), status: 'new' },
+  { id: 'i2', user_name: 'Zaph', text: 'Stan should say how many stops are left when I finish a street', screen: 'run', device_time: nz('05:31'), status: 'planned', note: 'With the next voice update' },
+  { id: 'i3', user_name: 'Moana', text: 'Bigger Next button please', screen: 'home', device_time: nz('05:02'), status: 'done' }];
 const view = (t) => t === 'address_register' ? T.addresses.map((a) => ({ ...a, operating_name: T.operating_locations.find((o) => o.id === a.operating_location_id)?.name, service_name: T.service_locations.find((s) => s.id === a.service_location_id)?.name })) : T[t];
 window.calls = [];
 function from(t) {
@@ -64,6 +68,6 @@ const fmtDate = (iso) => iso;
 const changeSummary = (r, ch) => `${shortRoute(r)}: ${ch.count} changed`;
 window.confirm = () => true;
 const openSheet = (title, ...content) => { const close = () => panel.remove(); const panel = h('div', { class: 'sheet-backdrop' }, h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-head' }, h('h2', null, title)), ...content.map((c) => (typeof c === 'function' ? c(close) : c)))); document.body.append(panel); return close; };
-await viewDispatch({ app: { store: { mode: 'shared', sb, loadDuty: async () => T.duty, getSetting: async (k) => T.settings[k] || null, setSetting: async (k, v) => { T.settings[k] = v; } }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary, openSheet }, location.hash.slice(1) || 'overview');
+await viewDispatch({ app: { store: { mode: 'shared', sb, loadDuty: async () => T.duty, getSetting: async (k) => T.settings[k] || null, loadIdeas: async () => T.ideas, reviewIdea: async (id, patch) => { Object.assign(T.ideas.find((i) => i.id === id), patch); }, setSetting: async (k, v) => { T.settings[k] = v; } }, me: { name: 'Mike', email: 'mike@example.com', role: 'dispatcher' } }, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch: () => toast('refetch'), pickSheets: () => toast('pick'), fmtStamp, fmtDate, changeSummary, openSheet }, location.hash.slice(1) || 'overview');
 window.ready = true;
 </script></body></html>
