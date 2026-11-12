@@ -55,4 +55,6 @@ npm install
 npm run check          # tests + documentation checks (same as CI)
 python3 -m http.server 8765   # then open http://localhost:8765 with an empty config.js for demo mode
 ```
+Stan's voice lab: open `test/voice-lab.html` (also on the live site) to hear and choose his voice.
+
 Browser tests (`test/e2e*.py`, Playwright) and real-sheet tests (`node test/village.mjs <sheet.pdf>…`) need sample run sheets, which contain customer addresses and are therefore kept out of the repository.

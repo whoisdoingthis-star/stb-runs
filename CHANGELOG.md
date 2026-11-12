@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Stan's own voice, step one:** a voice lab (`test/voice-lab.html`) to choose Stan's voice from free-for-business voices (VCTK, LibriTTS-R), with proper pauses at commas and full stops and a warmer sound. Engine in `js/stanvoice.js` (not switched on in the app yet). Credits in [docs/credits.md](docs/credits.md).
 - Live 12 Nov: `duty_events` and `app_settings` tables applied in Supabase, depot set, `route` function deployed and its ORS key added: Stan gives turn by turn (checked: depot to Howick, 1.2 km, 4 turns).
 - **Stan, step two** (12 Nov): Stan on empty screens (no runs yet, all done, empty History, run complete) and in Dispatch (Nothing waiting, Nothing active, empty Shifts), plus a **Stan's tip** card on the Overview, one tip a day. ([decision 0022](docs/decisions/0022-stan-empty-screens.md))
 - **Stan joins the app** (Mike, 12 Nov): Stan's head is now the **Driver Assistant button**; in the panel his lights say *Turn by turn* (blue), *Pointing the way* (amber) or *Waiting for GPS* (grey), and they blink while he talks. He hops when you finish a run, waves when you're on the run or off duty, and says hello on the On duty card the first time. **⚙ Settings → Stan** hides him. ([decision 0021](docs/decisions/0021-stan.md))
