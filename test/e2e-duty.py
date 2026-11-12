@@ -59,6 +59,20 @@ with sync_playwright() as p:
     page.click('text=Start my runs'); page.wait_for_selector('.tile'); page.wait_for_timeout(500)
     ids = page.evaluate("JSON.parse(localStorage.getItem('stb.myruns')).ids")
     check('Start my runs opens them together, in that order', page.url.endswith('#/r/' + '+'.join(ids)) and len(ids) == 2, page.url)
+    # Photo and Problem are there before any tick, with their names, and work for the next stop.
+    check('Photo and Problem show before the first tick, with words', page.locator('[aria-label="Take a delivery photo"]').is_visible() and 'Photo' in page.inner_text('[aria-label="Take a delivery photo"]') and 'Problem' in page.inner_text('[aria-label="Problem with this delivery"]'))
+    check('the bar still fits the phone', page.evaluate('document.documentElement.scrollWidth - innerWidth') <= 0)
+    if SHOTS: page.locator('.actionbar').screenshot(path=f'{SHOTS}/bar-before.png')
+    nxt = page.locator('.tile.next').get_attribute('data-label')
+    page.click('[aria-label="Problem with this delivery"]'); page.wait_for_selector('.sheet')
+    check('Problem before a tick is about the next stop', nxt in page.inner_text('.sheet'), page.inner_text('.sheet')[:80])
+    page.click('.sheet >> text=Gate locked'); page.wait_for_timeout(400)
+    check('a stop can be marked not delivered without ticking it first', 'Not delivered' in page.inner_text('.actionbar') and page.locator('.tile.next').get_attribute('data-label') != nxt, page.inner_text('.actionbar'))
+    page.click('[aria-label="Take a delivery photo"]'); page.wait_for_selector('.sheet')
+    check('with a stop just done and a next stop, Photo asks which one', 'just done' in page.inner_text('.sheet') and 'next stop' in page.inner_text('.sheet'), page.inner_text('.sheet')[:120])
+    if SHOTS: page.screenshot(path=f'{SHOTS}/which-stop.png')
+    page.keyboard.press('Escape'); page.wait_for_timeout(200)
+    if page.locator('.sheet').count(): page.locator('.sheet button:has-text("✕")').first.click(); page.wait_for_timeout(300)
     check('the run list follows my order (Run 11 first)', page.locator('.seg:not(.order-seg) button').nth(1).inner_text() == 'Run 11', page.locator('.seg:not(.order-seg)').inner_text())
 
     # Deliver all of Run 11.

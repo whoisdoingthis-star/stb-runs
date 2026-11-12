@@ -956,8 +956,23 @@ async function viewRun(ids) {
   const abMain = h('div', { class: 'ab-main' });
   const abSub = h('div', { class: 'ab-sub' });
   const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, icon('undo'), 'Undo');
-  const abPhoto = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Take a delivery photo', onclick: () => { if (S.last?.lines.length === 1) takePhoto(S.last.lines[0]); } }, icon('camera'));
-  const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => { if (S.last) openProblem(S.last); } }, icon('warn'));
+  // Photo and Problem are always in the bar (Mike, 12 Nov 2026: he couldn't find them). They work for the stop
+  // just ticked or the next stop: with both, it asks which one, so a photo or "gate locked" never needs a tick first.
+  const nextTarget = () => {
+    const el = body.querySelector('.tile.next'); const key = el?.getAttribute('data-key'); const found = key && S.lineByKey[key];
+    const lines = Array.isArray(found) ? found : found ? [found] : [];
+    return lines.length ? { lines, label: el.getAttribute('data-label') || addrText(lines[0]), flashKey: key } : null;
+  };
+  function whichStop(title, then) {
+    const last = S.last; const next = nextTarget();
+    if (last && next && last.flashKey !== next.flashKey) {
+      const close = openSheet(title,
+        h('button', { class: 'btn big', onclick: () => { close(); then(last); } }, `${last.problem ? '\u26a0' : '\u2713'} ${last.label} (just done)`),
+        h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => { close(); then(next); } }, `${next.label} (next stop)`));
+    } else if (last || next) then(last || next);
+  }
+  const abPhoto = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Take a delivery photo', onclick: () => whichStop('Photo of which stop?', (t) => takePhoto(t.lines[0])) }, icon('camera'), h('span', { class: 'ab-lbl' }, 'Photo'));
+  const abProblem = h('button', { class: 'ab-btn', hidden: true, 'aria-label': 'Problem with this delivery', onclick: () => whichStop('Problem at which stop?', (t) => openProblem(t)) }, icon('warn'), h('span', { class: 'ab-lbl' }, 'Problem'));
   const navStan = stanOn() ? stan({ head: true, size: 30 }) : null;
   const abNav = h('button', { class: 'ab-btn', hidden: true, 'aria-label': navStan ? 'Stan, the Driver Assistant' : 'Driver Assistant', 'aria-pressed': 'false', onclick: () => assistant(!da.on, true) },
     navStan || icon('nav'), h('span', { class: 'ab-lbl' }, navStan ? 'Stan' : 'Assistant'));
@@ -966,11 +981,12 @@ async function viewRun(ids) {
     h('div', { class: 'ab-text', onclick: () => goNext(true) }, abMain, abSub), abUndo, abProblem, abPhoto, abNav, abNext);
   function drawBar(nextEl) {
     const last = S.last;
-    abUndo.hidden = !last; abProblem.hidden = !last; abPhoto.hidden = !(last && last.lines.length === 1);
+    abUndo.hidden = !last; abProblem.hidden = !last && !nextEl; abPhoto.hidden = !last && !nextEl;
     abMain.textContent = last ? `${last.problem ? '⚠' : '✓'} ${last.problem ? `${last.problem}: ` : ''}${last.label}` : (nextEl ? 'Next stop' : '');
     abSub.textContent = nextEl ? `Next: ${nextEl.getAttribute('data-label') || ''}` : (S.progress?.total ? 'All done on this screen' : '');
     abNext.hidden = !nextEl; abNav.hidden = !nextEl && !da.on;
-    actionbar.classList.toggle('has-last', !!last); // two rows once there is a tick: words on top, buttons underneath
+    actionbar.classList.toggle('has-last', !!last || !!nextEl); // two rows: words on top, buttons underneath
+    actionbar.classList.toggle('with-undo', !!last); // with Undo there's no room for the words on Photo and Problem
     if (da.on) { daTick(geo.last); requestAnimationFrame(() => document.documentElement.style.setProperty('--ab-h', `${actionbar.offsetHeight}px`)); } // the next stop may have changed
   }
   // Scroll the next stop into view (only if it's off screen, unless asked).

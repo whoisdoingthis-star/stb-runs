@@ -76,6 +76,9 @@ Anyone who opens the same run (for example from a texted link) sees the same lis
 ### No signal?
 Keep going. Ticks are saved on the phone and sent when there is signal ("3 to send" at the top). Photos need signal to save to the run; if one can't, it says so and lets you try again (you can still send it on WhatsApp).
 
+## Photos and problems
+The bottom bar of a run always has **Problem** (⚠) and **Photo** (📷). They work for the stop you just did or the next one: if there are both, the app asks which. So you can take a photo, or say *Gate locked*, without ticking first. Once you've ticked a stop the bar also has Undo, and the two buttons shrink to just their pictures.
+
 ## Stan
 Stan is our little yellow robot. He's the **Stan** button in the bottom bar of a run: tap him for directions to the next stop (that's the Driver Assistant). In the panel he tells you how he's helping: **Turn by turn** (blue lights), **Pointing the way** (amber: he knows where the stop is, not the roads) or **Waiting for GPS** (grey). He talks when the voice is on, and pops up to cheer when you finish a run. **Got an idea? Tell Stan.** On the Runs page tap **Got an idea? Tell Stan** (or ⋯ → Tell Stan an idea in a run). Type what would make the app better, or what's bugging you, and tap **Send**. Stan answers, and your idea goes in the ideas book that Mike reads. You can use the microphone on the phone's keyboard to say it instead of typing.
 

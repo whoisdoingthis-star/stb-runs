@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Photo and Problem are always there** (Mike couldn't find them, 12 Nov): both buttons are in a run's bottom bar from the start, with their names, and work for the stop just done or the next stop (the app asks which). No need to tick first; photos work for stops with several papers too.
 - **Chat with Stan** (Mike's idea, 12 Nov): tap **Got an idea? Tell Stan** on the Runs page (or in a run's ⋯ menu), type an idea, tweak or niggle, and Stan answers out loud with a bit of cheek. Every message goes in **Stan's ideas book** on the Dispatch Overview, where each gets a status (New, Planned, Done, Not now) and a note. ([decision 0024](docs/decisions/0024-chat-with-stan.md); table `ideas`)
 - Fix: the finish time no longer makes the run screen wider than the phone (it drops to its own line; it replaces "to go" when both would show).
 - **Finish time** (Mike, 12 Nov): the run screen and the On duty card show *finish about 6:35 am* for all the runs you have open, from your pace so far, so you know early if you need to ring for help.

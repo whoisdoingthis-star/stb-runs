@@ -638,7 +638,8 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 .splash .sp-pin, .splash .sp-logo, .splash .sp-tw { opacity: 0; }
 /* Five buttons after a tick: Maps shows just its arrow, and buttons use less padding. */
 .actionbar.has-last .ab-btn { padding: 0 6px; min-width: 0; gap: 4px; }
-.actionbar.has-last .ab-lbl { display: none; }
+.actionbar.with-undo .ab-lbl { display: none; }
+.actionbar.has-last .ab-lbl { font-size: 13px; }
 .actionbar.has-last .ab-btn { flex: 1 1 auto; }
 .actionbar.has-last .ab-btn.primary { flex: 1.3 1 auto; }
 .flag.resume { background: var(--other-bg, #3a2f12); color: var(--warn); }
@@ -767,3 +768,4 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
 .dz-idea.st-planned { border-left-color: var(--info); } .dz-idea.st-done { border-left-color: var(--done-line); } .dz-idea.st-declined { border-left-color: var(--line); }
 .dz-idea-text { font-weight: 600; white-space: pre-wrap; }
 .dz-idea-act { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.actionbar.has-last .ab-btn { gap: 6px; padding-left: 6px; padding-right: 6px; }

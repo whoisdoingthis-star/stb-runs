@@ -66,6 +66,7 @@ with sync_playwright() as p:
     key = page.locator('.tile.next').get_attribute('data-key')
     page.locator('.tile.next').click(); page.wait_for_timeout(200)
     page.click('[aria-label="Problem with this delivery"]'); page.wait_for_selector('.sheet')
+    page.click('.sheet >> text=(just done)'); page.wait_for_timeout(300)  # it asks which stop: the one just ticked, or the next
     page.click('.sheet >> text=Gate locked'); page.wait_for_timeout(300)
     tl = page.locator(f'.tile[data-key="{key}"]')
     check("couldn't deliver shows on the tile", 'futile' in (tl.get_attribute('class') or '') and 'Gate locked' in tl.inner_text(), tl.inner_text().replace('\n', ' | '))
