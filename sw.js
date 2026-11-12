@@ -1,6 +1,6 @@
 // Keeps the app itself on the phone so it opens with no signal.
 // Bump VERSION whenever any file changes, so phones pick up the new copy.
-const VERSION = 'stb-runs-v56';
+const VERSION = 'stb-runs-v57';
 const SHELL = [
   './', 'index.html', 'styles.css', 'config.js', 'manifest.webmanifest',
   'js/app.js', 'js/store.js', 'js/geo.js', 'js/parser.js', 'js/sequence.js', 'js/village.js', 'js/rows.js', 'js/splash.js', 'js/assistant.js', 'js/shifts.js', 'js/stan.js', 'js/stanvoice.js', 'js/stanvoice-worker.js',
@@ -9,7 +9,9 @@ const SHELL = [
 ];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  // Clear out older versions of the app, but only those: other caches (Stan's voice, 100 MB,
+  // 'stb-stan-voice') must survive an update.
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('stb-runs-v') && k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);

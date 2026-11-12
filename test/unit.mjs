@@ -65,3 +65,10 @@ t('Different publications at one address share a tile, NZH first', () => { const
   t('nothing to say is nothing', () => assert.deepEqual(speakable('  ... '), []));
   t('Stan’s chosen voice is recorded', () => assert.deepEqual([STAN.voice, STAN.speaker], ['vctk', 'p316']));
 }
+
+// ---- an app update must not delete Stan's voice (decision 0023) ----
+{
+  const fs = await import('fs');
+  const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  t('updating the app only clears old app versions, never Stan’s voice', () => { assert.match(sw, /k\.startsWith\('stb-runs-v'\) && k !== VERSION/); assert.doesNotMatch(sw, /filter\(\(k\) => k !== VERSION\)/); });
+}
