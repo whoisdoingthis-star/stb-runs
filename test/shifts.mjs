@@ -1,6 +1,6 @@
 // On Duty and the shift timeline (decision 0020): every minute accounted for.
 import assert from 'node:assert/strict';
-import { shiftSegments, runOwners, currentDuty, shiftStart, MotionWatch, clock, parseLatLng } from '../js/shifts.js';
+import { shiftSegments, runOwners, currentDuty, shiftStart, MotionWatch, clock, parseLatLng, estimateFinish } from '../js/shifts.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log(`✓ ${name}`); } catch (e) { failed++; console.log(`✗ ${name}\n  ${e.message}`); } };
 const at = (hm) => new Date(`2026-11-12T${hm}:00+13:00`).getTime();
@@ -70,6 +70,21 @@ t('forgot Off duty: the shift ends at the last thing they did, not days later', 
 t('a tick after Off duty (fixing a mistake that evening) doesn\u2019t stretch the shift', () => {
   const x = shiftSegments({ ...day, ticks: [...day.ticks, { run_id: 'r6', device_time: at('18:10') }] });
   assert.equal(x.end, at('06:25'));
+});
+// ---- about when will it all be done? ----
+t('finish time: pace so far times the stops left', () => {
+  const T = []; for (let i = 0; i < 11; i++) T.push(at('05:00') + i * 60000); // 11 stops, one a minute
+  const e = estimateFinish({ tickTimes: T, done: 11, remaining: 30, now: at('05:10') });
+  assert.equal(e.at, at('05:40'));
+});
+t('finish time: a long stop (10+ min) doesn\u2019t slow the pace, and each run not started adds 5 minutes', () => {
+  const T = [0, 1, 2, 3, 4, 5].map((i) => at('05:00') + i * 60000).concat([at('05:30'), at('05:31')]);
+  const e = estimateFinish({ tickTimes: T, done: 8, remaining: 14, unstarted: 2, now: at('05:31') });
+  assert.equal(Math.round((e.at - at('05:31')) / 60000), 22); // 6 min of work over 7 gaps -> 12 min for 14 stops, + 10
+});
+t('finish time: no guess before 5 stops, or when nothing is left', () => {
+  assert.equal(estimateFinish({ tickTimes: [1, 2, 3], done: 3, remaining: 10 }), null);
+  assert.equal(estimateFinish({ tickTimes: [1, 2, 3, 4, 5, 6], done: 6, remaining: 0 }), null);
 });
 // ---- pasting the depot's location (Dispatch) ----
 const near = (p, lat, lng) => p && Math.abs(p.lat - lat) < 1e-6 && Math.abs(p.lng - lng) < 1e-6;

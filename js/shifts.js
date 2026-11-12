@@ -150,3 +150,19 @@ export function parseLatLng(text) {
 }
 
 export const SEGMENT_LABEL = { depot: 'Depot', travel: 'Driving to a run', run: 'Own runs', help: 'Helping', pause: 'Stopped', between: 'Between runs', wrap: 'After the last stop' };
+
+/**
+ * About when will it all be done? (Mike, 12 Nov 2026: so a driver knows early if they should ring for help.)
+ * Pace = time actually spent delivering so far (gaps of 10+ minutes don't count) per finished stop;
+ * finish = now + pace x stops left + 5 minutes to get to each run not started yet.
+ * Needs 5 finished stops before it will guess. Returns { at, per } or null.
+ */
+export function estimateFinish({ tickTimes = [], done = 0, remaining = 0, unstarted = 0, now = Date.now(), travelMs = 5 * 60000 }) {
+  if (done < 5 || remaining <= 0) return null;
+  const T = [...tickTimes].filter(Number.isFinite).sort((a, b) => a - b);
+  let active = 0;
+  for (let i = 1; i < T.length; i++) { const d = T[i] - T[i - 1]; if (d < PAUSE_MS) active += d; }
+  if (active <= 0) return null;
+  const per = active / Math.max(1, done - 1);
+  return { at: now + per * remaining + unstarted * travelMs, per };
+}

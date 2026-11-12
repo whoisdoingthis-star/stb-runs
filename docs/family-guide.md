@@ -31,6 +31,7 @@ These are remembered on that phone only.
 - It changes to **On the run** by itself when you drive off, or when you tick your first stop.
 - **Choose my runs**: tap your runs in the order you'll do them (a number appears on each), then **Start my runs**. When you finish one, the app says "✓ Run 11 done. On to Run 6" and carries on with the next.
 - Helping someone else finish theirs? Just open their run and tick. When it's done, the app offers **Go to** your next run.
+- The bar at the top of a run shows **finish about 6:35 am**: about when all the runs you have open will be done, at the pace you're going. If that's later than you'd like, ring someone for a hand. It also shows on the On duty card.
 - At the end, tap **Off duty**. After your last run the app asks if you're finished.
 
 ## Doing a run

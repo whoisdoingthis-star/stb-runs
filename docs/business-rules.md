@@ -142,6 +142,7 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 - **No minute goes missing.** A shift is split into depot, driving to a run, own runs, helping, stopped (10 minutes or more with no tick), between runs and after the last stop. The gap after helping someone counts as driving to your next run.
 - **Helping** shows on the helper's shift as *Helping (Moana)*; it doesn't change the run owner's figures. A run belongs to the driver it was closed with, else whoever ticked most of it.
 - Forgot Off duty: the shift ends at the last tick (after 12 hours). Ticks after Off duty aren't part of the shift.
+- **Finish time** (Mike, 12 Nov 2026): the run screen shows *finish about 6:35 am* for everything you have open (all of My runs), so you know early if you should ring someone for help. It's your pace so far (stops of 10+ minutes don't count) times the stops left, plus 5 minutes to get to each run not started. No guess before 5 stops.
 - **The depot** is set in Dispatch; within 150 m (changeable) counts as at the depot.
 
 ## Tracing a tile back to the sheet

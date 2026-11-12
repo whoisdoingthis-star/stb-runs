@@ -56,14 +56,16 @@ with sync_playwright() as p:
 
     # Deliver all of Run 11.
     page.locator('.seg:not(.order-seg) button', has_text='Run 11').click(); page.wait_for_timeout(200)
-    first = True
-    for _ in range(200):
+    first = True; eta = ''
+    for n in range(200):
         t = page.locator('.tile:not(.done)')
         if t.count() == 0: break
         t.first.click(); page.wait_for_timeout(60)
+        if n == 8: page.wait_for_timeout(1100); eta = page.inner_text('.fb-time')
         if first:
             check('the first tick switches to On the run', duty()[-1]['state'] == 'on_run' and duty()[-1]['source'] == 'tick', json.dumps(duty()[-1]))
             first = False
+    check('the run screen says about when all my runs will be finished', 'finish about' in eta, eta)
     page.wait_for_selector('#toast .stan', timeout=3000)
     if SHOTS: page.screenshot(path=f'{SHOTS}/toast-stan.png')
     toast = page.inner_text('#toast') if page.locator('#toast').is_visible() else ''

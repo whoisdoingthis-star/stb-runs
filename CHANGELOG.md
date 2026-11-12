@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Finish time** (Mike, 12 Nov): the run screen and the On duty card show *finish about 6:35 am* for all the runs you have open, from your pace so far, so you know early if you need to ring for help.
 - Fix: an app update no longer deletes Stan's downloaded voice (the updater now clears only old app versions).
 - **Stan has his own voice** (chosen by Mike in the voice lab, 12 Nov): the same on every phone, with proper pauses at commas and full stops, road names said in full, and a warmer sound. About 100 MB once (he asks first unless you're on Wi-Fi), then it loads when the app opens and works with no signal. The phone's voice fills in until it's ready; **⚙ Settings → Voice** switches between them. ([decision 0023](docs/decisions/0023-stan-voice.md))
 - **Stan's own voice, step one:** a voice lab (`test/voice-lab.html`) to choose Stan's voice from free-for-business voices (VCTK, LibriTTS-R), with proper pauses at commas and full stops and a warmer sound. Engine in `js/stanvoice.js` (not switched on in the app yet). Credits in [docs/credits.md](docs/credits.md).

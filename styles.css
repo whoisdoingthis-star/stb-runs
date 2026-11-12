@@ -745,3 +745,4 @@ html.big .da-ctl .da-stan { font-size: 17px; }
 .empty .stan-says, .finished .stan-says { justify-content: center; text-align: left; }
 .dz-tip .stan-says { align-items: flex-start; }
 html.big .stan-says .stan { --stan: 72px !important; }
+.duty-eta { font-weight: 800; font-size: var(--t-l); }

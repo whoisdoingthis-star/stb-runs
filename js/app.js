@@ -9,7 +9,7 @@ import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
-import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM } from './shifts.js';
+import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -372,9 +372,17 @@ function dutyCard(todayRuns, rerender) {
   card.append(...[
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
-    mineRow, h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
+    mineRow, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
   card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
   return card;
+}
+/** "Finish about 6:35 am", from the run screen's latest guess (kept for 20 minutes). */
+function etaRow() {
+  try {
+    const e = JSON.parse(pref('stb.eta', 'null'));
+    if (!e || Date.now() - e.saved > 20 * 60000 || e.at < Date.now()) return null;
+    return h('div', { class: 'duty-eta' }, `Finish about ${fmtTime(new Date(e.at).toISOString())}`);
+  } catch { return null; }
 }
 /** Pick today's runs in the order you'll do them; the app moves on to the next one by itself. */
 function openMyRuns(todayRuns, done) {
@@ -1352,6 +1360,16 @@ async function viewRun(ids) {
     fbProg.replaceChildren(h('b', null, `${stopsDone}/${stops}`), ` · ${copiesDone}/${copies} items`);
     fbFill.style.width = `${stops ? (100 * stopsDone) / stops : 0}%`;
     S.progress = { done: stopsDone, total: stops, runIds: visibleRuns.map((d) => d.run.id) };
+    // Everything open (all of My runs), for the finish time: stops done and left, and runs not started.
+    const all = { done: 0, total: 0, unstarted: 0 };
+    for (const d of S.data) {
+      let n = 0; let dn = 0;
+      for (const g of (S.show === 'all' || d.run.id === S.show ? laid.find((x) => x.d === d) : groupsFor(d)).groups) {
+        if (g.type === 'bundle') { n += 1; if (g.lines.every(isDone)) dn += 1; } else { n += g.lines.length; dn += g.lines.filter(isDone).length; }
+      }
+      all.done += dn; all.total += n; if (n && !dn) all.unstarted += 1;
+    }
+    S.all = all;
     tick();
 
     const q = S.query;
@@ -1495,7 +1513,14 @@ async function viewRun(ids) {
     if (!p) return;
     const st = status();
     const times = S.events.filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)).filter(Number.isFinite);
-    if (!times.length) { fbTime.textContent = 'Starts at first tick'; return; }
+    const finish = () => {
+      const a = S.all;
+      const eta = a && estimateFinish({ tickTimes: S.events.filter((e) => e.done).map((e) => Date.parse(e.device_time)), done: a.done, remaining: a.total - a.done, unstarted: Math.max(0, a.unstarted - (p.done ? 0 : 1)) });
+      if (!eta) return '';
+      setPref('stb.eta', JSON.stringify({ at: eta.at, saved: Date.now() }));
+      return ` \u00b7 finish about ${fmtTime(new Date(eta.at).toISOString())}`;
+    };
+    if (!times.length) { fbTime.textContent = `Starts at first tick${finish()}`; return; }
     const start = Math.min(...times);
     const complete = p.total > 0 && p.done === p.total;
     const lastDone = Math.max(...Object.values(st).filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)), start);
@@ -1506,6 +1531,8 @@ async function viewRun(ids) {
       const rem = per * (p.total - p.done);
       text += rem < 60000 ? ' · nearly done' : ` · ~${fmtDur(rem)} to go`;
     }
+    // About when it will all be done (every run open here, so all of My runs), so you know early if you need a hand.
+    text += finish();
     fbTime.textContent = text;
   }
   const clock = setInterval(tick, 1000);
