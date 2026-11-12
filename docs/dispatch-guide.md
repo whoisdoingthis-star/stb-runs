@@ -13,6 +13,9 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 - **Delivery score (DIFOTIS)** per run: delivered, in full (not short), on time (inside the address's time policies, or on the day), in spec (no wet, damaged or wrong-paper complaint for that day), and couldn't deliver. See [business rules](business-rules.md#delivery-outcomes).
 - **Items to collect** and **Recent photos**.
 
+### Stan
+Stan shows up when there's nothing to do ("✓ Nothing waiting", "Nothing active"), and the **Stan's tip** card on the Overview has one tip a day with a link to this guide. He's never on the figures. Hide him in the app's **⚙ Settings → Stan** (same browser).
+
 ### Shifts and the depot (Overview)
 - **Shifts**: one bar per person for the day: depot (grey), driving to a run (striped), own runs (green), helping (purple), between runs (orange), stopped (pale yellow), after the last stop. Hover a piece for its times. Under it: the totals, and each run's time including getting there.
 - People who didn't tap On duty show from first to last tick; a shift with no Off duty says so.

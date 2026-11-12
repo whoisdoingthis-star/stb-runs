@@ -54,3 +54,31 @@ export function stanState(el, state) { if (el) el.dataset.state = state || ''; }
 
 /** Talking while the phone speaks (mouth lights blink, antenna pin pulses). */
 export function stanTalk(el, on) { el?.classList.toggle('st-talking', !!on); }
+
+/**
+ * An empty screen or a calm message, said by Stan: him beside the words. With Stan hidden, just the words.
+ * `text` may be a string or an element.
+ */
+export function stanSays(text, { pose = 'idle', size = 56, cls = '' } = {}) {
+  const box = document.createElement('div');
+  box.className = `stan-says ${cls}`.trim();
+  const words = typeof text === 'string' ? Object.assign(document.createElement('p'), { textContent: text }) : text;
+  if (stanOn()) box.append(stan({ pose, size }));
+  box.append(words);
+  return box;
+}
+
+/** Stan's tips for Dispatch: one a day (same tip all day), plus a link to the full guide. */
+export const DISPATCH_TIPS = [
+  'Paper run today? Close it from Runs with the driver, so it drops to History and counts for them.',
+  'Drag a tile in a run to change the order for everyone. Drivers’ own drags only change their phone.',
+  'A tick in the wrong place? Undo it on the phone, or see the runbook to remove it here.',
+  'Shifts: hover a piece of the bar to see what it was and how long it took.',
+  'STOPNA on a sheet becomes a stop, not a complaint. Check Needs attention after loading.',
+  'Set the depot once (Overview, Depot) and phones will tell drivers when they’ve arrived.',
+  'Two rules that disagree are refused: change the dates on the old one first.',
+];
+export function tipOfDay(date = new Date()) {
+  const day = Math.floor((date.getTime() + 13 * 3600e3) / 864e5);
+  return DISPATCH_TIPS[day % DISPATCH_TIPS.length];
+}

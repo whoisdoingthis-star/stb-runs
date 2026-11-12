@@ -33,6 +33,10 @@ with sync_playwright() as p:
     page.goto('http://localhost:8765/#/'); page.reload(); page.wait_for_selector('.duty-card'); page.wait_for_selector('.splash', state='detached', timeout=5000)
     duty = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.duty') || '[]')")
 
+    page.locator('.home-tabs button', has_text='History').click(); page.wait_for_timeout(200)
+    check('an empty History tab: Stan says finished runs will show here', page.locator('.empty .stan-says .stan').count() == 1 and 'Finished runs will show here' in page.inner_text('.empty'))
+    if SHOTS: page.locator('.empty').screenshot(path=f'{SHOTS}/empty-history.png')
+    page.locator('.home-tabs button', has_text='Runs to do').click(); page.wait_for_timeout(200)
     check('the first time, Stan says hello on the duty card', page.locator('.duty-card .stan.st-wave').count() == 1 and 'Stan' in page.inner_text('.duty-card'))
     if SHOTS: page.locator('.duty-card').screenshot(path=f'{SHOTS}/duty-hello.png')
     check('the Runs page starts Off duty, with an On duty button', 'Off duty' in page.inner_text('.duty-card') and page.locator('.duty-btn').is_visible())

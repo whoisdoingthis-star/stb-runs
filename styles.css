@@ -739,3 +739,9 @@ html.big .duty-actions { grid-template-columns: 1fr; }
 html.big .da-ctl .da-stan { font-size: 17px; }
 #toast > span.stan { flex: none; margin: -8px 10px -8px -4px; }
 .duty-hello { display: flex; gap: 12px; align-items: center; }
+/* Stan says (empty screens and calm messages) */
+.stan-says { display: flex; align-items: center; gap: 14px; }
+.stan-says p { margin: 0; }
+.empty .stan-says, .finished .stan-says { justify-content: center; text-align: left; }
+.dz-tip .stan-says { align-items: flex-start; }
+html.big .stan-says .stan { --stan: 72px !important; }

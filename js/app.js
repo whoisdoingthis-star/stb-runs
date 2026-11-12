@@ -7,7 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
-import { stan, stanState, stanTalk, stanOn, setStan } from './stan.js';
+import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -385,7 +385,7 @@ async function viewHome() {
     drawDuty(runs);
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
-        h('p', null, app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.'),
+        stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' }),
         app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs now') : null,
         h('button', { class: `btn big ${app.store.mode === 'shared' ? '' : 'primary'}`, style: 'margin-top:8px', onclick: () => fileInput.click() }, 'Upload a run sheet (PDF)')));
       return;
@@ -450,8 +450,8 @@ async function viewHome() {
     const pastDates = Object.keys(past).sort().reverse();
     list.replaceChildren(tabs, ...(homeTab === 'current'
       ? (curDates.length ? curDates.map((d) => daySection(d, cur)) : [h('div', { class: 'empty' }, Object.keys(byDate).some((d) => d >= today)
-        ? 'All done. Finished runs are under History.' : 'No runs for today or tomorrow yet. They load themselves after 7pm.')])
-      : (pastDates.length ? pastDates.map((d) => daySection(d, past)) : [h('div', { class: 'empty' }, 'Finished runs will show here.')])));
+        ? stanSays('All done! Finished runs are under History.', { pose: 'hop' }) : stanSays('No runs for today or tomorrow yet. They load themselves after 7pm.'))])
+      : (pastDates.length ? pastDates.map((d) => daySection(d, past)) : [h('div', { class: 'empty' }, stanSays('Finished runs will show here.'))])));
   }
   await renderList();
 
@@ -1330,7 +1330,7 @@ async function viewRun(ids) {
       });
     }
     if (!out.some((n) => n.tagName === 'SECTION')) {
-      out.push(h('div', { class: 'finished' }, q ? 'No match.' : S.todoOnly && stopsDone === stops ? 'Run complete. Nice work.' : 'Nothing to show.'));
+      out.push(h('div', { class: 'finished' }, q ? 'No match.' : S.todoOnly && stopsDone === stops ? stanSays('Run complete. Nice work!', { pose: 'hop' }) : 'Nothing to show.'));
     }
     body.replaceChildren(...out);
     body.classList.toggle('as-list', layoutIsList());

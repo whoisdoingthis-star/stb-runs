@@ -34,6 +34,7 @@ async function leaflet() {
 }
 
 import { runComplete } from './rows.js';
+import { stanSays, tipOfDay } from './stan.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
@@ -300,7 +301,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         h('div', { class: 'dz-actions' },
           h('button', { class: 'btn primary', onclick: () => openRefetch() }, 'Get Runs from RouteSmart…'),
           h('button', { class: 'btn', onclick: () => pickSheets() }, 'Upload a sheet…')));
-    const attnCard = card('Needs attention', attention.length ? h('ul', { class: 'dz-attn' }, attention) : h('p', { class: 'ok' }, '✓ Nothing waiting.'));
+    const attnCard = card('Needs attention', attention.length ? h('ul', { class: 'dz-attn' }, attention) : stanSays(h('p', { class: 'ok' }, '✓ Nothing waiting.'), { pose: 'wave', size: 44 }));
     const complaintsCard = todays.length ? card(`Complaints on this sheet (${todays.length})`, h('ul', { class: 'dz-complaints' }, todays.map(complaintSummary)),
         h('button', { class: 'link', onclick: () => go('complaints', null) }, 'All complaints and patterns ›')) : null;
     const progressCard = card('Progress',
@@ -313,6 +314,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const scoreCard = rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null;
     const itemsCard = card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–'));
     const shiftsCard = card('Shifts', shiftsView(rs));
+    const tipCard = card('Stan\u2019s tip', stanSays(h('p', null, tipOfDay(), ' ',
+      h('a', { href: 'https://github.com/whoisdoingthis-star/stb-runs/blob/main/docs/dispatch-guide.md', target: '_blank', rel: 'noopener' }, 'More in the Dispatch guide')), { size: 40, cls: 'dz-tip' }));
     const depotCard = card('Depot', D.depot?.lat
       ? h('p', null, `Set${D.depot.updated_by ? ` by ${D.depot.updated_by}` : ''}: ${D.depot.lat.toFixed(5)}, ${D.depot.lng.toFixed(5)} (within ${D.depot.radius_m || 150} m counts as at the depot). `,
         h('a', { href: `https://www.google.com/maps/search/?api=1&query=${D.depot.lat},${D.depot.lng}`, target: '_blank', rel: 'noopener' }, 'Check on the map'))
@@ -322,7 +325,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         : h('p', { class: 'muted' }, 'No delivery photos yet.'));
     // Two columns on a laptop: the day's work on the left, what needs a look on the right (first on a phone).
     return h('div', { class: 'dz-over' },
-      h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard, depotCard),
+      h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard, depotCard, tipCard),
       h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), shiftsCard, scoreCard));
   }
 
@@ -331,7 +334,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const ticks = D.status.filter((x) => x.done && x.method !== 'paper' && x.user_name);
     const owners = runOwners(rs, D.status);
     const people = [...new Set([...D.duty.map((e) => e.user_name), ...ticks.map((x) => x.user_name)].filter(Boolean))].sort();
-    if (!people.length) return h('p', { class: 'muted' }, 'Nobody has gone on duty or ticked a stop this day yet.');
+    if (!people.length) return stanSays(h('p', { class: 'muted' }, 'Nobody has gone on duty or ticked a stop this day yet.'), { size: 44 });
     const name = (id) => shortRoute(rs.find((r) => r.id === id)?.route || '') || 'a run';
     const hm = (t) => new Date(t).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
     const rows = people.map((p) => {
@@ -576,7 +579,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
               h('td', null, !r.last_changes ? '–' : !r.last_changes.count ? 'No changes'
                 : h('details', null, h('summary', null, `${r.last_changes.count} changed`), h('ul', null, r.last_changes.items.map((x) => h('li', null, x))))),
               h('td', null, runStatus(r))))))));
-      }) : h('p', { class: 'muted' }, hist ? 'No finished runs yet.' : D.runs.length ? '✓ Nothing active: every run is finished or closed.' : 'No sheets loaded yet.'));
+      }) : stanSays(h('p', { class: 'muted' }, hist ? 'No finished runs yet.' : D.runs.length ? '✓ Nothing active: every run is finished or closed.' : 'No sheets loaded yet.'), { pose: !hist && D.runs.length ? 'hop' : 'idle', size: 44 }));
   }
 
   // ================= History =================

@@ -44,3 +44,11 @@ t('Different publications at one address share a tile, NZH first', () => { const
   t('a real complaint is not a stop', () => assert.equal(temporaryStop({ type: 'WET', comments: '1011' }, '2026-11-11'), null));
   t('a stop that has ended says deliver again', () => assert.match(temporaryStop({ type: 'STOPNA', comments: '0111 stop till 05112026' }, '2026-11-11').text, /deliver again/));
 }
+
+// ---- Stan's tip of the day (Dispatch) ----
+{
+  const { tipOfDay, DISPATCH_TIPS } = await import('../js/stan.js');
+  t('Stan’s tip stays the same all day (NZ time)', () => assert.equal(tipOfDay(new Date('2026-11-12T11:30:00Z')), tipOfDay(new Date('2026-11-12T22:00:00Z'))));
+  t('Stan’s tip changes the next day', () => assert.notEqual(tipOfDay(new Date('2026-11-12T00:00:00Z')), tipOfDay(new Date('2026-11-13T00:00:00Z'))));
+  t('Stan’s tips are short', () => assert.ok(DISPATCH_TIPS.every((x) => x.length <= 120)));
+}
