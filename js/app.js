@@ -1526,13 +1526,14 @@ async function viewRun(ids) {
     const lastDone = Math.max(...Object.values(st).filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)), start);
     if (complete) { fbTime.textContent = `✓ Done in ${fmtClock(lastDone - start)}`; return; }
     let text = `⏱ ${fmtClock(Date.now() - start)}`;
+    let togo = '';
     if (p.done >= 5 && lastDone > start) {
       const per = (lastDone - start) / (p.done - 1);
       const rem = per * (p.total - p.done);
-      text += rem < 60000 ? ' · nearly done' : ` · ~${fmtDur(rem)} to go`;
+      togo = rem < 60000 ? ' · nearly done' : ` · ~${fmtDur(rem)} to go`;
     }
-    // About when it will all be done (every run open here, so all of My runs), so you know early if you need a hand.
-    text += finish();
+    const fin = finish();
+    text += fin || togo; // the finish time (all my runs) says more than "to go" for this one; no room for both
     fbTime.textContent = text;
   }
   const clock = setInterval(tick, 1000);

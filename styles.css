@@ -746,3 +746,6 @@ html.big .da-ctl .da-stan { font-size: 17px; }
 .dz-tip .stan-says { align-items: flex-start; }
 html.big .stan-says .stan { --stan: 72px !important; }
 .duty-eta { font-weight: 800; font-size: var(--t-l); }
+/* The progress row never widens the page: the time drops to its own line when it's long (finish time). */
+.rh-prog { flex-wrap: wrap; min-width: 0; max-width: min(900px, 100%); row-gap: 2px; }
+.rh-prog .fb-time { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }

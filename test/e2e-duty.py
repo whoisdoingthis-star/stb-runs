@@ -61,11 +61,12 @@ with sync_playwright() as p:
         t = page.locator('.tile:not(.done)')
         if t.count() == 0: break
         t.first.click(); page.wait_for_timeout(60)
-        if n == 8: page.wait_for_timeout(1100); eta = page.inner_text('.fb-time')
+        if n == 8: page.wait_for_timeout(1100); eta = page.inner_text('.fb-time'); wide = page.evaluate('document.documentElement.scrollWidth - innerWidth')
         if first:
             check('the first tick switches to On the run', duty()[-1]['state'] == 'on_run' and duty()[-1]['source'] == 'tick', json.dumps(duty()[-1]))
             first = False
     check('the run screen says about when all my runs will be finished', 'finish about' in eta, eta)
+    check('the finish time fits the phone (the page never gets wider than the screen)', wide <= 0, str(wide))
     page.wait_for_selector('#toast .stan', timeout=3000)
     if SHOTS: page.screenshot(path=f'{SHOTS}/toast-stan.png')
     toast = page.inner_text('#toast') if page.locator('#toast').is_visible() else ''
