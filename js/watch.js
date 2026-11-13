@@ -79,8 +79,10 @@ export function summaryText(dateLabel, rows, extras = {}, fmt = (t) => new Date(
   const lines = rows.map((r) => {
     const w = r.watch;
     if (w.state.startsWith('done')) return `${r.name}: finished ${w.finishedAt ? fmt(w.finishedAt) : '(paper sheet)'}${w.state === 'done_late' ? `, ${w.overMin} min late` : ''}`;
-    if (w.eta) return `${r.name}: ${w.text.toLowerCase()}, finish about ${fmt(w.eta)}`;
-    return `${r.name}: ${w.text.toLowerCase()}`;
+    const low = w.text.charAt(0).toLowerCase() + w.text.slice(1);
+    if (w.state === 'not_started_late') return `${r.name}: not started; even starting now, about ${w.overMin} min late`;
+    if (w.eta) return `${r.name}: ${low}, finish about ${fmt(w.eta)}`;
+    return `${r.name}: ${low}`;
   });
   const tail = [];
   if (extras.notDelivered?.length) tail.push(`Not delivered (${extras.notDelivered.length}): ${extras.notDelivered.join('; ')}`);
