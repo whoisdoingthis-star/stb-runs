@@ -919,3 +919,22 @@ create policy ideas_add on public.ideas for insert to authenticated
   with check (public.is_member() and user_id = auth.uid() and status = 'new' and note is null);
 drop policy if exists ideas_review on public.ideas;
 create policy ideas_review on public.ideas for update to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());
+
+-- ---- People's icons (Mike, 13 Nov 2026, via Chat with Stan; docs/decisions/0025-avatars.md) ----
+-- One row per person: a ready-made icon's name, or a small photo (96x96 JPEG as a data URL, made on the phone).
+create table if not exists public.avatars (
+  user_id    uuid primary key default auth.uid(),
+  user_name  text not null,
+  kind       text not null check (kind in ('icon', 'photo')),
+  value      text not null check (char_length(value) < 60000),
+  updated_at timestamptz not null default now(),
+  check (kind <> 'photo' or value ~ '^data:image/(jpeg|png);base64,[A-Za-z0-9+/=]+$'),
+  check (kind <> 'icon' or value ~ '^[a-z]{2,20}$')
+);
+alter table public.avatars enable row level security;
+drop policy if exists avatars_read on public.avatars;
+create policy avatars_read on public.avatars for select to authenticated using (public.is_member());
+drop policy if exists avatars_mine_add on public.avatars;
+create policy avatars_mine_add on public.avatars for insert to authenticated with check (public.is_member() and user_id = auth.uid());
+drop policy if exists avatars_mine_change on public.avatars;
+create policy avatars_mine_change on public.avatars for update to authenticated using (user_id = auth.uid()) with check (public.is_member() and user_id = auth.uid());

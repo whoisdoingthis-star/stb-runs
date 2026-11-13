@@ -212,6 +212,8 @@ export class LocalStore extends Base {
     LS.set('stb.ideaspending', []);
     this.emitSync();
   }
+  async loadAvatars() { return LS.get('stb.avatars', {}); }
+  async setAvatar(kind, value) { const m = { ...LS.get('stb.avatars', {}), [this.me?.name || 'Me']: { kind, value } }; LS.set('stb.avatars', m); return m; }
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
@@ -528,6 +530,20 @@ export class SupabaseStore extends Base {
     if (error) throw error;
     const sent = new Set(batch.map((e) => e.id));
     LS.set('stb.ideaspending', this.pendingIdeas().filter((e) => !sent.has(e.id)));
+  }
+  /** Everyone's icons by name (decision 0025); the last loaded copy when offline. */
+  async loadAvatars() {
+    try {
+      const { data, error } = await this.sb.from('avatars').select('user_name, kind, value');
+      if (error) throw error;
+      const m = Object.fromEntries(data.map((a) => [a.user_name, { kind: a.kind, value: a.value }]));
+      LS.set('stb.avatars', m); return m;
+    } catch { return LS.get('stb.avatars', {}); }
+  }
+  async setAvatar(kind, value) {
+    const { error } = await this.sb.from('avatars').upsert({ user_id: this.me.id, user_name: this.me.name, kind, value, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (error) throw error;
+    const m = { ...LS.get('stb.avatars', {}), [this.me.name]: { kind, value } }; LS.set('stb.avatars', m); return m;
   }
   /** Everyone's ideas, newest first (Dispatch). */
   async loadIdeas() {

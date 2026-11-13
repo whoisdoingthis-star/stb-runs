@@ -81,3 +81,11 @@ t('Different publications at one address share a tile, NZH first', () => { const
   t('the same message gets the same reply, and a next one can differ', () => { assert.equal(stanReply('Rain colours', 0).text, stanReply('Rain colours', 0).text); assert.ok(new Set([0, 1, 2, 3, 4].map((n) => stanReply('Rain colours', n).text)).size > 1); });
   t('Stan never promises an idea will be built', () => { for (const m of ['add maps', 'it broke', 'be faster', 'new colours', 'reorder runs', 'hey stan', 'xyz']) for (let n = 0; n < 6; n++) assert.doesNotMatch(stanReply(m, n).text, /\b(will be (built|added|fixed)|I promise it|definitely)\b/i); });
 }
+
+// ---- people's icons (decision 0025) ----
+{
+  const { ICONS, iconSvg, initials, okPhoto } = await import('../js/avatars.js');
+  t('there are a dozen ready-made icons, each drawable', () => { assert.equal(Object.keys(ICONS).length, 12); for (const id of Object.keys(ICONS)) assert.match(iconSvg(id), /^<svg/); });
+  t('no icon chosen: initials', () => { assert.equal(initials('Mike'), 'M'); assert.equal(initials('Mary Jane Smith'), 'MJ'); assert.equal(initials(''), '?'); });
+  t('only a small image made by the app counts as a photo', () => { assert.ok(okPhoto('data:image/jpeg;base64,AAAA')); assert.ok(!okPhoto('javascript:alert(1)')); assert.ok(!okPhoto('https://example.com/x.jpg')); assert.ok(!okPhoto('data:image/svg+xml;base64,AAAA')); assert.ok(!okPhoto('data:image/jpeg;base64,' + 'A'.repeat(70000))); });
+}

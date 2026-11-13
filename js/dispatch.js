@@ -36,6 +36,7 @@ async function leaflet() {
 import { runComplete } from './rows.js';
 import { stanSays, tipOfDay } from './stan.js';
 import { IDEA_STATUS } from './stanchat.js';
+import { avatar } from './avatars.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
@@ -349,7 +350,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       const tip = (sg) => `${SEGMENT_LABEL[sg.kind]}${sg.run_id ? ` (${name(sg.run_id)})` : ''}: ${hm(sg.start)}–${hm(sg.end)}, ${clock(sg.end - sg.start)}`;
       const parts = ['depot', 'travel', 'run', 'help', 'between', 'pause', 'wrap'].filter((k) => x.totals[k] >= 60000).map((k) => `${SEGMENT_LABEL[k]} ${clock(x.totals[k])}`);
       return h('div', { class: 'dz-shift' },
-        h('div', { class: 'dz-shift-head' }, h('b', null, p),
+        h('div', { class: 'dz-shift-head' }, avatar(p, 26), h('b', null, p),
           ` ${hm(x.start)}–${x.open ? 'now' : hm(x.end)} · ${clock(x.totals.shift)}`,
           x.forgot ? h('span', { class: 'small warn' }, ' · didn’t tap Off duty (ends at the last tick)') : null,
           x.open ? h('span', { class: 'dz-duty-now' }, ` · ${DUTY_LABEL[now.state]}${now.run_id ? `: ${name(now.run_id)}` : ''}`) : null,
@@ -375,7 +376,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         Object.entries(IDEA_STATUS).map(([k, v]) => h('option', { value: k, selected: i.status === k }, v)));
       return h('li', { class: `dz-idea st-${i.status}` },
         h('div', { class: 'dz-idea-text' }, i.text),
-        h('div', { class: 'small muted' }, `${i.user_name || 'Someone'} \u00b7 ${fmtStamp(i.device_time)}${i.screen ? ` \u00b7 from the ${i.screen} screen` : ''}${i.note ? ` \u00b7 ${i.note}` : ''}`),
+        h('div', { class: 'small muted dz-idea-who' }, avatar(i.user_name || '?', 20), `${i.user_name || 'Someone'} \u00b7 ${fmtStamp(i.device_time)}${i.screen ? ` \u00b7 from the ${i.screen} screen` : ''}${i.note ? ` \u00b7 ${i.note}` : ''}`),
         h('div', { class: 'dz-idea-act' }, sel,
           h('button', { class: 'btn small', onclick: () => {
             const box = h('textarea', { rows: 3, style: 'width:100%', 'aria-label': 'Note' }, i.note || '');

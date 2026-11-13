@@ -28,6 +28,8 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 
 | `ideas` | Chat with Stan: what someone told Stan (`text`, `topic`, `screen`, `app_version`, who, when), plus `status` (new, planned, done, declined) and `note`. Family members add their own; everyone on the list reads; only dispatchers set status and note. ([decision 0024](decisions/0024-chat-with-stan.md)) |
 
+| `avatars` | Each person's icon: `kind` (icon or photo) and `value` (a ready-made icon's name, or a 96×96 JPEG as a data URL made on the phone). One row per person; only they can add or change it; everyone on the list reads. ([decision 0025](decisions/0025-avatars.md)) |
+
 ## Views
 - `line_status`: latest tick state per tile, with its outcome, reason, quantity delivered and method.
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.

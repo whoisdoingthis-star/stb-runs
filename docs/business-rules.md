@@ -136,6 +136,9 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 - Only dispatchers can close or reopen a run, set its driver, or enter paper ticks (enforced by the database).
 - Paper ticks have no GPS, so they never feed learned letterbox positions or delivery order; they do count in DIFOTIS (on time = the finish time entered).
 
+## People's icons (Mike, 13 Nov 2026, via Chat with Stan)
+- Everyone chooses their own icon (a ready-made robot or a photo); only they can change it. ([decision 0025](decisions/0025-avatars.md))
+
 ## Photos and problems from the bar (Mike, 12 Nov 2026)
 - **Photo** and **Problem** are always in a run's bottom bar, named, and apply to the stop just done or the next stop (the app asks which when there are both). A stop can be marked *not delivered* or photographed without being ticked first, and a photo can be taken for a stop with several papers.
 

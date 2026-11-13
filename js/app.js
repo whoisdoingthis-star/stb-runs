@@ -10,6 +10,7 @@ import { playSplash, soundOn, setSound } from './splash.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
 import { stanReply, STAN_HELLO } from './stanchat.js';
+import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -209,6 +210,10 @@ async function route() {
   window.scrollTo(0, 0);
   try {
     app.me = await app.store.session();
+    if (app.me) { // people's icons: the saved copy straight away, then fresh ones
+      try { setKnown(JSON.parse(localStorage.getItem('stb.avatars') || '{}')); } catch { /* none yet */ }
+      app.store.loadAvatars().then(setKnown).catch(() => {});
+    }
   } catch (e) {
     await app.store.signOut();
     return viewLogin(e.message);
@@ -317,6 +322,25 @@ function voiceStatus() {
 // The app version this phone is running (from the service worker's cache name), for the ideas register.
 let APP_VERSION = '';
 try { caches.keys().then((ks) => { APP_VERSION = ks.filter((k) => k.startsWith('stb-runs-v')).sort().pop() || ''; }).catch(() => {}); } catch { /* no caches */ }
+// ---- My icon (decision 0025): pick a ready-made one, upload a photo, or go back to initials ----
+function openAvatarPicker(after) {
+  const save = async (kind, value) => {
+    try { setKnown(await app.store.setAvatar(kind, value)); close(); toast('That\u2019s you!', null, { stan: 'hop' }); after?.(); }
+    catch (e) { toast(`Couldn\u2019t save your icon: ${e.message}`); }
+  };
+  const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  file.addEventListener('change', async () => {
+    const f = file.files[0]; file.value = ''; if (!f) return;
+    try { await save('photo', await photoToDataUrl(f)); } catch { toast('Couldn\u2019t read that photo. Try another one.'); }
+  });
+  const mine = knownAvatars()[app.me.name];
+  const close = openSheet('Choose your icon',
+    h('div', { class: 'avatar-grid' }, Object.keys(AVATAR_ICONS).map((id) => h('button', { class: `avatar-pick ${mine?.kind === 'icon' && mine.value === id ? 'on' : ''}`, 'aria-label': `Robot icon: ${id}`, 'aria-pressed': String(mine?.kind === 'icon' && mine.value === id), onclick: () => save('icon', id) }, avatar('', 64, { kind: 'icon', value: id })))),
+    file,
+    h('button', { class: 'btn big', style: 'margin-top:12px', onclick: () => file.click() }, 'Upload a photo'),
+    h('p', { class: 'small muted' }, 'Your photo is cropped to a small circle. The family can see it; nobody else can.'));
+}
+
 // ---- Chat with Stan (decision 0024) --------------------------------------
 /** Stan says a line out loud anywhere in the app: his own voice if it's loaded, else the phone's. */
 function stanSay(text, face) {
@@ -346,7 +370,7 @@ function openStanChat(screen = 'home') {
     const text = input.value.trim();
     const r = stanReply(text, app.store.myIdeas().length);
     if (text) {
-      bubble('from-me', text);
+      bubble('from-me', text).prepend(avatar(app.me.name, 22));
       app.store.addIdea(text, { topic: r.topic, screen, app_version: APP_VERSION });
       input.value = '';
     }
@@ -472,7 +496,7 @@ async function viewHome() {
   mount(h('div', { class: 'page home' },
     h('header', { class: 'home-top' },
       h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
-      app.store.mode === 'shared' ? h('span', { class: 'who-me' }, app.me.name) : null,
+      h('span', { class: 'who-me' }, avatar(app.me.name, 26), app.store.mode === 'shared' ? app.me.name : ''),
       h('button', { class: 'icon-btn settings-btn', 'aria-label': 'Settings', onclick: () => openSettings(fileInput) }, '⚙')),
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: saved on this phone only.') : null,
     app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
@@ -573,6 +597,8 @@ function openSettings(fileInput) {
       choiceRow('Text', [['normal', 'Normal'], ['big', 'Big']], bigOn() ? 'big' : 'normal', (v) => { if ((v === 'big') !== bigOn()) { toggleBig(); close(); route().then(() => openSettings(document.getElementById('pdf'))); } }),
       bigOn() ? null : choiceRow('Tiles', [['grid', 'Two across'], ['list', 'One per row']], pref('stb-layout', 'grid'), (v) => setPref('stb-layout', v)),
       choiceRow('Colours', THEMES, pref('stb-theme', 'night'), (v) => { setPref('stb-theme', v); applyTheme(); }),
+      h('div', { class: 'choice-row avatar-row' }, h('span', { class: 'choice-label' }, 'My icon'), avatar(app.me.name, 40),
+        h('button', { class: 'btn small', onclick: () => { close(); openAvatarPicker(() => openSettings(fileInput)); } }, 'Change')),
       choiceRow('Stan', [['on', 'Show'], ['off', 'Hide']], stanOn() ? 'on' : 'off', (v) => setStan(v === 'on')),
       stanOn() ? choiceRow('Voice', [['stan', 'Stan\u2019s'], ['phone', 'Phone\u2019s']], voicePref(), (v) => { setVoicePref(v); close(); openSettings(fileInput); if (v === 'stan') loadStanVoice({ ask: false }); }) : null,
       stanOn() ? voiceStatus() : null,

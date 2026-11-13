@@ -42,7 +42,7 @@ try { await db.query(`insert into runs(route, delivery_date) values ('X','2026-1
 
 // ---- dispatch: roles, register, locations (assertions fail the run) ----
 const check = (name, ok) => { console.log(ok ? '✓' : '✗', name); if (!ok) process.exitCode = 1; };
-const as = async (email) => db.exec(`reset role; update auth.ctx set email='${email}'; set role authenticated;`);
+const as = async (email) => db.exec(`reset role; update auth.ctx set email='${email}', uid=md5('${email}')::uuid; set role authenticated;`);
 await db.exec(`reset role; insert into members (email, display_name, role) values ('lisa@example.com','Lisa','driver') on conflict do nothing; update members set role='dispatcher' where email='mike@example.com';`);
 check('existing address registered by backfill or trigger', (await db.query(`select routes from addresses where address_key='K|A|1'`)).rows[0]?.routes?.includes('HOWICK06'));
 await as('lisa@example.com');
@@ -194,3 +194,13 @@ check('a dispatcher sets an idea to planned', (await db.query(`select status fro
   const cols = (await db.query(`select column_name c from information_schema.columns where table_name='ideas'`)).rows.map((r) => r.c);
   check('every idea field the app sends is an ideas column', IDEA_COLUMNS.every((c) => cols.includes(c)));
 }
+
+// ---- people's icons ----
+await as('lisa@example.com');
+await db.query(`insert into avatars(user_name, kind, value) values ('Lisa', 'icon', 'rose')`);
+check('someone picks their own icon', (await db.query(`select value from avatars where user_name='Lisa'`)).rows[0].value === 'rose');
+blocked = false; try { await db.query(`insert into avatars(user_name, kind, value) values ('Lisa2', 'photo', 'javascript:alert(1)')`); } catch { blocked = true; }
+check('a photo must be a small image made by the app, nothing else', blocked);
+await as('mike@example.com');
+await db.query(`update avatars set value='storm' where user_name='Lisa'`);
+check('nobody changes someone else’s icon, not even a dispatcher', (await db.query(`select value from avatars where user_name='Lisa'`)).rows[0].value === 'rose');

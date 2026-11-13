@@ -769,3 +769,15 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
 .dz-idea-text { font-weight: 600; white-space: pre-wrap; }
 .dz-idea-act { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .actionbar.has-last .ab-btn { gap: 6px; padding-left: 6px; padding-right: 6px; }
+
+/* ---- People's icons (decision 0025) ---- */
+.avatar { display: inline-grid; place-items: center; width: var(--av, 28px); height: var(--av, 28px); border-radius: 50%; overflow: hidden; flex: none; vertical-align: middle; line-height: 1; }
+.avatar svg, .avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.avatar.av-initials { color: #fff; font-weight: 800; font-size: calc(var(--av, 28px) * 0.42); }
+.who-me { display: inline-flex; align-items: center; gap: 8px; }
+.avatar-row { display: flex; align-items: center; gap: 12px; } .avatar-row .choice-label { flex: 1; }
+.avatar-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.avatar-pick { display: grid; place-items: center; padding: 8px; border-radius: 16px; border: 2px solid var(--edge); background: var(--card); }
+.avatar-pick.on { border-color: #fdb704; box-shadow: 0 0 0 2px #fdb704 inset; }
+.chat-bubble.from-me { display: flex; align-items: center; gap: 8px; }
+.dz-shift-head .avatar { margin-right: 6px; } .dz-idea-who { display: flex; align-items: center; gap: 6px; }

@@ -16,6 +16,9 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 ### Stan
 Stan shows up when there's nothing to do ("✓ Nothing waiting", "Nothing active"), and the **Stan's tip** card on the Overview has one tip a day with a link to this guide. He's never on the figures. Hide him in the app's **⚙ Settings → Stan** (same browser).
 
+### People's icons
+Each person's icon (chosen on their phone, ⚙ Settings → My icon) shows on their Shifts bar and beside their ideas. No icon chosen yet = their initials.
+
 ### Stan's ideas book (Overview)
 Everything the family tells Stan (Chat with Stan on the phones): who, when, from which screen. Set each one to **New**, **Planned**, **Done** or **Not now**, and add a note on what was decided. Dealt-with ideas fold away under *Done or not now*.
 

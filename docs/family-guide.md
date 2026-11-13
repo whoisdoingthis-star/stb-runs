@@ -76,6 +76,9 @@ Anyone who opens the same run (for example from a texted link) sees the same lis
 ### No signal?
 Keep going. Ticks are saved on the phone and sent when there is signal ("3 to send" at the top). Photos need signal to save to the run; if one can't, it says so and lets you try again (you can still send it on WhatsApp).
 
+## Your icon
+**⚙ Settings → My icon → Change**: pick one of the little robots, or tap **Upload a photo** to use a picture of yourself (it's cropped to a small circle). It shows beside your name, and Mike sees it in Dispatch. Only you can change yours.
+
 ## Photos and problems
 The bottom bar of a run always has **Problem** (⚠) and **Photo** (📷). They work for the stop you just did or the next one: if there are both, the app asks which. So you can take a photo, or say *Gate locked*, without ticking first. Once you've ticked a stop the bar also has Undo, and the two buttons shrink to just their pictures.
 
