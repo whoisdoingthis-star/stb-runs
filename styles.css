@@ -712,23 +712,25 @@ html.big .duty-actions { grid-template-columns: 1fr; }
 .stan { display: inline-block; width: var(--stan, 48px); height: calc(var(--stan, 48px) * 1.44); flex: none; line-height: 0; }
 .stan.st-head { height: var(--stan, 48px); }
 .stan svg { width: 100%; height: 100%; overflow: visible; }
-.stan .st-mouth rect { fill: #4ade80; }
+.stan .st-mouth rect { fill: #22e6f2; } .stan .st-mouth { opacity: 0; } .stan.st-talking .st-mouth, .stan[data-state]:not([data-state=""]) .st-mouth { opacity: 1; }
+.stan .st-eye-wink, .stan.st-wave .st-eye-open { display: none; } .stan.st-wave .st-eye-wink { display: inline; }
+.stan.st-head .st-name { display: none; }
 .stan[data-state="route"] .st-mouth rect { fill: #60a5fa; }
 .stan[data-state="point"] .st-mouth rect { fill: #fbbf24; }
 .stan[data-state="wait"] .st-mouth rect { fill: #9ca3af; }
 .stan svg * { transform-box: view-box; }
 .stan .st-bob { animation: st-bob 2.6s ease-in-out infinite; }
 .stan .st-pin { transform-origin: 100px 22px; }
-.stan .st-eyes { transform-origin: 100px 82px; animation: st-blink 5s infinite; }
-.stan.st-wave .st-armR { transform-origin: 156px 172px; animation: st-wave .5s ease-in-out 4 alternate; }
+.stan .st-eyes { transform-origin: 100px 86px; animation: st-blink 5s infinite; }
+.stan.st-wave .st-armR { transform-origin: 158px 160px; animation: st-wave .5s ease-in-out 4 alternate; }
 .stan.st-hop svg { animation: st-hop .45s ease-out 2; }
-.stan.st-point .st-armR { transform-origin: 156px 172px; transform: rotate(-70deg); }
+.stan.st-point .st-armR { transform-origin: 158px 160px; transform: rotate(34deg); }
 .stan.st-talking .st-mouth rect { animation: st-talk .32s steps(2) infinite; }
 .stan.st-talking .st-mouth rect:nth-child(2n) { animation-delay: .16s; }
 .stan.st-talking .st-pin { animation: st-pulse .64s ease-in-out infinite; }
 @keyframes st-bob { 50% { transform: translateY(3px); } }
 @keyframes st-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
-@keyframes st-wave { from { transform: rotate(0); } to { transform: rotate(-110deg); } }
+@keyframes st-wave { from { transform: rotate(10deg); } to { transform: rotate(-26deg); } }
 @keyframes st-hop { 40% { transform: translateY(-14%); } }
 @keyframes st-talk { 50% { opacity: .25; } }
 @keyframes st-pulse { 50% { transform: scale(1.25); } }
