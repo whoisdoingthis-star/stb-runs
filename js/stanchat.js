@@ -9,6 +9,7 @@ const TOPICS = [
   { key: 'thanks', re: /\b(thanks|thank you|cheers|love (it|you|this)|awesome|great job|good job|well done|legend)\b/i, lines: [
     'Aww. My circuits have gone all warm. Thank you!',
     'You’re making my antenna wobble. Cheers!',
+    'Stan-tastic! That’s my word, by the way. Mike said I could keep it.',
     'High five! Well, I’ve only got little arms. But high five!' ] },
   { key: 'dispatch', re: /\b(dispatch|dashboard|report|complaints?|pdf|ping)\b/i, lines: [
     'A Dispatch idea! The boss will like that one. It\u2019s in the book.',

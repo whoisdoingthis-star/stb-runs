@@ -11,6 +11,7 @@ Mike (14 Nov 2026) proposed a redesign and supplied the reference himself, a des
 - Same places, same sizes, same behaviour: the Assistant button (head only, without the name), toasts, Chat with Stan, empty screens, Dispatch tips. Settings → Stan still turns him off and "reduce motion" still keeps him still.
 - His "voice lights" (blue = turn by turn, amber = pointing at the stop, grey = no GPS) are now small bars on his screen, shown only while he's guiding or talking.
 - He wears his name rather than the STB badge.
+- **"Stan-tastic!"** is his word for a finished run (Mike, 14 Nov 2026), alongside his "G'day".
 - His personality stays his own: earnest, helpful, pleased when a run goes right, in his own words.
 
 ## Consequences

@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- Stan has a word of his own: finish a run and he says **"Stan-tastic!"** (Mike, 14 Nov).
 - **Stan has a new look** (Mike's design, 14 Nov): a glossy yellow head with a screen face and glowing eyes, his name on the front, and a wink when he waves. He does everything he did before. ([decision 0032](docs/decisions/0032-stan-new-look.md))
 - **A photo's own time is proof** (Mike, 14 Nov): add a photo afterwards from the phone that took it (**⋯ → Add a photo to an address… → Choose from my photos**) and it keeps the real time it was taken. If that stop wasn't ticked, the delivery is recorded at that time, and the report says the time came from the photo. A picture sent through WhatsApp has no time of its own, so it's saved but ticks nothing. ([decision 0030](docs/decisions/0030-photo-time-is-proof.md))
 - **Keep my own order, for Mike and Lisa too** (Mike via Stan, 14 Nov): **⋯ → Keep my own order…** keeps a run in your order (as it is now, or your last one) whatever anyone else moves; **⋯ → Use the usual order again** switches back. ([decision 0031](docs/decisions/0031-own-order-for-dispatchers.md))

@@ -1231,8 +1231,8 @@ async function viewRun(ids) {
       return;
     }
     if (onDuty() && (!mine.length || mine.every(finished))) {
-      toast(`✓ ${name} done. That’s all your runs.`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
-    } else toast(`✓ ${name} done.`, null, { stan: 'hop' });
+      toast(`✓ ${name} done. That’s all your runs. Stan-tastic!`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
+    } else toast(`✓ ${name} done. Stan-tastic!`, null, { stan: 'hop' });
   }
   const updateSync = (n = app.store.pendingCount()) => {
     if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'st'; return; }
@@ -1556,7 +1556,7 @@ async function viewRun(ids) {
       });
     }
     if (!out.some((n) => n.tagName === 'SECTION')) {
-      out.push(h('div', { class: 'finished' }, q ? 'No match.' : S.todoOnly && stopsDone === stops ? stanSays('Run complete. Nice work!', { pose: 'hop' }) : 'Nothing to show.'));
+      out.push(h('div', { class: 'finished' }, q ? 'No match.' : S.todoOnly && stopsDone === stops ? stanSays('Run complete. Stan-tastic!', { pose: 'hop' }) : 'Nothing to show.'));
     }
     body.replaceChildren(...out);
     body.classList.toggle('as-list', layoutIsList());
