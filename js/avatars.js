@@ -37,18 +37,25 @@ export const initials = (name) => String(name || '?').trim().split(/\s+/).map((w
 export const okPhoto = (v) => typeof v === 'string' && /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length < 60000;
 
 let known = {};
-export function setKnown(map) { known = map || {}; }
+export function setKnown(map) { known = map || {}; if (typeof document !== 'undefined') refreshAvatars(); }
 export const knownAvatars = () => known;
 
 /** That person's icon as an element (decorative: their name is always written beside it). */
 export function avatar(name, size = 28, choice) {
-  const a = choice || known[name];
   const el = document.createElement('span');
-  el.className = 'avatar'; el.setAttribute('aria-hidden', 'true'); el.style.setProperty('--av', `${size}px`);
+  el.setAttribute('aria-hidden', 'true'); el.style.setProperty('--av', `${size}px`);
+  if (!choice) el.dataset.who = name; // so it can be redrawn when that person changes their icon
+  paint(el, name, choice);
+  return el;
+}
+/** Redraw every icon on the screen (after someone picks a new one, or fresh ones arrive). */
+export function refreshAvatars(root = document) { for (const el of root.querySelectorAll('.avatar[data-who]')) paint(el, el.dataset.who); }
+function paint(el, name, choice) {
+  const a = choice || known[name];
+  el.className = 'avatar'; el.style.background = ''; el.replaceChildren();
   if (a?.kind === 'photo' && okPhoto(a.value)) { const img = new Image(); img.src = a.value; img.alt = ''; el.append(img); }
   else if (a?.kind === 'icon' && ICONS[a.value]) el.innerHTML = iconSvg(a.value);
   else { el.textContent = initials(name); el.classList.add('av-initials'); el.style.background = COLOURS[hash(name) % COLOURS.length]; }
-  return el;
 }
 
 /** A picked photo, cropped to the middle square and shrunk to 96x96, as a JPEG data URL (about 5 KB). */

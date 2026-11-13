@@ -45,6 +45,7 @@ with sync_playwright() as p:
     check('picking a robot saves it as my icon', page.evaluate("Object.values(JSON.parse(localStorage.getItem('stb.avatars')))[0].kind") == 'icon')
     page.keyboard.press('Escape'); page.wait_for_timeout(200)
     if page.locator('.sheet').count(): page.locator('.sheet button:has-text("✕")').first.click(); page.wait_for_timeout(300)
+    check('my new icon shows straight away, without reopening the app', page.locator('.who-me .avatar svg').is_visible())
     page.reload(); page.wait_for_selector('.duty-card'); page.wait_for_selector('.splash', state='detached', timeout=5000)
     check('my icon shows on the Runs page', page.locator('.who-me .avatar svg').count() == 1)
     page.click('.stan-chat-btn'); page.wait_for_selector('.chat-log')

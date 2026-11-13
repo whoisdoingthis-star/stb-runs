@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- Fix (Mike, via Chat with Stan): a newly chosen icon now shows straight away everywhere on the screen; before, the Runs page kept the old one until the app was reopened.
 - **Runs on the map, and Ping** (Mike's idea, through Chat with Stan): Dispatch → Runs & sheets → **Map** shows every stop as a pin (blue to do, green done, red couldn't deliver) with the trail in delivery order turning green as it's travelled. **Ping** asks an on-duty driver's phone where it is; the driver is always told, and nothing is shared off duty. ([decision 0026](docs/decisions/0026-run-map-and-ping.md); table `pings`)
 - **Your own icon** (Mike's idea, the first one sent through Chat with Stan): **⚙ Settings → My icon** lets everyone pick one of twelve little robots or upload a photo. It shows beside your name on the Runs page and in Chat with Stan, and in Dispatch on Shifts bars and the ideas book. ([decision 0025](docs/decisions/0025-avatars.md); table `avatars`)
 - **Photo and Problem are always there** (Mike couldn't find them, 12 Nov): both buttons are in a run's bottom bar from the start, with their names, and work for the stop just done or the next stop (the app asks which). No need to tick first; photos work for stops with several papers too.
