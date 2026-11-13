@@ -7,7 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound } from './splash.js';
-import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js';
+import { stan, stanState, stanTalk, stanOn, setStan, stanSays, stbLogo } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
 import { stanReply, STAN_HELLO } from './stanchat.js';
 import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
@@ -267,7 +267,7 @@ function viewLogin(error) {
   h('label', { class: 'field' }, h('span', null, 'Email'), email),
   h('label', { class: 'field' }, h('span', null, 'Password'), pw),
   msg, btn);
-  mount(h('div', { class: 'login' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs'), form,
+  mount(h('div', { class: 'login' }, stbLogo({ height: 84 }), h('h1', null, 'Runs'), form,
     h('p', { class: 'muted small' }, 'You stay signed in on this phone. On iPhone, sign in once in Safari as well if you open runs from text links.')));
 }
 

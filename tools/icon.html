@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>STB icon</title>
+<style>html,body{margin:0;background:#0b0b0c}svg{display:block}.st-eye-wink,.st-eye-happy,.st-mouth{display:none}</style>
+<div id="i"></div>
+<script type="module">
+// Draws the home-screen icon from Stan's own drawing (decision 0033). tools/make-icons.py photographs it.
+// ?size=512&fill=0.80 : how much of the square his head (with antenna) takes up. Maskable icons use about 0.60
+// so the round and squircle crops phones apply never cut him.
+import { stanHead, STAN_DEFS } from '../js/stan.js';
+const q = new URLSearchParams(location.search); const size = +q.get('size') || 512; const fill = +q.get('fill') || 0.8;
+// His head with antenna and sparks spans x 24..176, y -22..168 in his own units.
+const w = 190; const k = (size * fill) / w; const cx = 100; const cy = 73;
+document.getElementById('i').innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${STAN_DEFS}
+  <rect width="${size}" height="${size}" fill="#0b0b0c"/><g transform="translate(${size / 2 - cx * k} ${size / 2 - cy * k}) scale(${k})">${stanHead('none')}</g></svg>`;
+window.ready = true;
+</script>

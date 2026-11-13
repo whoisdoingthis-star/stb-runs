@@ -34,7 +34,7 @@ async function leaflet() {
 }
 
 import { runComplete } from './rows.js';
-import { stanSays, tipOfDay } from './stan.js';
+import { stanSays, tipOfDay, stbLogo } from './stan.js';
 import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
 import { runMapData, pingText } from './runmap.js';
@@ -691,7 +691,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       h('div', { class: 'rp-bar' }, h('button', { class: 'btn primary', onclick: () => { const t = document.title; document.title = reportFileName(R.from, R.to); const back = () => { document.title = t; window.removeEventListener('afterprint', back); }; window.addEventListener('afterprint', back); window.print(); } }, 'Save as PDF / Print'), h('button', { class: 'btn', onclick: () => page.remove() }, 'Close'),
         h('span', { class: 'small muted' }, 'In the print box choose “Save as PDF”, paper size A4. Wait for the photos to show first. Read any “Our response” notes: they go to the run owner unless you leave them out.')),
       h('style', null, `@page { @bottom-left { content: "Zalense delivery report · ${ref}"; font: 9pt system-ui, sans-serif; color: #555; } }`),
-      h('header', null, h('h1', null, 'Delivery report'), h('p', null, 'Zalense · NZ Herald runs HOWICK 06, 08, 10, 11, 13'),
+      h('header', null, h('div', { class: 'rp-brand' }, stbLogo({ height: 58, ink: '#17130a', outline: true })), h('h1', null, 'Delivery report'), h('p', null, 'Zalense · NZ Herald runs HOWICK 06, 08, 10, 11, 13'),
         h('p', null, h('b', null, `${day(R.from)} to ${day(R.to)}`)), h('p', { class: 'rp-meta' }, `Prepared ${made.toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })} by ${by()} · Reference ${ref}`)),
       h('section', { class: 'rp-summary' },
         h('div', null, h('b', null, S.complaints), ` complaint${S.complaints === 1 ? '' : 's'} received`), h('div', null, h('b', null, S.timed), ' with a timed delivery record'), h('div', null, h('b', null, S.paper), ' delivered on a paper run sheet'),

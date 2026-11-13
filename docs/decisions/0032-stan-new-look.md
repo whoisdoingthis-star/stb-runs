@@ -1,7 +1,7 @@
 # 0032. Stan's new look
 
 - **Date:** 2026-11-14
-- **Status:** Accepted (replaces the drawing in [0021](0021-stan.md); what Stan does is unchanged)
+- **Status:** Superseded the same day by [0033](0033-brand.md) (rounder head, one drawing for icon, opening and logo). Replaced the drawing in [0021](0021-stan.md); what Stan does is unchanged)
 
 ## Context
 Mike (14 Nov 2026) proposed a redesign and supplied the reference himself, a design he had made for Stan: a glossy yellow head that is most of his body, a dark screen for a face with glowing cyan eyes, his name signed on the front, a dark collar, short floating limbs with cyan tips, and the map-pin antenna with spark lines. Mike confirmed the design is ours to use.

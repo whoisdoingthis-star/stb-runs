@@ -2,7 +2,7 @@
 <style>body{margin:0;font:16px system-ui}.row{display:flex;gap:28px;align-items:flex-end;padding:24px 28px;flex-wrap:wrap}.dark{background:#0e0f11;color:#ddd}.light{background:#f6f6f4;color:#222}figure{margin:0;text-align:center}figcaption{font-size:13px;margin-top:6px}</style>
 <div id="out"></div>
 <script type="module">
-import { stan, stanState, stanTalk } from '../js/stan.js';
+import { stan, stanState, stanTalk, stbLogo } from '../js/stan.js';
 const out = document.getElementById('out');
 for (const cls of ['dark', 'light']) {
   const row = Object.assign(document.createElement('div'), { className: `row ${cls}` });
@@ -10,10 +10,12 @@ for (const cls of ['dark', 'light']) {
   add(stan({ pose: 'idle', size: 150 }), 'idle');
   add(stan({ pose: 'wave', size: 150 }), 'wave');
   add(stan({ pose: 'point', size: 150 }), 'point');
+  add(stan({ pose: 'hop', size: 150 }), 'hop (run done)');
   { const s = stan({ pose: 'talk', size: 150 }); stanTalk(s, true); stanState(s, 'route'); add(s, 'talking, route'); }
   { const s = stan({ size: 150 }); stanState(s, 'point'); add(s, 'pointing state'); }
   add(stan({ size: 72 }), '72'); add(stan({ size: 56 }), '56'); add(stan({ size: 48 }), '48');
   add(stan({ head: true, size: 44 }), 'head 44'); add(stan({ head: true, size: 30 }), 'head 30'); add(stan({ head: true, size: 22 }), 'head 22');
+  add(stbLogo({ height: 90, outline: cls === 'light' }), 'logo');
   out.append(row);
 }
 window.ready = true;

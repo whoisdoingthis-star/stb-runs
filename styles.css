@@ -633,9 +633,9 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 }
 
 /* Opening animation (js/splash.js): over everything, a tap skips it */
-.splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink); touch-action: manipulation; }
+.splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #050506; color: #fff; touch-action: manipulation; }
 .splash svg { width: min(92vw, 440px); height: auto; overflow: visible; }
-.splash .sp-pin, .splash .sp-logo, .splash .sp-tw { opacity: 0; }
+.splash .sp-stan, .splash .sp-burst, .splash .sp-glow, .splash .st-eye-wink, .splash .st-eye-happy { opacity: 0; } .splash .sp-glow { filter: blur(6px); } .splash .st-mouth { display: none; }
 /* Five buttons after a tick: Maps shows just its arrow, and buttons use less padding. */
 .actionbar.has-last .ab-btn { padding: 0 6px; min-width: 0; gap: 4px; }
 .actionbar.with-undo .ab-lbl { display: none; }
@@ -713,18 +713,18 @@ html.big .duty-actions { grid-template-columns: 1fr; }
 .stan.st-head { height: var(--stan, 48px); }
 .stan svg { width: 100%; height: 100%; overflow: visible; }
 .stan .st-mouth rect { fill: #22e6f2; } .stan .st-mouth { opacity: 0; } .stan.st-talking .st-mouth, .stan[data-state]:not([data-state=""]) .st-mouth { opacity: 1; }
-.stan .st-eye-wink, .stan.st-wave .st-eye-open { display: none; } .stan.st-wave .st-eye-wink { display: inline; }
-.stan.st-head .st-name { display: none; }
+.stan .st-eye-wink, .stan .st-eye-happy, .stan.st-wave .st-eye-open, .stan.st-hop .st-eye-l, .stan.st-hop .st-eye-open { display: none; } .stan.st-wave .st-eye-wink, .stan.st-hop .st-eye-happy { display: inline; }
+.stb-logo { display: inline-block; line-height: 0; } .stb-logo .st-eye-open, .stb-logo .st-eye-happy { display: none; }
 .stan[data-state="route"] .st-mouth rect { fill: #60a5fa; }
 .stan[data-state="point"] .st-mouth rect { fill: #fbbf24; }
 .stan[data-state="wait"] .st-mouth rect { fill: #9ca3af; }
 .stan svg * { transform-box: view-box; }
 .stan .st-bob { animation: st-bob 2.6s ease-in-out infinite; }
 .stan .st-pin { transform-origin: 100px 22px; }
-.stan .st-eyes { transform-origin: 100px 86px; animation: st-blink 5s infinite; }
-.stan.st-wave .st-armR { transform-origin: 158px 160px; animation: st-wave .5s ease-in-out 4 alternate; }
+.stan .st-eyes { transform-origin: 100px 84px; animation: st-blink 5s infinite; }
+.stan.st-wave .st-armR { transform-origin: 166px 130px; animation: st-wave .5s ease-in-out 4 alternate; }
 .stan.st-hop svg { animation: st-hop .45s ease-out 2; }
-.stan.st-point .st-armR { transform-origin: 158px 160px; transform: rotate(34deg); }
+.stan.st-point .st-armR { transform-origin: 166px 130px; transform: rotate(30deg); }
 .stan.st-talking .st-mouth rect { animation: st-talk .32s steps(2) infinite; }
 .stan.st-talking .st-mouth rect:nth-child(2n) { animation-delay: .16s; }
 .stan.st-talking .st-pin { animation: st-pulse .64s ease-in-out infinite; }
@@ -801,6 +801,7 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
 .stb-report header p, .stb-report article p { margin: 2px 0; }
 .rp-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; top: -24px; background: #fff; padding: 10px 0; border-bottom: 1px solid #ddd; }
 .rp-bar .btn { color: #111; background: #f3f4f6; border-color: #9ca3af; } .rp-bar .btn.primary { background: #fdb704; border-color: #b45309; }
+.rp-brand { float: right; margin: 6px 0 0 16px; } .login .stb-logo { margin: 0 0 6px -6px; }
 .rp-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0; padding: 10px 12px; background: #f6f6f4; border-radius: 8px; } .rp-summary b { font-size: 18px; }
 .rp-meta { color: #555; font-size: 13px; font-weight: 400; } .rp-how { font-size: 13px; color: #333; margin: 10px 0 0; }
 .rp-index { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; } .rp-index th, .rp-index td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
