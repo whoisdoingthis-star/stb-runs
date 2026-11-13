@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- The **logo is at the top of the Runs page** now (Stan and "Send The Boy"), with "Runs" small underneath. And **Stan is bigger on the home-screen icon** (Mike, 14 Nov: he was a bit small).
 - **Stan is the face of the app** (Mike's designs, 14 Nov): a rounder Stan with his name on a black band; **a new home-screen icon** (his face on black); **a new opening** (he winks, spins and cheers, with the same chimes); and a **Send The Boy logo** with Stan on the sign-in page and the delivery report. His eyes go happy when a run is finished. ([decision 0033](docs/decisions/0033-brand.md))
 - Stan has a word of his own: finish a run and he says **"Stan-tastic!"** (Mike, 14 Nov).
 - **Stan has a new look** (Mike's design, 14 Nov): a glossy yellow head with a screen face and glowing eyes, his name on the front, and a wink when he waves. He does everything he did before. ([decision 0032](docs/decisions/0032-stan-new-look.md))

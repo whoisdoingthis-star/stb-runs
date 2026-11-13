@@ -3,13 +3,13 @@
 <div id="i"></div>
 <script type="module">
 // Draws the home-screen icon from Stan's own drawing (decision 0033). tools/make-icons.py photographs it.
-// ?size=512&fill=0.80 : how much of the square his head (with antenna) takes up. Maskable icons use about 0.60
-// so the round and squircle crops phones apply never cut him.
 import { stanHead, STAN_DEFS } from '../js/stan.js';
-const q = new URLSearchParams(location.search); const size = +q.get('size') || 512; const fill = +q.get('fill') || 0.8;
-// His head with antenna and sparks spans x 24..176, y -22..168 in his own units.
-const w = 190; const k = (size * fill) / w; const cx = 100; const cy = 73;
-document.getElementById('i').innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${STAN_DEFS}
-  <rect width="${size}" height="${size}" fill="#0b0b0c"/><g transform="translate(${size / 2 - cx * k} ${size / 2 - cy * k}) scale(${k})">${stanHead('none')}</g></svg>`;
+const q = new URLSearchParams(location.search); const size = +q.get('size') || 512; const r = +q.get('r') || 0.45; const sparks = q.get('sparks') !== '0';
+// His head and antenna fit in a circle of radius 94 (his own units) centred on (100, 77). ?r= is that circle's radius as a
+// share of the icon: 0.40 is the "safe zone" every phone's crop keeps, so maskable icons use it and he fills it edge to edge.
+// The tiny spark lines are left off the maskable icon (?sparks=0): they'd cost him size and can't be seen that small.
+const k = (size * r) / 94;
+document.getElementById('i').innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${STAN_DEFS}${sparks ? '' : '<style>.st-spark{display:none}</style>'}
+  <rect width="${size}" height="${size}" fill="#0b0b0c"/><g transform="translate(${size / 2 - 100 * k} ${size / 2 - 77 * k}) scale(${k})">${stanHead('none')}</g></svg>`;
 window.ready = true;
 </script>

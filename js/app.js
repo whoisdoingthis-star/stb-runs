@@ -267,7 +267,7 @@ function viewLogin(error) {
   h('label', { class: 'field' }, h('span', null, 'Email'), email),
   h('label', { class: 'field' }, h('span', null, 'Password'), pw),
   msg, btn);
-  mount(h('div', { class: 'login' }, stbLogo({ height: 84 }), h('h1', null, 'Runs'), form,
+  mount(h('div', { class: 'login' }, stbLogo({ height: 84, outline: !document.documentElement.classList.contains('dark') }), h('h1', null, 'Runs'), form,
     h('p', { class: 'muted small' }, 'You stay signed in on this phone. On iPhone, sign in once in Safari as well if you open runs from text links.')));
 }
 
@@ -505,7 +505,7 @@ async function viewHome() {
   };
   mount(h('div', { class: 'page home' },
     h('header', { class: 'home-top' },
-      h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'brand' }, 'Send The Boy'), h('h1', null, 'Runs')),
+      h('div', { class: 'home-brand' }, stbLogo({ height: 54, outline: !document.documentElement.classList.contains('dark') }), h('h1', null, 'Runs')),
       h('span', { class: 'who-me' }, avatar(app.me.name, 26), app.store.mode === 'shared' ? app.me.name : ''),
       h('button', { class: 'icon-btn settings-btn', 'aria-label': 'Settings', onclick: () => openSettings(fileInput) }, '⚙')),
     app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: saved on this phone only.') : null,
