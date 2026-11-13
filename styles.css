@@ -795,22 +795,39 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
 .stb-report { position: fixed; inset: 0; z-index: 3000; overflow: auto; background: #fff; color: #111; padding: 24px max(24px, calc(50vw - 420px)); font: 15px/1.45 system-ui, sans-serif; }
 .stb-report a { color: #1d4ed8; }
 .stb-report h1 { margin: 12px 0 2px; font-size: 28px; } .stb-report h2 { margin: 22px 0 8px; font-size: 19px; border-bottom: 2px solid #fdb704; padding-bottom: 4px; }
-.stb-report h3 { margin: 0 0 2px; font-size: 16px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.stb-report h3 { margin: 0 0 2px; font-size: 17px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .stb-report header p, .stb-report article p { margin: 2px 0; }
 .rp-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; top: -24px; background: #fff; padding: 10px 0; border-bottom: 1px solid #ddd; }
 .rp-bar .btn { color: #111; background: #f3f4f6; border-color: #9ca3af; } .rp-bar .btn.primary { background: #fdb704; border-color: #b45309; }
 .rp-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0; padding: 10px 12px; background: #f6f6f4; border-radius: 8px; } .rp-summary b { font-size: 18px; }
-.rp-item { border: 1px solid #d4d4d4; border-left: 5px solid #9ca3af; border-radius: 6px; padding: 10px 12px; margin: 0 0 10px; break-inside: avoid; }
-.rp-item.st-disputed { border-left-color: #2563eb; } .rp-item.st-accepted { border-left-color: #dc2626; } .rp-item.st-closed { border-left-color: #16a34a; } .rp-item.st-open { border-left-color: #f59e0b; }
-.rp-tag { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: #eee; } .rp-meta { color: #555; font-size: 13px; }
-.rp-photos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; } .rp-photos figure { margin: 0; width: 230px; }
-.rp-photos img, .rp-nophoto { width: 230px; height: 172px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; display: grid; place-items: center; color: #777; font-size: 13px; }
+.rp-meta { color: #555; font-size: 13px; font-weight: 400; } .rp-how { font-size: 13px; color: #333; margin: 10px 0 0; }
+.rp-index { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; } .rp-index th, .rp-index td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+.rp-index th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; color: #555; } .rp-index td.good { color: #166534; font-weight: 700; } .rp-index td:nth-child(5), .rp-index td:nth-child(6), .rp-index td:nth-child(8) { white-space: nowrap; }
+.rp-item { border: 1px solid #c8c8c8; border-radius: 8px; padding: 12px 14px; margin: 0 0 14px; }
+.rp-item section, .rp-group { break-inside: avoid; } .rp-item h3, .rp-claim { break-after: avoid; }
+.rp-no { font-size: 12px; font-weight: 700; background: #111; color: #fff; border-radius: 10px; padding: 1px 9px; }
+.rp-item h4 { margin: 0 0 4px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rp-item h4 span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.rp-item section { margin-top: 8px; padding: 8px 10px; border-radius: 6px; }
+/* The complaint is someone else's claim: grey, plain. Our record is the evidence: outlined, larger. */
+.rp-claim { background: #f3f3f1; color: #333; font-size: 13.5px; } .rp-claim h4 { color: #555; }
+.rp-record { border: 2px solid #9ca3af; font-size: 15px; } .rs-app .rp-record, .rs-app_nogps .rp-record, .rs-paper .rp-record { border-color: #15803d; background: #f4fbf6; }
+.rp-badge { margin-left: auto; font-size: 12px; font-weight: 700 !important; padding: 2px 10px; border-radius: 10px; background: #e5e7eb; color: #374151; } .rp-badge.good { background: #15803d; color: #fff; }
+.rp-facts { border-collapse: collapse; } .rp-facts th { text-align: left; font-weight: 400; color: #555; padding: 1px 14px 1px 0; vertical-align: top; white-space: nowrap; width: 1%; } .rp-facts td { padding: 1px 0; }
+.rp-time { font-size: 22px; } .rp-coords { color: #666; font-size: 12px; }
+.rp-since { background: #fafafa; font-size: 13.5px; padding-top: 4px !important; } .rp-since ul, .rp-group ul { margin: 2px 0 0; padding-left: 18px; } .rp-group ul { font-size: 13.5px; }
+.rp-status { padding: 0 2px !important; font-size: 14px; } .rp-leave { font-size: 12px; margin-left: 6px; padding: 1px 8px; border: 1px solid #9ca3af; border-radius: 10px; background: #fff; color: #111; }
+.rp-photos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; } .rp-photos figure { margin: 0; width: calc(50% - 5px); max-width: 300px; break-inside: avoid; }
+.rp-photos img, .rp-nophoto { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; border: 1px solid #bbb; display: grid; place-items: center; color: #777; font-size: 13px; }
+.rp-photos.small figure { width: calc(33.33% - 7px); max-width: 210px; }
 .rp-photos figcaption { font-size: 11.5px; color: #444; margin-top: 3px; }
-.stb-report footer { margin-top: 20px; font-size: 12px; color: #555; border-top: 1px solid #ddd; padding-top: 8px; }
+.stb-report footer { margin-top: 20px; font-size: 11.5px; color: #555; border-top: 1px solid #ddd; padding-top: 8px; }
 @media print {
   body > *:not(.stb-report) { display: none !important; }
-  .stb-report { position: static; overflow: visible; padding: 0; } .rp-bar { display: none; }
-  @page { margin: 14mm; }
+  .stb-report { position: static; overflow: visible; padding: 0; font-size: 12.5px; } .rp-bar, .rp-screen { display: none !important; }
+  .stb-report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .stb-report h2 { break-after: avoid; } .rp-newpage { break-before: page; }
+  @page { size: A4; margin: 14mm 14mm 16mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9pt system-ui, sans-serif; color: #555; } }
 }
 
 /* ---- Morning watch (decision 0028): an icon and words for every state, colour only as a helper ---- */

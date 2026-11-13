@@ -38,7 +38,7 @@ import { stanSays, tipOfDay } from './stan.js';
 import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
 import { runMapData, pingText } from './runmap.js';
-import { buildReport, evidenceText, nzDate } from './report.js';
+import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './report.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -597,16 +597,15 @@ export async function viewDispatch(ctx, tab = 'overview') {
         })();
         const days = [...new Set([...rows.ticks.map((t) => nzDate(t.device_time)), ...rows.photos.map((p) => nzDate(p.taken_at))])].sort().reverse();
         const R = buildReport({ from: days.at(-1) || '0000', to: days[0] || '9999', complaints: D.register.filter((c) => c.address_key === a.address_key), photos: rows.photos, ticks: rows.ticks });
-        const byDay = new Map();
-        for (const c of R.complaints) byDay.set(c.about || c.reported, { delivery: c.delivery, photos: c.photos, complaint: c });
-        for (const p of R.photographed) if (!byDay.has(p.day)) byDay.set(p.day, { delivery: p.delivery, photos: p.photos });
-        const lastByDay = new Map(); for (const t of [...rows.ticks].reverse()) lastByDay.set(nzDate(t.device_time), t);
-        for (const [d, t] of lastByDay) if (!byDay.has(d)) byDay.set(d, { delivery: { by: t.user_name, at: t.device_time, outcome: t.outcome || (t.done ? 'delivered' : 'undone'), reason: t.reason, method: t.method === 'paper' ? 'paper' : 'app', lat: t.lat, lng: t.lng, accuracy_m: t.accuracy_m }, photos: [] });
+        const byDay = new Map(); const slot = (d) => { if (!byDay.has(d)) byDay.set(d, { delivery: null, photos: [] }); return byDay.get(d); };
+        for (const t of [...rows.ticks].reverse()) slot(nzDate(t.device_time)).delivery = { by: t.user_name, at: t.device_time, outcome: t.outcome || (t.done ? 'delivered' : 'undone'), reason: t.reason, method: t.method === 'paper' ? 'paper' : 'app', lat: t.lat, lng: t.lng, accuracy_m: t.accuracy_m };
+        for (const p of rows.photos) slot(nzDate(p.taken_at)).photos.push(p);
+        for (const c of R.complaints) slot(c.day || c.reported).complaint = c;
         const list = [...byDay.entries()].sort((x, y) => y[0].localeCompare(x[0]));
         out.replaceChildren(h('h3', null, `${label(a)}: ${list.length} delivery day${list.length === 1 ? '' : 's'} on record`),
           ...(list.length ? list.map(([d, v]) => h('div', { class: 'dz-find-day' }, h('b', null, day(d)),
             h('div', null, evidenceText(v.delivery, time), ' ', v.delivery?.lat != null && v.delivery.method !== 'paper' ? h('a', { href: `https://www.google.com/maps/search/?api=1&query=${v.delivery.lat},${v.delivery.lng}`, target: '_blank', rel: 'noopener' }, 'map') : null),
-            v.complaint ? h('div', { class: 'small bad' }, `Complaint: ${v.complaint.kind}. ${v.complaint.statusText}${v.complaint.notes ? `. ${v.complaint.notes}` : ''}`) : null,
+            v.complaint ? h('div', { class: 'small bad' }, `Complaint received: ${v.complaint.kindText}. ${v.complaint.statusText}${v.complaint.notes ? `. ${v.complaint.notes}` : ''}`) : null,
             v.photos.length ? h('div', { class: 'dz-find-photos' }, v.photos.map((p) => (p.url ? h('a', { href: p.url, target: '_blank', rel: 'noopener' }, h('img', { src: p.url, alt: `Photo, ${time(p.taken_at)}` })) : h('span', { class: 'small muted' }, 'photo not available')))) : null))
             : [h('p', { class: 'muted' }, 'Nothing ticked or photographed at this address yet.')]));
       } catch (e) { out.replaceChildren(h('p', { class: 'bad' }, `Couldn\u2019t look that up: ${e.message}`)); }
@@ -623,7 +622,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const today = nzDate(Date.now());
     const from = h('input', { type: 'date', value: nzDate(Date.now() - 6 * 864e5), max: today });
     const to = h('input', { type: 'date', value: today, max: today });
-    const msg = h('p', { class: 'small muted' }, 'Includes every complaint about or reported in these dates, with its status and your notes, and every delivery that has a photo.');
+    const msg = h('p', { class: 'small muted' }, 'Includes every complaint about or received in these dates, each set beside our delivery record for that morning (time, who, GPS, photos), and every other delivery that has a photo. You can leave a note out before you save it.');
     const close = openSheet('Delivery report',
       h('label', { class: 'field' }, h('span', null, 'From'), from), h('label', { class: 'field' }, h('span', null, 'To'), to), msg,
       h('button', { class: 'btn primary big', onclick: async (e) => {
@@ -654,33 +653,60 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
   function showReport(R) {
     const day = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '');
+    const dayShort = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
     const time = (t) => new Date(t).toLocaleTimeString('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', second: '2-digit' });
-    const mapLink = (d) => (d?.lat != null && d.method !== 'paper' ? h('a', { href: `https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}`, target: '_blank', rel: 'noopener' }, 'map') : null);
-    const pics = (ps) => (ps.length ? h('div', { class: 'rp-photos' }, ps.map((p) => h('figure', null,
+    const made = new Date(); const ref = reportRef(R.from, R.to, made); const S = R.summary;
+    const mapLink = (d) => (d?.lat != null && d.method !== 'paper' ? h('a', { href: `https://www.google.com/maps/search/?api=1&query=${d.lat},${d.lng}`, target: '_blank', rel: 'noopener' }, 'view on map') : null);
+    const pics = (ps, cls = '') => (ps.length ? h('div', { class: `rp-photos ${cls}` }, ps.map((p) => h('figure', null,
       p.url ? h('img', { src: p.url, alt: `Photo at the address, ${time(p.taken_at)}` }) : h('div', { class: 'rp-nophoto' }, 'Photo not available'),
-      h('figcaption', null, `${p.added_later ? 'Added later' : 'Taken'} ${day(nzDate(p.taken_at))} ${time(p.taken_at)}${p.user_name ? ` by ${p.user_name}` : ''}${p.lat != null ? ` \u00b7 GPS ${Number(p.lat).toFixed(5)}, ${Number(p.lng).toFixed(5)}` : ''}`)))) : null);
-    const S = R.summary;
+      h('figcaption', null, `${p.added_later ? 'Photo added later,' : 'Photo taken'} ${dayShort(nzDate(p.taken_at))}, ${time(p.taken_at)}${p.user_name ? `, by ${p.user_name}` : ''}`)))) : null);
+    const row = (k, ...v) => h('tr', null, h('th', { scope: 'row' }, k), h('td', null, ...v));
+    // Our record for one morning, as a table of facts: the time first and largest.
+    const facts = (d) => {
+      if (!d || d.outcome === 'undone') return h('p', null, 'Nothing was recorded in the app at this address that morning.');
+      const paper = d.method === 'paper';
+      return h('table', { class: 'rp-facts' }, h('tbody', null,
+        paper ? row('Time', 'Not recorded for each stop (paper run sheet)') : row(d.outcome === 'futile' ? 'Attempted' : 'Delivered', h('b', { class: 'rp-time' }, time(d.at))),
+        d.outcome === 'futile' ? row('Outcome', `Could not deliver${d.reason ? `: ${d.reason}` : ''}`) : d.outcome === 'short' ? row('Outcome', 'Delivered short') : null,
+        row('By', d.by || 'Not recorded'),
+        row('How recorded', paper ? 'Run done from the paper run sheet and signed off afterwards' : 'Driver tapped the stop in the app at the address'),
+        paper ? null : row('Position', d.lat != null ? [`Recorded at the address${d.accuracy_m ? `, accurate to about ${Math.round(d.accuracy_m)} m` : ''} · `, mapLink(d), h('span', { class: 'rp-coords' }, ` (${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)})`)] : 'No GPS fix at that moment')));
+    };
+    const sinceLine = (x) => { const d = x.delivery; const ok = d && d.outcome !== 'undone';
+      return h('li', null, h('b', null, dayShort(x.day)), ': ', !ok ? 'photo only' : d.method === 'paper' ? `delivered${d.by ? ` by ${d.by}` : ''} (paper run sheet)` : `${d.outcome === 'futile' ? 'could not deliver' : 'delivered'} ${time(d.at)}${d.by ? ` by ${d.by}` : ''}${d.lat != null ? ', GPS recorded' : ''}`, x.photos.length ? `, ${x.photos.length} photo${x.photos.length === 1 ? '' : 's'}` : ''); };
+    const aboutText = (c) => (c.dayFrom === 'publisher' ? day(c.day) : c.dayFrom === 'reference' ? `${day(c.day)} (read from the publisher’s reference)` : 'Not stated by the publisher');
+    const complaint = (c) => h('article', { class: `rp-item rs-${c.record.state}` },
+      h('h3', null, h('span', { class: 'rp-no' }, `${c.no} of ${R.complaints.length}`), c.address, h('span', { class: 'rp-meta' }, shortRoute(c.route))),
+      h('section', { class: 'rp-claim' }, h('h4', null, 'Complaint received ', h('span', null, '(as reported by the publisher, not verified)')),
+        h('table', { class: 'rp-facts' }, h('tbody', null,
+          row('Reported as', `${c.kindText}${c.publication ? ` · ${c.publication}` : ''}`), row('For delivery on', aboutText(c)), row('On our run sheet', day(c.reported)),
+          c.description ? row('Publisher’s wording', c.description) : null, c.repeat ? row('History', c.repeat) : null))),
+      h('section', { class: 'rp-record' }, h('h4', null, c.day ? `Our delivery record for ${day(c.day)}` : 'Our delivery record', h('span', { class: `rp-badge ${c.record.good ? 'good' : 'none'}` }, c.record.label)),
+        c.day ? facts(c.delivery) : h('p', null, 'The publisher gave no date, so this complaint can’t be matched to one morning. Every delivery we have on record at this address in these dates is listed below.'),
+        pics(c.photos)),
+      c.since.length ? h('section', { class: 'rp-since' }, h('h4', null, c.day ? 'Deliveries since' : 'Deliveries on record in these dates'), h('ul', null, c.since.map(sinceLine)), pics(c.since.flatMap((x) => x.photos), 'small')) : null,
+      h('section', { class: 'rp-status' }, h('p', null, h('b', null, 'Status: '), c.statusText),
+        c.notes ? h('p', null, h('b', null, 'Our response: '), c.notes, ' ', h('button', { class: 'rp-screen rp-leave', onclick: (e) => e.currentTarget.parentElement.remove() }, 'Leave this note out')) : null));
     const page = h('div', { class: 'stb-report', role: 'document' },
-      h('div', { class: 'rp-bar' }, h('button', { class: 'btn primary', onclick: () => window.print() }, 'Save as PDF / Print'), h('button', { class: 'btn', onclick: () => page.remove() }, 'Close'),
-        h('span', { class: 'small muted' }, 'In the print box choose \u201cSave as PDF\u201d. Wait for the photos to show first.')),
-      h('header', null, h('h1', null, 'Delivery report'), h('p', null, `Zalense \u00b7 Send The Boy \u00b7 NZ Herald runs HOWICK 06, 08, 10, 11, 13`),
-        h('p', null, h('b', null, `${day(R.from)} to ${day(R.to)}`), ` \u00b7 made ${new Date().toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })} by ${by()}`)),
+      h('div', { class: 'rp-bar' }, h('button', { class: 'btn primary', onclick: () => { const t = document.title; document.title = reportFileName(R.from, R.to); const back = () => { document.title = t; window.removeEventListener('afterprint', back); }; window.addEventListener('afterprint', back); window.print(); } }, 'Save as PDF / Print'), h('button', { class: 'btn', onclick: () => page.remove() }, 'Close'),
+        h('span', { class: 'small muted' }, 'In the print box choose “Save as PDF”, paper size A4. Wait for the photos to show first. Read any “Our response” notes: they go to the run owner unless you leave them out.')),
+      h('style', null, `@page { @bottom-left { content: "Zalense delivery report · ${ref}"; font: 9pt system-ui, sans-serif; color: #555; } }`),
+      h('header', null, h('h1', null, 'Delivery report'), h('p', null, 'Zalense · NZ Herald runs HOWICK 06, 08, 10, 11, 13'),
+        h('p', null, h('b', null, `${day(R.from)} to ${day(R.to)}`)), h('p', { class: 'rp-meta' }, `Prepared ${made.toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })} by ${by()} · Reference ${ref}`)),
       h('section', { class: 'rp-summary' },
-        h('div', null, h('b', null, S.complaints), ' complaints'), h('div', null, h('b', null, S.withProof), ' with a delivery record'), h('div', null, h('b', null, S.withPhoto), ' with a photo'),
-        h('div', null, h('b', null, S.disputed), ' disputed'), h('div', null, h('b', null, S.accepted), ' accepted'), h('div', null, h('b', null, S.open), ' open'), h('div', null, h('b', null, S.photographed), ' other photographed deliveries')),
-      h('h2', null, 'Complaints and resolutions'),
-      R.complaints.length ? R.complaints.map((c) => h('article', { class: `rp-item st-${c.status}` },
-        h('h3', null, `${c.address}`, h('span', { class: 'rp-tag' }, `${c.kind}${c.publication ? ` \u00b7 ${c.publication}` : ''}`)),
-        h('p', { class: 'rp-meta' }, `${shortRoute(c.route)} \u00b7 about ${day(c.about) || 'date not given'} \u00b7 first on the sheet for ${day(c.reported)}${c.repeat ? ` \u00b7 ${c.repeat}` : ''}`),
-        c.description ? h('p', null, c.description) : null,
-        h('p', null, h('b', null, 'Delivery record: '), evidenceText(c.delivery, time), ' ', mapLink(c.delivery)),
-        h('p', null, h('b', null, 'Resolution: '), c.statusText), c.notes ? h('p', null, h('b', null, 'Our notes: '), c.notes) : null,
-        pics(c.photos))) : h('p', null, 'No complaints in these dates.'),
-      h('h2', null, 'Other photographed deliveries'),
-      R.photographed.length ? R.photographed.map((p) => h('article', { class: 'rp-item' },
-        h('h3', null, p.address), h('p', { class: 'rp-meta' }, `${shortRoute(p.route)} \u00b7 ${day(p.day)}`),
-        h('p', null, h('b', null, 'Delivery record: '), evidenceText(p.delivery, time), ' ', mapLink(p.delivery)), pics(p.photos))) : h('p', null, 'No other photographed deliveries in these dates.'),
-      h('footer', null, 'Times are New Zealand time, from the phone at the moment of the tick. GPS is where the phone was when the delivery was ticked. \u201cPaper run sheet\u201d means the run was done on paper and closed afterwards, so there is no time or GPS for each stop.'));
+        h('div', null, h('b', null, S.complaints), ` complaint${S.complaints === 1 ? '' : 's'} received`), h('div', null, h('b', null, S.timed), ' with a timed delivery record'), h('div', null, h('b', null, S.paper), ' delivered on a paper run sheet'),
+        h('div', null, h('b', null, S.noRecord), ' with no app record'), h('div', null, h('b', null, S.withPhoto), ' with a photo that morning'), h('div', null, h('b', null, S.followedUp), ' photographed since')),
+      R.complaints.length ? h('table', { class: 'rp-index' }, h('thead', null, h('tr', null, ['#', 'Address', 'Run', 'Reported as', 'For', 'Our record', 'Photo', 'Status'].map((x) => h('th', null, x)))),
+        h('tbody', null, R.complaints.map((c) => h('tr', null, h('td', null, c.no), h('td', null, c.address), h('td', null, shortRoute(c.route).replace(/^Run\s*/i, '')), h('td', null, `${c.kindText}${c.publication ? ` · ${c.publication}` : ''}`), h('td', null, dayShort(c.day) || 'Not stated'),
+          h('td', { class: c.record.good ? 'good' : '' }, c.record.state === 'app' || c.record.state === 'app_nogps' ? `Delivered ${time(c.delivery.at)}` : c.record.state === 'paper' ? 'Delivered (paper sheet)' : c.record.label),
+          h('td', null, c.photos.length ? 'Yes' : c.since.some((x) => x.photos.length) ? 'Since' : 'No'), h('td', null, c.statusText.split(':')[0]))))) : null,
+      h('p', { class: 'rp-how' }, h('b', null, 'How to read this report. '), 'Each complaint is shown exactly as the publisher reported it, followed by our own record of that morning’s delivery. A timed record is made when the driver taps the stop in the app at the address: the phone saves the time and its GPS position at that moment.'),
+      h('h2', null, 'Complaints and our delivery records'),
+      R.complaints.length ? R.complaints.map(complaint) : h('p', null, 'No complaints in these dates.'),
+      h('h2', { class: 'rp-newpage' }, 'Appendix: other photographed deliveries'),
+      R.photographed.length ? R.photographed.map((g) => h('article', { class: 'rp-item rp-group' },
+        h('h3', null, g.address, h('span', { class: 'rp-meta' }, shortRoute(g.route))), h('ul', null, g.days.map(sinceLine)), pics(g.days.flatMap((x) => x.photos), 'small'))) : h('p', null, 'No other photographed deliveries in these dates.'),
+      h('footer', null, 'All times are New Zealand time. Each position was recorded once, at the delivery address, at the moment the delivery was recorded; no location is recorded at any other time. “Paper run sheet” means the run was done from the printed sheet and signed off afterwards, so there is no time or position for each stop. “Read from the publisher’s reference” means the run sheet gave no date and we took it from the day and month at the start of the publisher’s code.'));
     document.querySelectorAll('.stb-report').forEach((x) => x.remove());
     document.body.append(page); page.scrollTop = 0;
   }
