@@ -1,9 +1,9 @@
 // Keeps the app itself on the phone so it opens with no signal.
 // Bump VERSION whenever any file changes, so phones pick up the new copy.
-const VERSION = 'stb-runs-v64';
+const VERSION = 'stb-runs-v65';
 const SHELL = [
   './', 'index.html', 'styles.css', 'config.js', 'manifest.webmanifest',
-  'js/app.js', 'js/store.js', 'js/geo.js', 'js/parser.js', 'js/sequence.js', 'js/village.js', 'js/rows.js', 'js/splash.js', 'js/assistant.js', 'js/shifts.js', 'js/stan.js', 'js/stanvoice.js', 'js/stanvoice-worker.js', 'js/stanchat.js', 'js/avatars.js', 'js/runmap.js',
+  'js/app.js', 'js/store.js', 'js/geo.js', 'js/parser.js', 'js/sequence.js', 'js/village.js', 'js/rows.js', 'js/splash.js', 'js/assistant.js', 'js/shifts.js', 'js/stan.js', 'js/stanvoice.js', 'js/stanvoice-worker.js', 'js/stanchat.js', 'js/avatars.js', 'js/runmap.js', 'js/report.js',
   'vendor/supabase.mjs', 'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon-512-maskable.png',
 ];

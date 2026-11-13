@@ -136,6 +136,9 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 - Only dispatchers can close or reopen a run, set its driver, or enter paper ticks (enforced by the database).
 - Paper ticks have no GPS, so they never feed learned letterbox positions or delivery order; they do count in DIFOTIS (on time = the finish time entered).
 
+## Delivery report (Mike, 13 Nov 2026)
+- A report for any dates lists complaints with their resolution and our notes, the delivery record (who, time, GPS, photos), and every photographed delivery even without a complaint. It says plainly when a run was done on paper (no GPS) or there is no record. ([decision 0027](decisions/0027-delivery-report.md))
+
 ## Run map and Ping (Mike, 13 Nov 2026, via Chat with Stan)
 - Dispatch can see each run on a map: a pin per address (to do / done / couldn't deliver) and the trail in delivery order. ([decision 0026](decisions/0026-run-map-and-ping.md))
 - **Ping** shows where a driver is only when a dispatcher asks, only while that driver is on duty with the app open, and the driver is always told. Off duty, nothing is shared. No continuous tracking.

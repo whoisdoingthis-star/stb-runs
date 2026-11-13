@@ -16,6 +16,9 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 ### Stan
 Stan shows up when there's nothing to do ("✓ Nothing waiting", "Nothing active"), and the **Stan's tip** card on the Overview has one tip a day with a link to this guide. He's never on the figures. Hide him in the app's **⚙ Settings → Stan** (same browser).
 
+### Delivery report (PDF)
+**Complaints → Delivery report (PDF)…**: pick the From and To dates and tap **Make the report**. It lists every complaint about or reported in those dates with its status, your notes and that day's delivery record (who, the time, GPS, photos), then every other delivery that has a photo. Check it on screen, tap **Save as PDF / Print**, choose *Save as PDF*, and send the file. Set each complaint's status and notes first: they go into the report as they are.
+
 ### A run on the map, and Ping
 **Runs & sheets → Map** shows the run's stops as pins: hollow blue = to do, solid green = done, red = couldn't deliver. The line joins them in delivery order and turns green as it's travelled (straight lines between stops, not the actual roads). It updates every 20 seconds; hover a pin for the address and who ticked it.
 
