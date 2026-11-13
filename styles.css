@@ -812,3 +812,17 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
   .stb-report { position: static; overflow: visible; padding: 0; } .rp-bar { display: none; }
   @page { margin: 14mm; }
 }
+
+/* ---- Morning watch (decision 0028): an icon and words for every state, colour only as a helper ---- */
+.dz-watch-table td { padding: 6px 8px; } .dz-watch-table .ws-icon { width: 1.6em; font-weight: 800; text-align: center; }
+.ws-done_on_time .ws-icon, .ws-on_track .ws-icon { color: var(--done); }
+.ws-late td, .ws-not_started_late td, .ws-done_late td:nth-child(3), .ws-unfinished td:nth-child(3) { color: var(--bad, #b91c1c); font-weight: 700; }
+.ws-late, .ws-not_started_late { background: var(--warn-bg); }
+/* Find a delivery */
+.dz-find-hits { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.dz-find-day { border-left: 4px solid var(--edge); padding: 4px 0 4px 10px; margin: 0 0 10px; }
+.dz-find-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; } .dz-find-photos img { width: 150px; height: 112px; object-fit: cover; border-radius: 6px; border: 1px solid var(--edge); }
+
+/* Big text: a not-delivered or short tile already says so in words; the big stamp overlapped them. */
+html.big .tile.done.futile .done-word, html.big .tile.done.short .done-word { display: none; }
+html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { font-size: 20px; margin-top: 4px; }

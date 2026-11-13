@@ -16,6 +16,18 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 ### Stan
 Stan shows up when there's nothing to do ("✓ Nothing waiting", "Nothing active"), and the **Stan's tip** card on the Overview has one tip a day with a link to this guide. He's never on the figures. Hide him in the app's **⚙ Settings → Stan** (same browser).
 
+### Morning watch (Overview)
+The first card on the Overview. Each run of the day shows where it stands against the deadline (6 am Monday to Friday, 7 am weekends and public holidays):
+- ○ **Not started**, with the time it needs to start by.
+- ⚠ **Not started: will be late**, or **Running late**, with the minutes and the finish time. That's when to ring the driver or warn the run owner.
+- ▶ **On track**, with the finish time.
+- ✓ **Done on time**, or **Done, 12 min late**.
+
+It refreshes itself every minute while a run is under way. A run done on paper shows *Not started* until you close it. **Copy the morning summary** puts a few plain lines on the clipboard to paste into a message. **Deadlines…** changes the times and the public-holiday list (check it each year).
+
+### Find a delivery
+**Find a delivery…** (Overview and Complaints): type part of an address and pick it. You see every day it was delivered: who, the time, GPS with a map link, any complaint, and photos.
+
 ### Delivery report (PDF)
 **Complaints → Delivery report (PDF)…**: pick the From and To dates and tap **Make the report**. It lists every complaint about or reported in those dates with its status, your notes and that day's delivery record (who, the time, GPS, photos), then every other delivery that has a photo. Check it on screen, tap **Save as PDF / Print**, choose *Save as PDF*, and send the file. Set each complaint's status and notes first: they go into the report as they are.
 

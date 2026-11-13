@@ -967,3 +967,9 @@ do $$ begin
     alter publication supabase_realtime add table public.pings;
   end if;
 exception when undefined_object then null; end $$;
+
+-- ---- Morning watch (Mike, 13 Nov 2026; docs/decisions/0028-morning-watch.md) ----
+-- When each run's app ticks started and ended: how long a route usually takes, and whether it made its deadline.
+create or replace view public.run_times with (security_invoker = true) as
+select run_id, min(device_time) as first_tick, max(device_time) as last_tick, count(*)::int as ticks
+from public.tap_events where done and method is distinct from 'paper' group by run_id;

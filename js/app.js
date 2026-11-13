@@ -1329,7 +1329,9 @@ async function viewRun(ids) {
   // send on WhatsApp.
   const watched = (l) => (S.watch[l.route] || []).includes(l.address_key);
   const photosOf = (l) => S.photos.filter((p) => p.run_id === l.run_id && p.address_key === l.address_key);
-  const wantsPhoto = (l) => watched(l) || (l.flags || []).some((f) => f.type === 'complaint');
+  // A photo is asked for at watched addresses, complaints, and new starts on their first sheet (Mike, 13 Nov 2026:
+  // a first-day photo settles "new start not actioned" before it's raised).
+  const wantsPhoto = (l) => watched(l) || (l.flags || []).some((f) => f.type === 'complaint' || f.type === 'start');
   const camInput = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
   document.body.append(camInput);
   let camFor = null;

@@ -39,6 +39,7 @@ import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
 import { runMapData, pingText } from './runmap.js';
 import { buildReport, evidenceText, nzDate } from './report.js';
+import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
@@ -96,6 +97,9 @@ export async function viewDispatch(ctx, tab = 'overview') {
     D.duty = (await app.store.loadDuty(from.toISOString(), new Date(from.getTime() + 40 * 3600e3).toISOString())).filter((e) => nzDay(e.device_time) === focus);
     D.depot = await app.store.getSetting('depot');
     try { D.ideas = await app.store.loadIdeas(); } catch { D.ideas = null; } // null = table not there yet
+    // Morning watch (decision 0028): the deadlines, and how long each run has taken before (app ticks only).
+    D.deadlines = (await app.store.getSetting('deadlines')) || null;
+    try { const tm = app.store.loadRunTimes ? await app.store.loadRunTimes() : must(await sb.from('run_times').select('*').in('run_id', allIds.slice(0, 300))); D.times = Object.fromEntries(tm.map((x) => [x.run_id, x])); } catch { D.times = {}; }
   }
   // The delivery day the overview is about: today or the next one loaded, else the latest.
   function focusDate() {
@@ -215,6 +219,13 @@ export async function viewDispatch(ctx, tab = 'overview') {
       ({ overview: renderOverview, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
+  // Morning watch keeps itself fresh: every minute while the Overview is showing a day with a run still under way.
+  const auto = setInterval(async () => {
+    if (!body.isConnected) { clearInterval(auto); return; }
+    if (tab !== 'overview' || document.visibilityState !== 'visible' || document.querySelector('.sheet, .stb-report')) return;
+    const date = focusDate(); const live = D.runs.some((r) => r.delivery_date === date && !runComplete(r)) && Math.abs(Date.now() - deadlineFor(date, D.deadlines || DEFAULT_DEADLINES).at) < 8 * 3600e3;
+    if (live) { const y = window.scrollY; try { await refresh(); window.scrollTo(0, y); } catch { /* offline: try again next minute */ } }
+  }, 60000);
   const act = async (fn, ok) => { try { await fn(); if (ok) toast(ok); await refresh(); } catch (e) { toast(`Didn't save: ${e.message}`); } };
   // Bulk actions on the selected addresses. The selection is cleared afterwards, so the next
   // assignment can never sweep up addresses from the previous one (bug found 8 Nov 2026).
@@ -318,6 +329,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
         h('p', { class: 'small muted' }, lastTick ? `Last tick ${fmtStamp(lastTick.device_time)} by ${lastTick.user_name || 'someone'}.` : 'No deliveries ticked yet.')) : h('p', { class: 'muted' }, '–'));
     const scoreCard = rs.length ? card('Delivery score (DIFOTIS)', difotis(rs, date)) : null;
     const itemsCard = card('Items to collect', rs.length ? paperSummary(rs) : h('p', { class: 'muted' }, '–'));
+    const proofCard = card('Proof of delivery', h('p', { class: 'small muted' }, 'Look up any address: every delivery with who, when, GPS and photos.'), h('div', { class: 'dz-actions' }, h('button', { class: 'btn small', onclick: () => findDelivery() }, 'Find a delivery\u2026'), h('button', { class: 'btn small', onclick: () => openReport() }, 'Delivery report (PDF)\u2026')));
+    const watchCard = rs.length ? card(`Morning watch \u00b7 ${fmtDate(date, true)}`, watchView(rs, date)) : null;
     const shiftsCard = card('Shifts', shiftsView(rs));
     const ideasCard = card(`Stan\u2019s ideas book${D.ideas?.some((i) => i.status === 'new') ? ` (${D.ideas.filter((i) => i.status === 'new').length} new)` : ''}`, ideasView());
     const tipCard = card('Stan\u2019s tip', stanSays(h('p', null, tipOfDay(), ' ',
@@ -331,8 +344,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
         : h('p', { class: 'muted' }, 'No delivery photos yet.'));
     // Two columns on a laptop: the day's work on the left, what needs a look on the right (first on a phone).
     return h('div', { class: 'dz-over' },
-      h('div', { class: 'dz-col side' }, attnCard, complaintsCard, photosCard, depotCard, tipCard),
-      h('div', { class: 'dz-col main' }, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), shiftsCard, ideasCard, scoreCard));
+      h('div', { class: 'dz-col side' }, attnCard, proofCard, complaintsCard, photosCard, depotCard, tipCard),
+      h('div', { class: 'dz-col main' }, watchCard, sheetsCard, h('div', { class: 'dz-pair' }, progressCard, itemsCard), shiftsCard, ideasCard, scoreCard));
   }
 
   // ---- Shifts: each person's morning as one bar, every minute accounted for (decision 0020)
@@ -365,6 +378,59 @@ export async function viewDispatch(ctx, tab = 'overview') {
     return h('div', null, rows,
       h('div', { class: 'dz-shift-key small' }, ['depot', 'travel', 'run', 'help', 'between', 'pause', 'wrap'].map((k) => h('span', null, h('i', { class: `sg-${k}` }), SEGMENT_LABEL[k]))),
       h('p', { class: 'small muted' }, 'Driving to a run includes the gap after helping someone, up to your next run’s first tick. Times for each run include getting there.'));
+  }
+
+  // ---- Morning watch (decision 0028): each run against its deadline, and a summary to send on
+  const usualFor = (route, exceptId) => typicalDuration(D.runs.filter((r) => r.route === route && r.id !== exceptId && D.times[r.id]).map((r) => ({ first: Date.parse(D.times[r.id].first_tick), last: Date.parse(D.times[r.id].last_tick), ticks: D.times[r.id].ticks })));
+  const watchOf = (r, now = Date.now()) => {
+    const dl = deadlineFor(r.delivery_date, D.deadlines || DEFAULT_DEADLINES);
+    const ticks = D.status.filter((x) => x.run_id === r.id && x.done && x.method !== 'paper').map((x) => Date.parse(x.device_time));
+    const complete = runComplete(r);
+    const finishedAt = r.closed_at ? Date.parse(r.closed_at) : complete && r.lastTick ? Date.parse(r.lastTick) : null;
+    return { ...runWatch({ run: { total: r.summary?.lines || 0, done: r.done || 0, complete, finishedAt }, tickTimes: ticks, deadline: dl.at, typicalMs: usualFor(r.route, r.id), now }), kind: dl.kind };
+  };
+  function watchView(rs, date) {
+    const hm = (t) => new Date(t).toLocaleTimeString('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit' });
+    const rows = rs.map((r) => ({ r, name: shortRoute(r.route), watch: watchOf(r) }));
+    const dl = deadlineFor(date, D.deadlines || DEFAULT_DEADLINES);
+    const bad = rows.filter((x) => needsAttention(x.watch));
+    const ICON = { done_on_time: '\u2713', done_late: '\u2713', on_track: '\u25b6', late: '\u26a0', not_started: '\u25cb', not_started_late: '\u26a0', unfinished: '?' };
+    const detail = (w) => (w.state.startsWith('done') ? (w.finishedAt ? `finished ${hm(w.finishedAt)}` : 'closed from the paper sheet')
+      : w.state === 'not_started' ? `needs to start by ${hm(w.startBy)}` : w.eta ? `finish about ${hm(w.eta)}` : '');
+    // The last two weeks, for the record: how many finished runs made their deadline.
+    const since = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+    const past = D.runs.filter((r) => r.delivery_date >= since && r.delivery_date <= date && runComplete(r)).map((r) => watchOf(r)).filter((w) => w.finishedAt);
+    const onTime = past.filter((w) => w.state === 'done_on_time').length;
+    const lineOf = (x) => D.lines.find((l) => l.run_id === x.run_id && l.line_key === x.line_key);
+    const notDelivered = D.status.filter((x) => x.outcome === 'futile').map((x) => { const l = lineOf(x); return `${l ? `${String(l.number).replace(/\s+/g, '')} ${titleCase(l.street)}` : 'an address'} (${(x.reason || 'no reason given').toLowerCase()})`; });
+    const text = () => summaryText(fmtDate(date, true), rows, { notDelivered, photos: D.photos.filter((p) => nzDate(p.taken_at) === date).length });
+    return h('div', { class: 'dz-watch' },
+      h('p', { class: bad.length ? 'bad' : 'ok', role: 'status' }, bad.length ? `\u26a0 ${bad.length} run${bad.length === 1 ? '' : 's'} need${bad.length === 1 ? 's' : ''} attention.` : rows.every((x) => x.watch.state.startsWith('done')) ? '\u2713 Every run is finished.' : '\u2713 Nothing is at risk right now.',
+        h('span', { class: 'small muted' }, ` Deadline ${hm(dl.at)} (${dl.kind === 'weekday' ? 'Monday to Friday' : dl.kind === 'holiday' ? 'public holiday' : 'weekend'}).`)),
+      h('table', { class: 'dz-table dz-watch-table' }, h('tbody', null, rows.map(({ r, name, watch: w }) => h('tr', { class: `ws-${w.state}` },
+        h('td', { class: 'ws-icon', 'aria-hidden': 'true' }, ICON[w.state]), h('td', null, h('b', null, name)), h('td', null, w.text), h('td', { class: 'muted' }, detail(w)),
+        h('td', { class: 'num muted' }, `${r.done || 0}/${r.summary?.lines ?? '?'}`))))),
+      h('div', { class: 'dz-actions' },
+        h('button', { class: 'btn small', onclick: async (e) => { const b = e.currentTarget; try { await navigator.clipboard.writeText(text()); b.textContent = 'Copied \u2713'; } catch { openSheet('Morning summary', h('textarea', { rows: 10, style: 'width:100%', readonly: true }, text())); } } }, 'Copy the morning summary'),
+        h('button', { class: 'btn small', onclick: () => setDeadlines() }, 'Deadlines\u2026'),
+        past.length ? h('span', { class: 'small muted' }, `Last two weeks: ${onTime} of ${past.length} finished runs on time.`) : null),
+      h('p', { class: 'small muted' }, 'Finish times come from the pace of the ticks so far. Runs done on paper show once they are closed. This page refreshes itself every minute while a run is under way.'));
+  }
+  function setDeadlines() {
+    const d = { ...DEFAULT_DEADLINES, ...(D.deadlines || {}) };
+    const wk = h('input', { type: 'time', value: d.weekday }); const we = h('input', { type: 'time', value: d.weekend });
+    const hol = h('textarea', { rows: 6, style: 'width:100%', 'aria-label': 'Public holidays, one date per line' }, (d.holidays || []).join('\n'));
+    const msg = h('p', { class: 'small muted' }, 'Public holidays use the weekend time. One date per line, like 2026-12-25. Check the list each year.');
+    const close = openSheet('Delivery deadlines',
+      h('label', { class: 'field' }, h('span', null, 'Monday to Friday, finished by'), wk), h('label', { class: 'field' }, h('span', null, 'Weekends and public holidays, finished by'), we),
+      h('label', { class: 'field' }, h('span', null, 'Public holidays'), hol), msg,
+      h('button', { class: 'btn primary', onclick: async () => {
+        const days = hol.value.split(/[\s,]+/).filter(Boolean);
+        const wrong = days.find((x) => !/^\d{4}-\d{2}-\d{2}$/.test(x) || Number.isNaN(Date.parse(x)));
+        if (wrong || !wk.value || !we.value) { msg.textContent = wrong ? `\u201c${wrong}\u201d isn\u2019t a date like 2026-12-25.` : 'Both times are needed.'; msg.className = 'small bad'; return; }
+        try { await app.store.setSetting('deadlines', { weekday: wk.value, weekend: we.value, holidays: [...new Set(days)].sort() }, by()); close(); toast('Deadlines saved.'); await refresh(); }
+        catch (e) { msg.textContent = `Couldn\u2019t save: ${e.message}`; msg.className = 'small bad'; }
+      } }, 'Save'));
   }
 
   // ---- Stan's ideas book: what the family told Stan, with a status and a note (decision 0024)
@@ -459,7 +525,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const noteBtn = (c) => h('button', { class: 'btn small', onclick: () => { const n = prompt(`Notes for ${cAddr(c)}, ${dayFmt(c.happened_on)}`, c.notes || ''); if (n !== null) act(async () => must(await sb.from('complaints').update({ notes: n || null, updated_at: now(), updated_by: by() }).eq('id', c.id)), 'Saved.'); } }, c.notes ? '✎ Edit note' : '+ Note');
 
     return h('div', null,
-      h('div', { class: 'dz-actions', style: 'margin-bottom:8px' }, h('button', { class: 'btn primary', onclick: () => openReport() }, 'Delivery report (PDF)\u2026')),
+      h('div', { class: 'dz-actions', style: 'margin-bottom:8px' }, h('button', { class: 'btn primary', onclick: () => openReport() }, 'Delivery report (PDF)\u2026'), h('button', { class: 'btn', onclick: () => findDelivery() }, 'Find a delivery\u2026')),
       h('p', { class: 'small muted' }, 'Every complaint from the RouteSmart key reports, kept once, with who ticked that delivery and the address\'s complaint history. Mark each as disputed (we delivered: the tick, GPS and photo back it up), accepted, or closed.'),
       h('div', { class: 'dz-filters' },
         sel('days', [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year']], 'All time'),
@@ -506,6 +572,49 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const d = seven > now ? now : seven;
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+
+  // ================= Find a delivery: proof on demand (decision 0028) =================
+  function findDelivery() {
+    const q = h('input', { type: 'search', placeholder: 'e.g. 12 Rimu or 2/2A Kerry', 'aria-label': 'Address' });
+    const hits = h('div', { class: 'dz-find-hits' }); const out = h('div', { class: 'dz-find-out', 'aria-live': 'polite' });
+    const time = (t) => new Date(t).toLocaleTimeString('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    const day = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const label = (a) => `${String(a.number || '').replace(/\s+/g, '')} ${titleCase(a.street || '')}`;
+    const search = () => {
+      const words = q.value.toLowerCase().split(/\s+/).filter(Boolean); out.replaceChildren();
+      if (!words.length) { hits.replaceChildren(); return; }
+      const found = D.addresses.filter((a) => { const t = `${String(a.number || '').replace(/\s+/g, '')} ${a.street || ''}`.toLowerCase(); return words.every((w) => t.includes(w)); }).slice(0, 8);
+      hits.replaceChildren(...(found.length ? found.map((a) => h('button', { class: 'btn small', onclick: () => show(a) }, `${label(a)}${a.route ? ` \u00b7 ${shortRoute(a.route)}` : ''}`)) : [h('p', { class: 'small muted' }, 'No address like that on any sheet so far.')]));
+    };
+    async function show(a) {
+      out.replaceChildren(h('p', { class: 'small muted' }, 'Looking up deliveries\u2026'));
+      try {
+        const rows = app.store.loadProof ? await app.store.loadProof(a.address_key) : await (async () => {
+          const ticks = must(await sb.from('tap_events').select('address_key, done, outcome, reason, method, user_name, device_time, lat, lng, accuracy_m').eq('address_key', a.address_key).order('device_time', { ascending: false }).limit(400));
+          const photos = must(await sb.from('photos').select('*').eq('address_key', a.address_key).order('taken_at', { ascending: false }).limit(60));
+          if (photos.length) { const { data } = await sb.storage.from('delivery-photos').createSignedUrls(photos.map((p) => p.path), 3600); (data || []).forEach((u, i) => { photos[i].url = u.signedUrl || null; }); }
+          return { ticks, photos };
+        })();
+        const days = [...new Set([...rows.ticks.map((t) => nzDate(t.device_time)), ...rows.photos.map((p) => nzDate(p.taken_at))])].sort().reverse();
+        const R = buildReport({ from: days.at(-1) || '0000', to: days[0] || '9999', complaints: D.register.filter((c) => c.address_key === a.address_key), photos: rows.photos, ticks: rows.ticks });
+        const byDay = new Map();
+        for (const c of R.complaints) byDay.set(c.about || c.reported, { delivery: c.delivery, photos: c.photos, complaint: c });
+        for (const p of R.photographed) if (!byDay.has(p.day)) byDay.set(p.day, { delivery: p.delivery, photos: p.photos });
+        const lastByDay = new Map(); for (const t of [...rows.ticks].reverse()) lastByDay.set(nzDate(t.device_time), t);
+        for (const [d, t] of lastByDay) if (!byDay.has(d)) byDay.set(d, { delivery: { by: t.user_name, at: t.device_time, outcome: t.outcome || (t.done ? 'delivered' : 'undone'), reason: t.reason, method: t.method === 'paper' ? 'paper' : 'app', lat: t.lat, lng: t.lng, accuracy_m: t.accuracy_m }, photos: [] });
+        const list = [...byDay.entries()].sort((x, y) => y[0].localeCompare(x[0]));
+        out.replaceChildren(h('h3', null, `${label(a)}: ${list.length} delivery day${list.length === 1 ? '' : 's'} on record`),
+          ...(list.length ? list.map(([d, v]) => h('div', { class: 'dz-find-day' }, h('b', null, day(d)),
+            h('div', null, evidenceText(v.delivery, time), ' ', v.delivery?.lat != null && v.delivery.method !== 'paper' ? h('a', { href: `https://www.google.com/maps/search/?api=1&query=${v.delivery.lat},${v.delivery.lng}`, target: '_blank', rel: 'noopener' }, 'map') : null),
+            v.complaint ? h('div', { class: 'small bad' }, `Complaint: ${v.complaint.kind}. ${v.complaint.statusText}${v.complaint.notes ? `. ${v.complaint.notes}` : ''}`) : null,
+            v.photos.length ? h('div', { class: 'dz-find-photos' }, v.photos.map((p) => (p.url ? h('a', { href: p.url, target: '_blank', rel: 'noopener' }, h('img', { src: p.url, alt: `Photo, ${time(p.taken_at)}` })) : h('span', { class: 'small muted' }, 'photo not available')))) : null))
+            : [h('p', { class: 'muted' }, 'Nothing ticked or photographed at this address yet.')]));
+      } catch (e) { out.replaceChildren(h('p', { class: 'bad' }, `Couldn\u2019t look that up: ${e.message}`)); }
+    }
+    q.addEventListener('input', () => { clearTimeout(q.t); q.t = setTimeout(search, 200); });
+    openSheet('Find a delivery', h('p', { class: 'small muted' }, 'Type part of the address. You\u2019ll see every day it was delivered: who, the time, GPS and photos.'), q, hits, out);
+    setTimeout(() => q.focus(), 200);
+  }
 
   // ================= Delivery report (decision 0027) =================
   // Complaints and how each was resolved, with the delivery record (who, when, GPS) and photos, plus every

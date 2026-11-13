@@ -5,6 +5,10 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Morning watch** (Mike, 13 Nov): the Dispatch Overview now opens with every run against its deadline (6 am Monday to Friday, 7 am weekends and public holidays): not started (and when it must start by), on track, running late by how many minutes, done on time or late. It refreshes itself every minute, keeps an on-time count for the last two weeks, and **Copy the morning summary** gives a few plain lines to send on. **Deadlines…** sets the times and public holidays. ([decision 0028](docs/decisions/0028-morning-watch.md); view `run_times`)
+- **Find a delivery**: type an address in Dispatch and see every delivery there with who, when, GPS, complaints and photos.
+- **New starts ask for a photo** on their first day.
+- Fixes: in big text a not-delivered tile no longer has its stamp over the reason; Stan no longer files an idea under "voice" just because it contains "saying".
 - **Delivery report (PDF)** (Mike, 13 Nov): Dispatch → Complaints → **Delivery report (PDF)…** makes a report for any dates: each complaint with its resolution, your notes and that day's delivery record (who, time, GPS, photos), plus every other photographed delivery. Save it as a PDF to send to the run owner. ([decision 0027](docs/decisions/0027-delivery-report.md))
 - Fix (Mike, via Chat with Stan): a newly chosen icon now shows straight away everywhere on the screen; before, the Runs page kept the old one until the app was reopened.
 - **Runs on the map, and Ping** (Mike's idea, through Chat with Stan): Dispatch → Runs & sheets → **Map** shows every stop as a pin (blue to do, green done, red couldn't deliver) with the trail in delivery order turning green as it's travelled. **Ping** asks an on-duty driver's phone where it is; the driver is always told, and nothing is shared off duty. ([decision 0026](docs/decisions/0026-run-map-and-ping.md); table `pings`)

@@ -24,7 +24,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `dispatch_history` | Every change to people, locations, assignments and policies | Who, when, what (the row as JSON). Filled by triggers; the register filling itself isn't logged. |
 
 | `duty_events` | Each change of a person's duty: `state` (on_duty, on_run, between, off_duty), `run_id`, `source` (tap, auto = driving, tick, move_on, dispatch), `device_time`, position. Added, never edited. Members add their own; everyone on the list reads. ([decision 0020](decisions/0020-on-duty-and-shifts.md)) |
-| `app_settings` | Small settings by `key`, `value` as JSON. `depot` = `{ lat, lng, radius_m }`. Dispatchers write; everyone on the list reads. |
+| `app_settings` | Small settings by `key`, `value` as JSON. `depot` = `{ lat, lng, radius_m }`. `deadlines` = `{ weekday: '06:00', weekend: '07:00', holidays: ['2026-12-25', …] }` ([decision 0028](decisions/0028-morning-watch.md)). Dispatchers write; everyone on the list reads. |
 
 | `ideas` | Chat with Stan: what someone told Stan (`text`, `topic`, `screen`, `app_version`, who, when), plus `status` (new, planned, done, declined) and `note`. Family members add their own; everyone on the list reads; only dispatchers set status and note. ([decision 0024](decisions/0024-chat-with-stan.md)) |
 
@@ -37,6 +37,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.
 - `complaint_register`: complaints with who ticked that delivery (time, GPS accuracy, outcome and reason), photos that day, and the address's complaint count, order and previous date.
 - `policy_clashes`: pairs of active policies that disagree (can appear after an address moves to a different stop).
+- `run_times`: per run, the first and last app tick and how many (paper ticks left out). How long a route usually takes, and whether it made its deadline.
 - `run_progress`: per run, stops done, not delivered, paper ticks, the last tick and who ticked. Decides when a run is complete and moves to History.
 - `address_destinations`: where Google Maps goes for each address: the Dispatch stop's GPS, else the learned letterbox position.
 - `current_policies`: policies in force today (active, inside their dates).

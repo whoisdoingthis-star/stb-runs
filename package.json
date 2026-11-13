@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Send The Boy: newspaper run app (PoC)",
   "scripts": {
-    "test": "node test/unit.mjs && node test/assistant.mjs && node test/shifts.mjs && node test/runmap.mjs && node test/report.mjs && node test/sequence.mjs && node test/rows.mjs && node test/village.mjs && node test/sql.mjs",
+    "test": "node test/unit.mjs && node test/assistant.mjs && node test/shifts.mjs && node test/runmap.mjs && node test/report.mjs && node test/watch.mjs && node test/sequence.mjs && node test/rows.mjs && node test/village.mjs && node test/sql.mjs",
     "test:sheets": "node test/village.mjs ../sheets/*.pdf",
     "docs:check": "node tools/check-docs.mjs",
     "check": "npm test && npm run docs:check"

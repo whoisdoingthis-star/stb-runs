@@ -136,6 +136,11 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 - Only dispatchers can close or reopen a run, set its driver, or enter paper ticks (enforced by the database).
 - Paper ticks have no GPS, so they never feed learned letterbox positions or delivery order; they do count in DIFOTIS (on time = the finish time entered).
 
+## Deadlines and the morning watch (Mike, 13 Nov 2026)
+- **Runs must be finished by 6:00 am Monday to Friday, and 7:00 am on weekends and public holidays.** The times and the holiday list are set in Dispatch. ([decision 0028](decisions/0028-morning-watch.md))
+- A run is *running late* when its finish estimate is past the deadline; *not started: will be late* when it hasn't begun and can no longer finish in time. Both say by how many minutes.
+- **New starts** get a photo on their first day (the app asks), like complaint addresses.
+
 ## Delivery report (Mike, 13 Nov 2026)
 - A report for any dates lists complaints with their resolution and our notes, the delivery record (who, time, GPS, photos), and every photographed delivery even without a complaint. It says plainly when a run was done on paper (no GPS) or there is no record. ([decision 0027](decisions/0027-delivery-report.md))
 

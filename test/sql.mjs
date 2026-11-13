@@ -216,3 +216,10 @@ check('a dispatcher can’t answer a ping for someone else', (await db.query(`se
 await as('lisa@example.com');
 await db.query(`update pings set state='answered', lat=-36.9, lng=174.9, answered_at=now()`);
 check('the pinged driver’s phone answers with where it is', (await db.query(`select state from pings`)).rows[0].state === 'answered');
+
+// ---- Morning watch: run times ----
+{
+  const rt = (await db.query(`select count(*)::int n, bool_and(first_tick <= last_tick) ok from run_times`)).rows[0];
+  check('run_times gives the first and last app tick of each run', rt.n >= 1 && rt.ok);
+  check('paper ticks don’t count towards a run’s time', (await db.query(`select count(*)::int n from run_times t where not exists (select 1 from tap_events e where e.run_id = t.run_id and e.done and e.method is distinct from 'paper')`)).rows[0].n === 0);
+}

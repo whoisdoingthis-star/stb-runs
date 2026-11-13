@@ -10,7 +10,11 @@ const TOPICS = [
     'Aww. My circuits have gone all warm. Thank you!',
     'You’re making my antenna wobble. Cheers!',
     'High five! Well, I’ve only got little arms. But high five!' ] },
-  { key: 'voice', re: /\b(voice|talk|speak|sound|loud|quiet|volume|accent|say|pronounc)/i, lines: [
+  { key: 'dispatch', re: /\b(dispatch|dashboard|report|complaints?|pdf|ping)\b/i, lines: [
+    'A Dispatch idea! The boss will like that one. It\u2019s in the book.',
+    'Ooh, that\u2019s one for the big screen. Written down!',
+    'Noted! I\u2019ll leave it on Mike\u2019s desk. Well, his dashboard.' ] },
+  { key: 'voice', re: /\b(voice|speak|speaks|speaking|accent|pronounc\w*|volume|louder|quieter|too loud|too quiet)\b/i, lines: [
     'A note about my voice? I’m all ears. Well, all antenna. Written down!',
     'Testing, testing. Got it. I’ll pass that on to Mike.',
     'I’ve been practising my street names, I promise. Noted!' ] },

@@ -22,6 +22,26 @@ Policy dates and clash refusal, couldn't deliver / short, DIFOTIS, sheet fingerp
 
 Later, from the governance baseline (for STB proper): several companies on one system (tenants), published route versions that freeze once a run starts, vehicle limits and optimisation.
 
+## Towards a product for run owners (review, 13 Nov 2026)
+Where the app stands after its first week in use, looked at from the seat of someone who owns delivery contracts and has several contractors.
+
+**Already there**
+- Proof of delivery: every tick has who, when and where; photos; a complaint register matched to the delivery; a PDF report for any dates; Find a delivery.
+- Seeing the morning: Morning watch against deadlines, runs on a map, Ping, shifts, the morning summary.
+- Covering a run: the order, notes and Stan's directions stay with the run, not in one driver's head.
+- Sheets load themselves; totals are checked; stops and new starts are flagged.
+
+**Gaps, in the order they matter**
+1. **Alerts when nobody is looking.** A job on the server every few minutes, using the same rules as Morning watch, sending a text or email for "not started: will be late" and "running late". Needs a sender (email is free to start; texts cost per message).
+2. **A login for the run owner.** Read-only: Morning watch, Find a delivery, reports, the run map. No Ping, shifts, ideas book or people's icons, which are the contractor's own business.
+3. **Each contractor's data kept apart** (tenants). Today everyone on the list can read everything. Before a second contractor joins, every table needs to know which contractor it belongs to, and the rules must enforce it. This is the big one: plan it, test it on a copy, then move.
+4. **Getting sheets in without us.** Each contractor's sheets arriving by their own login to the source system, or by upload (the customer-portal idea of 9 Nov).
+5. **Numbers over time**: on-time rate and complaints per thousand deliveries by run and month, for the owner's meetings with the publisher.
+6. **Looking after it**: the secret key rotated and the source-system password changed (below), a proper email sender, backups checked, and somewhere to see errors from phones.
+7. **Paper runs**: until every driver uses the app, a paper run has no times or GPS. The watch and the report say so plainly; the fix is adoption, not code.
+
+**Order of work proposed**: 1 and 2 next (they are what the owner would use daily), then 3 before anyone else's data comes in, then 4 and 5.
+
 ## Before relying on it
 - Rotate the Supabase secret key and change the RouteSmart password ([decision 0011](decisions/0011-known-security-shortcuts.md)).
 - Protect `main`: changes through pull requests approved by Mike ([decision 0009](decisions/0009-docs-as-code.md)).

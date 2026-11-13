@@ -28,7 +28,7 @@ with sync_playwright() as p:
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
       const runs = JSON.parse(localStorage.getItem('stb.demo.runs')).map((r) => ({ ...r, delivery_date: today }));
       localStorage.setItem('stb.demo.runs', JSON.stringify(runs));
-      for (const k of Object.keys(localStorage)) if (k.startsWith('stb.run.')) { const v = JSON.parse(localStorage.getItem(k)); v.run.delivery_date = today; localStorage.setItem(k, JSON.stringify(v)); }
+      for (const k of Object.keys(localStorage)) if (k.startsWith('stb.run.')) { const v = JSON.parse(localStorage.getItem(k)); v.run.delivery_date = today; v.lines[0].flags = [...(v.lines[0].flags || []).filter((f) => f.type !== 'start'), { type: 'start', text: 'New start: NZH (WKLY7)' }]; localStorage.setItem(k, JSON.stringify(v)); }
     }""")
     page.goto('http://localhost:8765/#/'); page.reload(); page.wait_for_selector('.duty-card'); page.wait_for_selector('.splash', state='detached', timeout=5000)
     duty = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.duty') || '[]')")
@@ -70,6 +70,7 @@ with sync_playwright() as p:
     page.click('text=Start my runs'); page.wait_for_selector('.tile'); page.wait_for_timeout(500)
     ids = page.evaluate("JSON.parse(localStorage.getItem('stb.myruns')).ids")
     check('Start my runs opens them together, in that order', page.url.endswith('#/r/' + '+'.join(ids)) and len(ids) == 2, page.url)
+    check('a new start asks for a photo on its first day', page.locator('.tile:has(.flag.start) .cam').count() >= 1, str(page.locator('.flag.start').count()))
     # Photo and Problem are there before any tick, with their names, and work for the next stop.
     check('Photo and Problem show before the first tick, with words', page.locator('[aria-label="Take a delivery photo"]').is_visible() and 'Photo' in page.inner_text('[aria-label="Take a delivery photo"]') and 'Problem' in page.inner_text('[aria-label="Problem with this delivery"]'))
     check('the bar still fits the phone', page.evaluate('document.documentElement.scrollWidth - innerWidth') <= 0)
