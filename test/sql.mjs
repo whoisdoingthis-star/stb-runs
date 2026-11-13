@@ -138,8 +138,10 @@ check('every tap_events column (bar user and server time) is sent by the app', t
 await as('lisa@example.com');
 blocked = false; try { await db.query(`update runs set driver='Lisa' where id=$1`, [run2]); } catch { blocked = true; }
 check('a driver cannot close a run or set its driver', blocked);
-blocked = false; try { await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_id,method) values (gen_random_uuid(),$1,'K|C|3','K|C|3','HOWICK10',true,now(),'11111111-1111-1111-1111-111111111111','paper')`, [run2]); } catch { blocked = true; }
+blocked = false; try { await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_id,method) values (gen_random_uuid(),$1,'K|C|3','K|C|3','HOWICK10',true,now(),auth.uid(),'paper')`, [run2]); } catch { blocked = true; }
 check('a driver cannot enter paper ticks', blocked);
+await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_id,user_name,method) values (gen_random_uuid(),$1,'K|C|9','K|C|9','HOWICK10',true,'2026-11-01T16:46:56Z',auth.uid(),'Lenny','photo')`, [run2]);
+check('a driver can record a delivery at the time on its photo', (await db.query(`select method from line_status where run_id=$1 and line_key='K|C|9'`, [run2])).rows[0]?.method === 'photo');
 await as('mike@example.com');
 await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,user_name,outcome,method,device) values (gen_random_uuid(),$1,'K|C|3','K|C|3','HOWICK10',true,'2026-11-08T18:05:00Z','Lisa','delivered','paper','Dispatch: paper run sheet')`, [run2]);
 await db.query(`update runs set driver='Lisa', closed_at='2026-11-08T18:05:00Z', closed_by='Mike', close_method='paper' where id=$1`, [run2]);

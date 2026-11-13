@@ -11,6 +11,7 @@ import { stan, stanState, stanTalk, stanOn, setStan, stanSays } from './stan.js'
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
 import { stanReply, STAN_HELLO } from './stanchat.js';
 import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
+import { readExif, photoProof } from './exif.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -1363,7 +1364,7 @@ async function viewRun(ids) {
     };
     q.oninput = () => { picked = null; draw(); };
     openSheet('Add a photo to an address',
-      h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'For a photo you didn\u2019t take straight after ticking. It\u2019s saved to that address on this run and marked as added later. It doesn\u2019t tick anything.'),
+      h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'For a photo you didn\u2019t take straight after ticking. It\u2019s saved to that address on this run and marked as added later. A photo chosen from the phone that took it keeps its own time, and if the stop isn\u2019t ticked, the delivery is recorded at that time.'),
       q, list,
       (close) => { choose.append(
         menuItem('📷 Take a photo now', () => { close(); camFor = picked; camLater = true; camInput.click(); }),
@@ -1371,15 +1372,53 @@ async function viewRun(ids) {
     setTimeout(() => q.focus(), 50);
   }
 
+  // A dispatcher's drags change the usual order for everyone, so someone else's drags change theirs.
+  // "Keep my own order" gives them an order nobody else can move (Mike via Stan, 14 Nov 2026; decision 0031).
+  async function keepMyOrder() {
+    const runs = visibleData().filter((d) => !S.seq[d.run.route]?.mine);
+    const list = h('div', { class: 'menu-group' }, h('p', { class: 'small muted' }, 'Looking for your last order…'));
+    const close = openSheet('Keep my own order',
+      h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'The usual order is shared: when anyone in Dispatch moves tiles, it moves for everyone. Your own order is only yours. It stays as you left it, your moves change only yours, and you can go back to the usual order any time from this menu.'), list);
+    const keep = (d, keys, msg) => { const route = d.run.route; S.seq[route] = { keys, by: app.me.name, at: new Date().toISOString(), mine: true }; S.useCustom = true; app.store.saveSequence(route, keys, app.me.name, { own: true }); close(); render(); toast(msg); };
+    const items = [];
+    for (const d of runs) {
+      const route = d.run.route; const usual = app.store.sharedSequence(route); const now = orderedLines(d).map((l) => l.address_key);
+      const last = usual?.by === app.me.name ? null : await app.store.myLastOrder(route);
+      if (last && last.keys.join() !== (usual?.keys || []).join()) items.push(menuItem(`${shortRoute(route)}: go back to my last order`, () => keep(d, last.keys, `${shortRoute(route)} is back in your order. Only you see it.`),
+        { hint: `You saved it ${fmtStamp(last.at)}${usual?.by ? `; ${usual.by} changed the usual order ${fmtStamp(usual.at)}` : ''}` }));
+      items.push(menuItem(`${shortRoute(route)}: keep the order as it is now`, () => keep(d, mergeOrder(usual?.keys, now), `Saved as your own order for ${shortRoute(route)}. Only you see it.`), { hint: 'It stays like this for you, whatever anyone else moves' }));
+    }
+    list.replaceChildren(...items);
+  }
+
   async function photoTaken(l, file, opts = {}) {
     const later = !!(opts.later || camLater); camLater = false;
-    // A photo from the gallery keeps the time it was taken (if that was in the last two days).
-    const shot = later && file.lastModified && Date.now() - file.lastModified < 48 * 3600e3 ? new Date(file.lastModified) : null;
+    // A photo from the gallery says for itself when (and sometimes where) it was taken (decision 0030).
+    // If the photo doesn't say, the file's own date is used when it's from the last two days.
+    let exif = null;
+    if (later) { try { exif = readExif(new Uint8Array(await file.slice(0, 262144).arrayBuffer())); } catch { /* no details in this file */ } }
+    const proof = opts.later ? photoProof(exif, date) : { ok: false, at: null, why: '' };
+    const shot = proof.at && +proof.at < Date.now() + 5 * 60e3 ? proof.at : later && file.lastModified && Date.now() - file.lastModified < 48 * 3600e3 ? new Date(file.lastModified) : null;
     const when = shot || new Date();
-    const fix = !later && geo.last && Date.now() - geo.last.t < 60000 ? geo.last : null;
+    const fix = later ? (proof.at && exif?.lat != null ? { lat: exif.lat, lng: exif.lng } : null) : geo.last && Date.now() - geo.last.t < 60000 ? geo.last : null;
     const addr = `${l.number} ${titleCase(l.street)}`;
     const stamp = [addr, `${shortRoute(l.route)} · ${when.toLocaleString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
-      later ? `Added later by ${app.me.name}` : `Delivered by ${app.me.name}${fix ? ` · GPS ${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : ''}`];
+      later ? `${proof.at ? 'Time from the photo · added' : 'Added'} later by ${app.me.name}` : `Delivered by ${app.me.name}${fix ? ` · GPS ${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : ''}`];
+    // The photo is the proof: if this stop has no tick, record the delivery at the photo's own time.
+    let proofNote = null;
+    if (opts.later) {
+      const key = `${l.run_id}::${l.line_key}`; const cur = status()[key]; const at = proof.at?.toISOString();
+      const hms = proof.at ? proof.at.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '';
+      if (!proof.ok) proofNote = ['small muted', `The delivery wasn’t ticked from this photo: ${proof.why}`];
+      else if (cur?.done) proofNote = ['small muted', `Photo taken ${hms}. This stop was already ticked, so the tick is left as it is.`];
+      else if (cur && cur.device_time > at) proofNote = ['small muted', `Photo taken ${hms}. This stop was unticked after that, so it’s left unticked.`];
+      else {
+        const e = { id: uuid(), run_id: l.run_id, line_key: l.line_key, address_key: l.address_key, route: l.route, done: true, outcome: 'delivered', method: 'photo',
+          user_name: app.me.name, device_time: at, device: deviceLabel(), ...(fix ? { lat: fix.lat, lng: fix.lng } : {}) };
+        S.events.push(e); app.store.addEvents([e]); render();
+        proofNote = ['small ok', `✓ Delivery recorded at ${hms}, the time on the photo.`];
+      }
+    }
     let blob;
     try { blob = await stampPhoto(file, stamp); } catch { blob = file; }
     const name = `${addr.replace(/[^A-Za-z0-9]+/g, '-')}-${when.toISOString().slice(0, 16).replace(/[:T]/g, '')}.jpg`;
@@ -1417,7 +1456,7 @@ async function viewRun(ids) {
       h('div', { class: 'sheet photo-sheet' },
         h('h2', null, `📷 ${addr}`),
         h('img', { class: 'photo-preview', src: url, alt: `Delivery photo, ${addr}` }),
-        saveMsg,
+        saveMsg, proofNote ? h('div', { class: proofNote[0] }, proofNote[1]) : null,
         h('button', { class: 'btn primary big', onclick: async () => {
           try {
             if (canShareFile) await navigator.share({ files: [photoFile], text: shareText });
@@ -1721,17 +1760,18 @@ async function viewRun(ids) {
           h('ul', { class: 'checks' }, (d.run.checks || []).map((c) => h('li', { class: c.ok ? 'ok' : 'fail' }, `${c.ok ? '✓' : '✗'} ${c.label}: ${c.got}/${c.expected}`))),
           (d.run.warnings || []).length ? h('ul', { class: 'warnings' }, d.run.warnings.map((w) => h('li', null, w))) : null)))); })),
       (close) => h('div', { class: 'menu-group' },
-        app.store.personalOrders && visibleData().some((d) => S.seq[d.run.route]?.mine) ? menuItem('Use the usual order again (drop my own)…', () => {
+        visibleData().some((d) => S.seq[d.run.route]?.mine) ? menuItem('Use the usual order again (drop my own)…', () => {
           close();
           const runs = visibleData().filter((d) => S.seq[d.run.route]?.mine);
           if (!confirm(`Drop your own order for ${runs.map((d) => shortRoute(d.run.route)).join(' + ')} and use the usual one again? Only your phone changes.`)) return;
-          for (const d of runs) { app.store.saveSequence(d.run.route, null, app.me.name); S.seq[d.run.route] = app.store.sharedSequence(d.run.route); }
-          render();
+          for (const d of runs) { if (app.store.personalOrders) { app.store.saveSequence(d.run.route, null, app.me.name); S.seq[d.run.route] = app.store.sharedSequence(d.run.route); } else S.seq[d.run.route] = app.store.dropOwnOrder(d.run.route); }
+          render(); toast('Back on the usual order.');
         }) : null,
+        !app.store.personalOrders && visibleData().some((d) => !S.seq[d.run.route]?.mine) ? menuItem('Keep my own order…', () => { close(); keepMyOrder(); }, { hint: 'So nobody else\u2019s changes move your tiles' }) : null,
         app.store.personalOrders ? null : menuItem('Put back in the sheet’s order…', () => {
           close();
-          const runs = visibleData().filter(hasCustom);
-          if (!runs.length) return toast('Already in sheet order.');
+          const runs = visibleData().filter((d) => hasCustom(d) && !S.seq[d.run.route]?.mine);
+          if (!runs.length) return toast(visibleData().some((d) => S.seq[d.run.route]?.mine) ? 'You\u2019re on your own order. Drop it first to change the usual one.' : 'Already in sheet order.');
           if (!confirm(`Put ${runs.map((d) => shortRoute(d.run.route)).join(' + ')} back in the sheet's order? This changes it for everyone, for future runs too.`)) return;
           for (const d of runs) { S.seq[d.run.route] = null; app.store.saveSequence(d.run.route, null, app.me.name); }
           render();
@@ -1887,17 +1927,17 @@ async function viewRun(ids) {
     const next = moveKeys(current, a.keys, tgt.anchor, tgt.after);
     if (next.join() === current.join()) { render(); return; }
     const merged = mergeOrder(before?.keys, next);
-    const own = app.store.personalOrders;
+    const own = app.store.personalOrders || !!before?.mine;
     S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString(), mine: own };
     S.useCustom = true;
-    app.store.saveSequence(route, merged, app.me.name);
+    app.store.saveSequence(route, merged, app.me.name, { own });
     render();
     const usual = app.store.sharedSequence(route);
     toast(own ? `Moved ${a.label || 'it'}. Saved as your own order for ${shortRoute(route)}${before?.mine ? '' : `; ${usual?.by || 'the usual'}${usual?.by ? '\u2019s' : ''} order is unchanged`}.`
       : `Moved ${a.label || 'it'}. Saved for future ${shortRoute(route)} runs.`, {
       label: 'Undo',
       // Undoing a driver's first move drops their own order again, back to the usual one.
-      fn: () => { S.seq[route] = before; app.store.saveSequence(route, own && !before?.mine ? null : before?.keys || null, app.me.name); render(); },
+      fn: () => { S.seq[route] = before; app.store.saveSequence(route, own && !before?.mine ? null : before?.keys || null, app.me.name, { own }); render(); },
     });
   }
   body.addEventListener('pointerdown', (e) => {

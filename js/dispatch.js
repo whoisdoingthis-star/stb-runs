@@ -668,12 +668,12 @@ export async function viewDispatch(ctx, tab = 'overview') {
       return h('table', { class: 'rp-facts' }, h('tbody', null,
         paper ? row('Time', 'Not recorded for each stop (paper run sheet)') : row(d.outcome === 'futile' ? 'Attempted' : 'Delivered', h('b', { class: 'rp-time' }, time(d.at))),
         d.outcome === 'futile' ? row('Outcome', `Could not deliver${d.reason ? `: ${d.reason}` : ''}`) : d.outcome === 'short' ? row('Outcome', 'Delivered short') : null,
-        row('By', d.by || 'Not recorded'),
-        row('How recorded', paper ? 'Run done from the paper run sheet and signed off afterwards' : 'Driver tapped the stop in the app at the address'),
-        paper ? null : row('Position', d.lat != null ? [`Recorded at the address${d.accuracy_m ? `, accurate to about ${Math.round(d.accuracy_m)} m` : ''} · `, mapLink(d), h('span', { class: 'rp-coords' }, ` (${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)})`)] : 'No GPS fix at that moment')));
+        d.method === 'photo' ? null : row('By', d.by || 'Not recorded'),
+        row('How recorded', paper ? 'Run done from the paper run sheet and signed off afterwards' : d.method === 'photo' ? `From the delivery photo: the time is when the photo was taken. Added to the run afterwards${d.by ? ` by ${d.by}` : ''}` : 'Driver tapped the stop in the app at the address'),
+        paper ? null : row('Position', d.lat != null ? [`${d.method === 'photo' ? 'From the photo' : 'Recorded at the address'}${d.accuracy_m ? `, accurate to about ${Math.round(d.accuracy_m)} m` : ''} · `, mapLink(d), h('span', { class: 'rp-coords' }, ` (${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)})`)] : 'No GPS fix at that moment')));
     };
     const sinceLine = (x) => { const d = x.delivery; const ok = d && d.outcome !== 'undone';
-      return h('li', null, h('b', null, dayShort(x.day)), ': ', !ok ? 'photo only' : d.method === 'paper' ? `delivered${d.by ? ` by ${d.by}` : ''} (paper run sheet)` : `${d.outcome === 'futile' ? 'could not deliver' : 'delivered'} ${time(d.at)}${d.by ? ` by ${d.by}` : ''}${d.lat != null ? ', GPS recorded' : ''}`, x.photos.length ? `, ${x.photos.length} photo${x.photos.length === 1 ? '' : 's'}` : ''); };
+      return h('li', null, h('b', null, dayShort(x.day)), ': ', !ok ? 'photo only' : d.method === 'paper' ? `delivered${d.by ? ` by ${d.by}` : ''} (paper run sheet)` : d.method === 'photo' ? `delivered ${time(d.at)} (time from the photo)` : `${d.outcome === 'futile' ? 'could not deliver' : 'delivered'} ${time(d.at)}${d.by ? ` by ${d.by}` : ''}${d.lat != null ? ', GPS recorded' : ''}`, x.photos.length ? `, ${x.photos.length} photo${x.photos.length === 1 ? '' : 's'}` : ''); };
     const aboutText = (c) => (c.dayFrom === 'publisher' ? day(c.day) : c.dayFrom === 'reference' ? `${day(c.day)} (read from the publisher’s reference)` : 'Not stated by the publisher');
     const complaint = (c) => h('article', { class: `rp-item rs-${c.record.state}` },
       h('h3', null, h('span', { class: 'rp-no' }, `${c.no} of ${R.complaints.length}`), c.address, h('span', { class: 'rp-meta' }, shortRoute(c.route))),
@@ -698,7 +698,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         h('div', null, h('b', null, S.noRecord), ' with no app record'), h('div', null, h('b', null, S.withPhoto), ' with a photo that morning'), h('div', null, h('b', null, S.followedUp), ' photographed since')),
       R.complaints.length ? h('table', { class: 'rp-index' }, h('thead', null, h('tr', null, ['#', 'Address', 'Run', 'Reported as', 'For', 'Our record', 'Photo', 'Status'].map((x) => h('th', null, x)))),
         h('tbody', null, R.complaints.map((c) => h('tr', null, h('td', null, c.no), h('td', null, c.address), h('td', null, shortRoute(c.route).replace(/^Run\s*/i, '')), h('td', null, `${c.kindText}${c.publication ? ` · ${c.publication}` : ''}`), h('td', null, dayShort(c.day) || 'Not stated'),
-          h('td', { class: c.record.good ? 'good' : '' }, c.record.state === 'app' || c.record.state === 'app_nogps' ? `Delivered ${time(c.delivery.at)}` : c.record.state === 'paper' ? 'Delivered (paper sheet)' : c.record.label),
+          h('td', { class: c.record.good ? 'good' : '' }, ['app', 'app_nogps', 'photo'].includes(c.record.state) ? `Delivered ${time(c.delivery.at)}` : c.record.state === 'paper' ? 'Delivered (paper sheet)' : c.record.label),
           h('td', null, c.photos.length ? 'Yes' : c.since.some((x) => x.photos.length) ? 'Since' : 'No'), h('td', null, c.statusText.split(':')[0]))))) : null,
       h('p', { class: 'rp-how' }, h('b', null, 'How to read this report. '), 'Each complaint is shown exactly as the publisher reported it, followed by our own record of that morning’s delivery. A timed record is made when the driver taps the stop in the app at the address: the phone saves the time and its GPS position at that moment.'),
       h('h2', null, 'Complaints and our delivery records'),
@@ -706,7 +706,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       h('h2', { class: 'rp-newpage' }, 'Appendix: other photographed deliveries'),
       R.photographed.length ? R.photographed.map((g) => h('article', { class: 'rp-item rp-group' },
         h('h3', null, g.address, h('span', { class: 'rp-meta' }, shortRoute(g.route))), h('ul', null, g.days.map(sinceLine)), pics(g.days.flatMap((x) => x.photos), 'small'))) : h('p', null, 'No other photographed deliveries in these dates.'),
-      h('footer', null, 'All times are New Zealand time. Each position was recorded once, at the delivery address, at the moment the delivery was recorded; no location is recorded at any other time. “Paper run sheet” means the run was done from the printed sheet and signed off afterwards, so there is no time or position for each stop. “Read from the publisher’s reference” means the run sheet gave no date and we took it from the day and month at the start of the publisher’s code.'));
+      h('footer', null, 'All times are New Zealand time. Each position was recorded once, at the delivery address, at the moment the delivery was recorded; no location is recorded at any other time. “Paper run sheet” means the run was done from the printed sheet and signed off afterwards, so there is no time or position for each stop. \u201cTime from the delivery photo\u201d means the stop couldn\u2019t be recorded in the app at the time, so the delivery time is the moment the photo was taken, read from the photo file. “Read from the publisher’s reference” means the run sheet gave no date and we took it from the day and month at the start of the publisher’s code.'));
     document.querySelectorAll('.stb-report').forEach((x) => x.remove());
     document.body.append(page); page.scrollTop = 0;
   }

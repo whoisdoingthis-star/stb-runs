@@ -809,10 +809,11 @@ drop trigger if exists runs_close_guard on public.runs;
 create trigger runs_close_guard before update on public.runs
   for each row execute function public.runs_close_guard();
 
--- Paper ticks can only be entered by a dispatcher.
+-- Paper ticks can only be entered by a dispatcher. Anyone on the list can add a 'photo' tick:
+-- a delivery recorded afterwards at the time read from the delivery photo (decision 0030).
 drop policy if exists tap_events_add on public.tap_events;
 create policy tap_events_add on public.tap_events for insert to authenticated
-  with check (public.is_member() and user_id = auth.uid() and (method is null or public.is_dispatcher()));
+  with check (public.is_member() and user_id = auth.uid() and (method is null or method = 'photo' or public.is_dispatcher()));
 
 -- ---- Progress per run, counted in the database (the app used to count from up to 1000 tick
 -- rows, which undercounts once there are weeks of runs). A run is complete when it is closed

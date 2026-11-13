@@ -51,3 +51,15 @@ export function mergeOrder(stored, today) {
   }
   return out;
 }
+
+/**
+ * Where a waiting order change is saved (decision 0031). `v` is what's waiting on the phone:
+ * an order ({ keys, mine }), null (drop it), or { dropOwn: true } (a dispatcher going back to the usual order).
+ * A driver's changes are always their own. A dispatcher's change the usual order everyone sees,
+ * unless they've chosen to keep their own. Returns { own, drop }.
+ */
+export function seqTarget(v, personal) {
+  if (v?.dropOwn) return { own: true, drop: true };
+  if (!v) return { own: !!personal, drop: true };
+  return { own: !!personal || !!v.mine, drop: false };
+}

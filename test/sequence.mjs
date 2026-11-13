@@ -1,4 +1,4 @@
-import { applySequence, moveKeys, mergeOrder } from '../js/sequence.js';
+import { applySequence, moveKeys, mergeOrder, seqTarget } from '../js/sequence.js';
 import assert from 'assert';
 const t = (n, f) => { try { f(); console.log('✓', n); } catch (e) { console.log('✗', n, e.message); process.exitCode = 1; } };
 const L = (...ks) => ks.map((k) => ({ address_key: k }));
@@ -13,3 +13,8 @@ t('move block keeps inner order', () => assert.deepEqual(moveKeys(['a', 'b', 'c'
 t('drop on itself is no change', () => assert.deepEqual(moveKeys(['a', 'b'], ['a'], 'a', true), ['a', 'b']));
 t('merge keeps addresses not on today\'s sheet', () => assert.deepEqual(mergeOrder(['a', 'x', 'b', 'c'], ['c', 'a', 'b']), ['c', 'a', 'x', 'b']));
 t('merge with nothing stored', () => assert.deepEqual(mergeOrder(null, ['b', 'a']), ['b', 'a']));
+// Own order for dispatchers too (decision 0031)
+t('a driver’s order is always their own', () => { assert.deepEqual(seqTarget({ keys: ['a'], mine: true }, true), { own: true, drop: false }); assert.deepEqual(seqTarget(null, true), { own: true, drop: true }); });
+t('a dispatcher’s drags change the usual order', () => { assert.deepEqual(seqTarget({ keys: ['a'], mine: false }, false), { own: false, drop: false }); assert.deepEqual(seqTarget(null, false), { own: false, drop: true }); });
+t('a dispatcher who keeps their own order changes only their own', () => assert.deepEqual(seqTarget({ keys: ['a'], mine: true }, false), { own: true, drop: false }));
+t('a dispatcher dropping their own order leaves the usual order alone', () => assert.deepEqual(seqTarget({ dropOwn: true }, false), { own: true, drop: true }));

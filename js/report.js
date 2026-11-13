@@ -34,6 +34,7 @@ export function recordState(d) {
   if (d.outcome === 'undone') return { state: 'none', label: 'No app record', good: false };
   if (d.method === 'paper') return { state: 'paper', label: 'Delivered · paper run sheet', good: true };
   const what = d.outcome === 'short' ? 'Delivered short' : 'Delivered';
+  if (d.method === 'photo') return { state: 'photo', label: 'Delivered · time from the delivery photo', good: true };
   return d.lat != null ? { state: 'app', label: `${what} · time and GPS recorded`, good: true } : { state: 'app_nogps', label: `${what} · time recorded`, good: true };
 }
 
@@ -55,7 +56,7 @@ export function buildReport({ from, to, complaints = [], photos = [], ticks = []
     const t = tickBy.get(`${address_key}|${day}`);
     if (!t) return null;
     const outcome = t.outcome || (t.done ? 'delivered' : 'undone');
-    return { by: t.user_name || null, at: t.device_time, outcome, reason: t.reason || null, method: t.method === 'paper' ? 'paper' : 'app',
+    return { by: t.user_name || null, at: t.device_time, outcome, reason: t.reason || null, method: t.method === 'paper' ? 'paper' : t.method === 'photo' ? 'photo' : 'app',
       lat: t.lat ?? null, lng: t.lng ?? null, accuracy_m: t.accuracy_m ?? null };
   };
   const used = new Set();
@@ -85,7 +86,7 @@ export function buildReport({ from, to, complaints = [], photos = [], ticks = []
   const count = (s) => cs.filter((c) => c.status === s).length; const rec = (s) => cs.filter((c) => c.record.state === s).length;
   return { from, to, complaints: cs, photographed,
     summary: { complaints: cs.length, open: count('open'), disputed: count('disputed'), accepted: count('accepted'), closed: count('closed'),
-      withProof: cs.filter((c) => c.record.good).length, timed: rec('app') + rec('app_nogps'), paper: rec('paper'), noRecord: rec('none') + rec('futile') + rec('undated'),
+      withProof: cs.filter((c) => c.record.good).length, timed: rec('app') + rec('app_nogps') + rec('photo'), paper: rec('paper'), noRecord: rec('none') + rec('futile') + rec('undated'),
       withPhoto: cs.filter((c) => c.photos.length).length, followedUp: cs.filter((c) => c.since.some((x) => x.photos.length)).length,
       photographed: photographed.reduce((n, g) => n + g.days.length, 0), photos: photos.filter((p) => inRange(nzDate(p.taken_at))).length } };
 }
@@ -99,7 +100,7 @@ export const reportRef = (from, to, made = Date.now()) => `ZDR-${from.slice(2).r
 export function evidenceText(d, fmtTime = (t) => new Date(t).toLocaleTimeString('en-NZ', { timeZone: NZ, hour: 'numeric', minute: '2-digit', second: '2-digit' })) {
   if (!d) return 'No delivery record for that day in the app.';
   const what = d.outcome === 'delivered' ? 'Delivered' : d.outcome === 'futile' ? `Not delivered${d.reason ? ` (${d.reason})` : ''}` : d.outcome === 'short' ? 'Delivered short' : 'Tick undone';
-  const how = d.method === 'paper' ? 'recorded from the paper run sheet, so no GPS' : 'ticked in the app';
+  const how = d.method === 'paper' ? 'recorded from the paper run sheet, so no GPS' : d.method === 'photo' ? 'time from the delivery photo, added afterwards' : 'ticked in the app';
   const gps = d.method !== 'paper' && d.lat != null ? ` · GPS ${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)}${d.accuracy_m ? `, to about ${Math.round(d.accuracy_m)} m` : ''}` : d.method !== 'paper' ? ' · no GPS fix' : '';
   return `${what}${d.by ? ` by ${d.by}` : ''}${d.method === 'paper' ? '' : ` at ${fmtTime(d.at)}`} (${how})${gps}`;
 }

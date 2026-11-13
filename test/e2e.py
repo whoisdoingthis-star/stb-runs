@@ -49,6 +49,7 @@ with sync_playwright() as p:
     done_before = page.locator('.tile.done').count()
     target = page.locator('.tile:not(.done)').nth(3)
     tnum = target.locator('.num').inner_text().split()[0]
+    tkey = target.get_attribute('data-key')
     page.click('[aria-label="Run options"]'); page.wait_for_selector('.sheet')
     page.click('.sheet >> text=Add a photo to an address'); page.wait_for_selector('.pick-search')
     page.fill('.pick-search', tnum); page.wait_for_timeout(150)
@@ -61,7 +62,31 @@ with sync_playwright() as p:
     fc.value.set_files(jpg); page.wait_for_selector('.photo-sheet'); page.wait_for_timeout(500)
     saved = page.evaluate("JSON.parse(localStorage.getItem('stb.demo.photos')||'[]')")
     check('a photo can be added later from the gallery, marked as added later, without ticking', bool(saved) and saved[-1].get('added_later') is True and page.locator('.tile.done').count() == done_before, f'{saved[-1:]} done {done_before}->{page.locator(".tile.done").count()}')
+    check('a picture with no camera time says why the delivery wasn\u2019t ticked from it', 'wasn\u2019t ticked from this photo' in page.inner_text('.photo-sheet'), page.inner_text('.photo-sheet')[:200])
     page.keyboard.press('Escape'); page.evaluate("document.querySelectorAll('.sheet-backdrop').forEach(e=>e.remove())")
+    # the same, with a photo that carries its own time on the run's day: the delivery is recorded at that time (decision 0030)
+    try:
+        from PIL import Image
+        import re
+        day = re.search(r'"delivery_date":"(\d{4}-\d{2}-\d{2})"', page.evaluate("JSON.stringify(Object.assign({}, localStorage))").replace('\\"', '"')).group(1)
+        im = Image.new('RGB', (64, 48), 'gray'); ex = im.getexif(); ex.get_ifd(0x8769)[0x9003] = day.replace('-', ':') + ' 04:46:56'
+        jpg2 = os.path.join(tempfile.gettempdir(), 'stb-test-exif.jpg'); im.save(jpg2, exif=ex)
+        page.click('[aria-label="Run options"]'); page.wait_for_selector('.sheet')
+        page.click('.sheet >> text=Add a photo to an address'); page.wait_for_selector('.pick-search')
+        page.fill('.pick-search', tnum); page.wait_for_timeout(150)
+        page.locator('.pick-list .menu-item').first.click()
+        with page.expect_file_chooser() as fc:
+            page.click('.sheet >> text=Choose from my photos')
+        fc.value.set_files(jpg2); page.wait_for_selector('.photo-sheet'); page.wait_for_timeout(500)
+        said = page.inner_text('.photo-sheet')
+        evs = page.evaluate("Object.keys(localStorage).map(k => localStorage.getItem(k)).filter(v => v.includes('\"method\":\"photo\"')).join(' ')")
+        check('a photo with its own time ticks the delivery at that time', 'Delivery recorded at 4:46:56 am' in said and page.locator('.tile.done').count() == done_before + 1 and '"method":"photo"' in evs, f'{said[:160]} done {done_before}->{page.locator(".tile.done").count()}')
+        page.keyboard.press('Escape'); page.evaluate("document.querySelectorAll('.sheet-backdrop').forEach(e=>e.remove())")
+        # take the photo tick out again so the rest of the test starts where it did
+        page.evaluate("for (const k of Object.keys(localStorage)) { try { const v = JSON.parse(localStorage.getItem(k)); if (Array.isArray(v) && v.some(e => e && e.method === 'photo')) localStorage.setItem(k, JSON.stringify(v.filter(e => e.method !== 'photo'))); } catch {} }")
+        page.reload(); page.wait_for_selector('.tile'); page.wait_for_timeout(600)
+    except ImportError:
+        print('- skipped the photo-time check (needs Pillow)')
     # couldn't deliver: tick, then the warning button in the bottom bar; the tick stays in the history
     key = page.locator('.tile.next').get_attribute('data-key')
     page.locator('.tile.next').click(); page.wait_for_timeout(200)

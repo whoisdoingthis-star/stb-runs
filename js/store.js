@@ -5,6 +5,7 @@
 // so the app keeps working with no signal.
 
 import { lineRows, runRow, changeRecord } from './rows.js';
+import { seqTarget } from './sequence.js';
 
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -110,12 +111,23 @@ class Base {
   /** Drivers' drags make their own order; a dispatcher's change the usual order everyone sees (Mike, 11 Nov 2026). */
   get personalOrders() { return !!this.me && this.me.role !== 'dispatcher'; }
   sharedSequence(route) { return LS.get(`stb.seqshared.${route}`, null); }
-  saveSequence(route, keys, by) {
-    const v = keys ? { keys, by, at: new Date().toISOString(), mine: this.personalOrders } : null;
+  /** opts.own: save as this person's own order (a dispatcher who chose to keep their own, decision 0031). */
+  saveSequence(route, keys, by, opts = {}) {
+    const v = keys ? { keys, by, at: new Date().toISOString(), mine: this.personalOrders || !!opts.own } : null;
     this.cacheSeq(route, v);
     LS.set('stb.seqpending', { ...this.pendingSeqs(), [route]: v });
     this.flush();
   }
+  /** A dispatcher drops their own order and goes back to the usual one. The usual order is untouched. */
+  dropOwnOrder(route) {
+    const shared = this.sharedSequence(route);
+    this.cacheSeq(route, shared);
+    LS.set('stb.seqpending', { ...this.pendingSeqs(), [route]: this.personalOrders ? null : { dropOwn: true } });
+    this.flush();
+    return shared;
+  }
+  /** The last usual order this person saved for a route (from the history), or null. */
+  async myLastOrder() { return null; }
   // ---- On Duty (decision 0020): my own duty changes, kept on the phone, sent when there is signal ----
   pendingDuty() { return LS.get('stb.dutypending', []); }
   /** My duty changes from the last 36 hours, oldest first. */
@@ -416,7 +428,7 @@ export class SupabaseStore extends Base {
       if (error) throw error;
       // A driver's own orders (person_sequences); none yet, or the table not there yet, = the usual order.
       let mine = [];
-      if (this.personalOrders) {
+      {
         const res = await this.sb.from('person_sequences').select('route, address_keys, updated_by, updated_at').eq('user_id', this.me.id).in('route', routes);
         if (!res.error) mine = res.data;
       }
@@ -426,7 +438,7 @@ export class SupabaseStore extends Base {
         const row = data.find((d) => d.route === r);
         const shared = row ? { keys: row.address_keys, by: row.updated_by, at: row.updated_at } : null;
         LS.set(`stb.seqshared.${r}`, shared);
-        if (r in pending) { out[r] = pending[r] ?? (this.personalOrders ? shared : null); continue; } // our unsent change wins
+        if (r in pending) { out[r] = pending[r]?.dropOwn ? shared : pending[r] ?? (this.personalOrders ? shared : null); continue; } // our unsent change wins
         const m = mine.find((d) => d.route === r);
         out[r] = m ? { keys: m.address_keys, by: m.updated_by, at: m.updated_at, mine: true } : shared;
         this.cacheSeq(r, out[r]);
@@ -622,15 +634,22 @@ export class SupabaseStore extends Base {
     if (error) throw error;
     LS.set(`stb.setting.${key}`, value);
   }
+  async myLastOrder(route) {
+    try {
+      const { data, error } = await this.sb.from('route_sequence_history').select('address_keys, changed_at').eq('route', route).eq('updated_by', this.me.name).not('address_keys', 'is', null).order('changed_at', { ascending: false }).limit(1);
+      if (error || !data?.length) return null;
+      return { keys: data[0].address_keys, at: data[0].changed_at };
+    } catch { return null; }
+  }
   async flushSeqs() {
     for (const [route, v] of Object.entries(this.pendingSeqs())) {
       // A driver's order goes to their own row; if that can't be saved it waits on the phone
       // (never falls back to changing the usual order).
-      const own = this.personalOrders;
+      const { own, drop } = seqTarget(v, this.personalOrders);
       const { error } = own
-        ? (v ? await this.sb.from('person_sequences').upsert({ route, user_id: this.me.id, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route,user_id' })
+        ? (!drop ? await this.sb.from('person_sequences').upsert({ route, user_id: this.me.id, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route,user_id' })
           : await this.sb.from('person_sequences').delete().eq('route', route).eq('user_id', this.me.id))
-        : (v ? await this.sb.from('route_sequences').upsert({ route, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route' })
+        : (!drop ? await this.sb.from('route_sequences').upsert({ route, address_keys: v.keys, updated_by: v.by, updated_at: v.at }, { onConflict: 'route' })
           : await this.sb.from('route_sequences').delete().eq('route', route));
       if (error) return;
       const rest = this.pendingSeqs();
