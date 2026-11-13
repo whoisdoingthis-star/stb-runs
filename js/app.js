@@ -213,6 +213,15 @@ async function route() {
     if (app.me) { // people's icons: the saved copy straight away, then fresh ones
       try { setKnown(JSON.parse(localStorage.getItem('stb.avatars') || '{}')); } catch { /* none yet */ }
       app.store.loadAvatars().then(setKnown).catch(() => {});
+      // Ping (decision 0026): Dispatch asks where I am. Answer once, only while on duty, and always say so here.
+      if (!app.pingOff) app.pingOff = app.store.onPing(app.me.name, async (p) => {
+        if (!p || p.state !== 'asked' || Date.now() - Date.parse(p.asked_at) > 90000) return;
+        const who = p.asked_by || 'Dispatch';
+        if (!onDuty()) { await app.store.answerPing(p.id, { state: 'off_duty' }); toast(`${who} pinged you. You\u2019re off duty, so nothing was shared.`, null, { stan: 'idle' }); return; }
+        const f = await quietFix();
+        await app.store.answerPing(p.id, f ? { state: 'answered', lat: f.lat, lng: f.lng, accuracy_m: f.acc } : { state: 'no_gps' });
+        toast(f ? `${who} checked where you are.` : `${who} pinged you, but the phone couldn\u2019t find its position.`, null, { stan: 'wave' });
+      });
     }
   } catch (e) {
     await app.store.signOut();

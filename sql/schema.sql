@@ -938,3 +938,32 @@ drop policy if exists avatars_mine_add on public.avatars;
 create policy avatars_mine_add on public.avatars for insert to authenticated with check (public.is_member() and user_id = auth.uid());
 drop policy if exists avatars_mine_change on public.avatars;
 create policy avatars_mine_change on public.avatars for update to authenticated using (user_id = auth.uid()) with check (public.is_member() and user_id = auth.uid());
+
+-- ---- Ping (Mike, 13 Nov 2026, via Chat with Stan; docs/decisions/0026-run-map-and-ping.md) ----
+-- A dispatcher asks where an on-duty driver is; that driver's phone answers once, if STB is open on it.
+-- Every ask is kept, and the driver is told each time.
+create or replace function public.my_name() returns text
+language sql stable security definer set search_path = public as $$
+  select display_name from public.members where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) limit 1;
+$$;
+create table if not exists public.pings (
+  id          uuid primary key default gen_random_uuid(),
+  target_name text not null,
+  asked_by    text,
+  asked_at    timestamptz not null default now(),
+  state       text not null default 'asked' check (state in ('asked', 'answered', 'off_duty', 'no_gps')),
+  answered_at timestamptz,
+  lat double precision, lng double precision, accuracy_m double precision
+);
+alter table public.pings enable row level security;
+drop policy if exists pings_read on public.pings;
+create policy pings_read on public.pings for select to authenticated using (public.is_dispatcher() or target_name = public.my_name());
+drop policy if exists pings_ask on public.pings;
+create policy pings_ask on public.pings for insert to authenticated with check (public.is_dispatcher() and state = 'asked' and lat is null);
+drop policy if exists pings_answer on public.pings;
+create policy pings_answer on public.pings for update to authenticated using (target_name = public.my_name() and state = 'asked') with check (target_name = public.my_name());
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'pings') then
+    alter publication supabase_realtime add table public.pings;
+  end if;
+exception when undefined_object then null; end $$;

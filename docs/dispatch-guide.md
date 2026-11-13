@@ -16,6 +16,11 @@ On a laptop the Overview has two columns: the day's work on the left (**Sheets**
 ### Stan
 Stan shows up when there's nothing to do ("✓ Nothing waiting", "Nothing active"), and the **Stan's tip** card on the Overview has one tip a day with a link to this guide. He's never on the figures. Hide him in the app's **⚙ Settings → Stan** (same browser).
 
+### A run on the map, and Ping
+**Runs & sheets → Map** shows the run's stops as pins: hollow blue = to do, solid green = done, red = couldn't deliver. The line joins them in delivery order and turns green as it's travelled (straight lines between stops, not the actual roads). It updates every 20 seconds; hover a pin for the address and who ticked it.
+
+**Ping Lisa** (under the map) asks her phone where it is. It answers within a few seconds if STB is open on her phone and she's on duty, and she's told you checked. If there's no answer, you see her last tick instead. Off duty, nothing is shared.
+
 ### People's icons
 Each person's icon (chosen on their phone, ⚙ Settings → My icon) shows on their Shifts bar and beside their ideas. No icon chosen yet = their initials.
 

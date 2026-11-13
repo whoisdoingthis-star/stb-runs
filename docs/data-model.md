@@ -30,6 +30,8 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 
 | `avatars` | Each person's icon: `kind` (icon or photo) and `value` (a ready-made icon's name, or a 96×96 JPEG as a data URL made on the phone). One row per person; only they can add or change it; everyone on the list reads. ([decision 0025](decisions/0025-avatars.md)) |
 
+| `pings` | Dispatch asking where an on-duty driver is: `target_name`, `asked_by`, `asked_at`, then the phone's answer (`state` answered / off_duty / no_gps, position, `answered_at`). Dispatchers add; only the pinged person's phone answers; kept as a record. ([decision 0026](decisions/0026-run-map-and-ping.md)) |
+
 ## Views
 - `line_status`: latest tick state per tile, with its outcome, reason, quantity delivered and method.
 - `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.

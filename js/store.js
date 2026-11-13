@@ -212,6 +212,11 @@ export class LocalStore extends Base {
     LS.set('stb.ideaspending', []);
     this.emitSync();
   }
+  async loadRunMap() { return { lines: [], status: [], dests: {}, order: null }; }
+  async ping() { throw new Error('Ping needs the shared database.'); }
+  async getPing() { return null; }
+  onPing() { return () => {}; }
+  async answerPing() {}
   async loadAvatars() { return LS.get('stb.avatars', {}); }
   async setAvatar(kind, value) { const m = { ...LS.get('stb.avatars', {}), [this.me?.name || 'Me']: { kind, value } }; LS.set('stb.avatars', m); return m; }
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
@@ -531,6 +536,36 @@ export class SupabaseStore extends Base {
     const sent = new Set(batch.map((e) => e.id));
     LS.set('stb.ideaspending', this.pendingIdeas().filter((e) => !sent.has(e.id)));
   }
+  // ---- A run on the map, and Ping (decision 0026) ----
+  async loadRunMap(runId, route) {
+    const [l, s, q] = await Promise.all([
+      this.sb.from('run_lines').select('line_key, address_key, number, street, seq').eq('run_id', runId),
+      this.sb.from('line_status').select('line_key, done, outcome, user_name, device_time, lat, lng').eq('run_id', runId),
+      this.sb.from('route_sequences').select('address_keys').eq('route', route).maybeSingle(),
+    ]);
+    if (l.error) throw l.error;
+    const keys = [...new Set(l.data.map((x) => x.address_key))];
+    const dests = {};
+    for (let i = 0; i < keys.length; i += 150) {
+      const d = await this.sb.from('address_destinations').select('address_key, lat, lng').in('address_key', keys.slice(i, i + 150));
+      for (const x of d.data || []) dests[x.address_key] = x;
+    }
+    return { lines: l.data, status: s.data || [], dests, order: q.data?.address_keys || null };
+  }
+  async ping(name, by) {
+    const { data, error } = await this.sb.from('pings').insert({ target_name: name, asked_by: by }).select('id').single();
+    if (error) throw error;
+    return data.id;
+  }
+  async getPing(id) { const { data } = await this.sb.from('pings').select('*').eq('id', id).maybeSingle(); return data; }
+  /** Hear pings meant for me while the app is open. Returns a function that stops listening. */
+  onPing(name, cb) {
+    const ch = this.sb.channel(`pings:${name}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pings', filter: `target_name=eq.${name}` }, (p) => cb(p.new))
+      .subscribe();
+    return () => { this.sb.removeChannel(ch); };
+  }
+  async answerPing(id, patch) { await this.sb.from('pings').update({ ...patch, answered_at: new Date().toISOString() }).eq('id', id); }
   /** Everyone's icons by name (decision 0025); the last loaded copy when offline. */
   async loadAvatars() {
     try {

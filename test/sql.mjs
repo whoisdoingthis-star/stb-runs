@@ -204,3 +204,15 @@ check('a photo must be a small image made by the app, nothing else', blocked);
 await as('mike@example.com');
 await db.query(`update avatars set value='storm' where user_name='Lisa'`);
 check('nobody changes someone else’s icon, not even a dispatcher', (await db.query(`select value from avatars where user_name='Lisa'`)).rows[0].value === 'rose');
+
+// ---- Ping ----
+await as('lisa@example.com');
+blocked = false; try { await db.query(`insert into pings(target_name, asked_by) values ('Mike', 'Lisa')`); } catch { blocked = true; }
+check('only a dispatcher can ping', blocked);
+await as('mike@example.com');
+await db.query(`insert into pings(target_name, asked_by) values ('Lisa', 'Mike')`);
+await db.query(`update pings set state='answered', lat=-36.9, lng=174.9`);
+check('a dispatcher can’t answer a ping for someone else', (await db.query(`select state from pings`)).rows[0].state === 'asked');
+await as('lisa@example.com');
+await db.query(`update pings set state='answered', lat=-36.9, lng=174.9, answered_at=now()`);
+check('the pinged driver’s phone answers with where it is', (await db.query(`select state from pings`)).rows[0].state === 'answered');

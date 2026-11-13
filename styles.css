@@ -781,3 +781,12 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
 .avatar-pick.on { border-color: #fdb704; box-shadow: 0 0 0 2px #fdb704 inset; }
 .chat-bubble.from-me { display: flex; align-items: center; gap: 8px; }
 .dz-shift-head .avatar { margin-right: 6px; } .dz-idea-who { display: flex; align-items: center; gap: 6px; }
+
+/* ---- A run on the map, and Ping (decision 0026) ---- */
+.dz-runmap { height: min(62vh, 560px); border-radius: 12px; border: 1px solid var(--edge); margin: 6px 0; }
+.dz-ping-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.dz-ping-row .btn { display: inline-flex; align-items: center; gap: 6px; }
+.dz-ping-msg { font-weight: 700; min-height: 1.4em; margin: 8px 0 0; }
+.dz-shift-key i.pin-todo, .dz-shift-key i.pin-done, .dz-shift-key i.pin-failed, .dz-shift-key i.pin-who { border-radius: 50%; }
+.pin-todo { background: #fff; border: 3px solid #2563eb !important; } .pin-done { background: #22c55e; border-color: #15803d !important; }
+.pin-failed { background: #ef4444; border-color: #991b1b !important; } .pin-who { background: #fdb704; border: 3px solid #111 !important; }

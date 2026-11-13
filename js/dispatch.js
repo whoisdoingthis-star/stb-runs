@@ -37,6 +37,7 @@ import { runComplete } from './rows.js';
 import { stanSays, tipOfDay } from './stan.js';
 import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
+import { runMapData, pingText } from './runmap.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
@@ -493,6 +494,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       : runComplete(r) ? h('span', { class: 'ok' }, `✓ Completed (app)${r.tickedBy ? ` · ${r.tickedBy}` : ''}${r.lastTick ? ` · ${fmtStamp(r.lastTick)}` : ''}`)
       : h('span', null, `Open${r.done ? ` · ${r.done}/${r.summary?.lines ?? '?'} done` : ''}${r.driver ? ` · ${r.driver}` : ''}`),
     r.close_note ? h('div', { class: 'small muted' }, r.close_note) : null,
+    h('button', { class: 'btn small', onclick: () => openRunMap(r) }, 'Map'),
     h('button', { class: 'btn small', onclick: () => (r.closed_at ? reopenRun(r) : closeRun(r)) }, r.closed_at ? 'Reopen…' : runComplete(r) ? 'Set driver…' : 'Close run…'));
 
   // Default finish time: 7am on the delivery day (runs are done early), or now if that is still ahead.
@@ -502,6 +504,70 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const d = seven > now ? now : seven;
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+
+  // ================= A run on the map, and Ping (decision 0026) =================
+  // Pins: hollow blue = still to do, solid green = done, red = couldn't deliver. The trail joins them in
+  // delivery order and turns green as it's travelled. Ping asks an on-duty driver's phone where it is.
+  const PIN = { todo: { color: '#2563eb', fillColor: '#ffffff', fillOpacity: 0.9, weight: 3, radius: 6 }, done: { color: '#15803d', fillColor: '#22c55e', fillOpacity: 1, weight: 2, radius: 6 }, failed: { color: '#991b1b', fillColor: '#ef4444', fillOpacity: 1, weight: 2, radius: 7 } };
+  async function openRunMap(r) {
+    const el = h('div', { class: 'dz-runmap' });
+    const info = h('p', { class: 'small muted' }, 'Loading the map\u2026');
+    const people = h('div', { class: 'dz-ping-row' });
+    const pingMsg = h('p', { class: 'dz-ping-msg', 'aria-live': 'polite' });
+    const key = h('div', { class: 'dz-shift-key small' },
+      h('span', null, h('i', { class: 'pin-todo' }), 'To do'), h('span', null, h('i', { class: 'pin-done' }), 'Done'), h('span', null, h('i', { class: 'pin-failed' }), 'Couldn\u2019t deliver'),
+      h('span', null, h('i', { class: 'pin-who' }), 'Driver (pinged)'));
+    openSheet(`${shortRoute(r.route)} on the map \u00b7 ${r.delivery_date}`, info, el, key, people, pingMsg);
+    try { await leaflet(); } catch (e) { info.textContent = e.message; return; }
+    const m = L.map(el, { zoomControl: true }); maps.push(m);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '\u00a9 OpenStreetMap contributors' }).addTo(m);
+    const layer = L.layerGroup().addTo(m); const whoLayer = L.layerGroup().addTo(m);
+    let first = true; let data = null;
+    const draw = async () => {
+      if (!el.isConnected) { clearInterval(timer); return; }
+      let raw; try { raw = await app.store.loadRunMap(r.id, r.route); } catch (e) { info.textContent = `Couldn\u2019t load the run: ${e.message}`; return; }
+      data = runMapData(raw); data.status = raw.status; data.lines = raw.lines;
+      layer.clearLayers();
+      for (const sg of data.trail) L.polyline([sg.from, sg.to], { color: sg.travelled ? '#16a34a' : '#2563eb', weight: sg.travelled ? 4 : 3, opacity: sg.travelled ? 0.9 : 0.55, dashArray: sg.travelled ? null : '6 7' }).addTo(layer);
+      data.stops.forEach((st, i) => L.circleMarker([st.lat, st.lng], PIN[st.state]).bindTooltip(`${i + 1}. ${st.label}${st.state === 'done' ? ` \u2713 ${st.by || ''} ${st.at ? fmtStamp(st.at) : ''}` : st.state === 'failed' ? ' \u26a0 not delivered' : ''}`).addTo(layer));
+      const c = data.counts;
+      info.textContent = `${c.done} of ${c.total} stops done${c.failed ? `, ${c.failed} not delivered` : ''}, ${c.todo} to go.${c.missing ? ` ${c.missing} not on the map yet (no position): ${data.missing.slice(0, 4).join(', ')}${c.missing > 4 ? '\u2026' : ''}.` : ''} Updates every 20 seconds.`;
+      if (first && data.stops.length) { m.fitBounds(data.stops.map((x) => [x.lat, x.lng]), { padding: [24, 24], maxZoom: 18 }); first = false; } else if (first) m.setView(HOWICK, 15);
+      drawPeople();
+    };
+    const lastTickOf = (name) => {
+      const mine = (data?.status || []).filter((x) => x.done && x.user_name === name && x.lat != null).sort((a, b) => String(b.device_time).localeCompare(String(a.device_time)))[0];
+      if (!mine) return null;
+      const ln = data.lines.find((l) => l.line_key === mine.line_key);
+      return { at: mine.device_time, lat: mine.lat, lng: mine.lng, label: ln ? `${String(ln.number).replace(/\s+/g, '')} ${String(ln.street).toLowerCase().replace(/\b[a-z]/g, (ch) => ch.toUpperCase())}` : 'a stop' };
+    };
+    const showWho = (name, lat, lng, text) => { whoLayer.clearLayers(); L.circleMarker([lat, lng], { radius: 11, color: '#111', weight: 3, fillColor: '#fdb704', fillOpacity: 1 }).bindTooltip(text, { permanent: true, direction: 'top' }).addTo(whoLayer); m.fitBounds([...data.stops.map((x) => [x.lat, x.lng]), [lat, lng]], { padding: [30, 30], maxZoom: 18 }); };
+    const drawPeople = () => {
+      // Who to ping: people on duty today, else whoever has ticked on this run.
+      const onDutyNow = [...new Set(D.duty.map((e) => e.user_name))].filter((n) => currentDuty(D.duty.filter((e) => e.user_name === n))?.onDuty);
+      const tickers = [...new Set((data?.status || []).filter((x) => x.done && x.user_name).map((x) => x.user_name))];
+      const names = [...new Set([...onDutyNow, ...tickers])];
+      people.replaceChildren(names.length ? h('span', { class: 'small muted' }, 'Where are they now? ') : h('span', { class: 'small muted' }, 'Nobody is on duty or has ticked on this run yet, so there is nobody to ping.'),
+        ...names.map((n) => h('button', { class: 'btn small', onclick: (e) => doPing(n, e.currentTarget) }, avatar(n, 20), ` Ping ${n}`)));
+    };
+    async function doPing(name, btn) {
+      btn.disabled = true; pingMsg.textContent = `Pinging ${name}\u2026`;
+      let ping = null;
+      try {
+        const id = await app.store.ping(name, by());
+        for (let i = 0; i < 10 && el.isConnected; i++) { await new Promise((ok) => setTimeout(ok, 2000)); ping = await app.store.getPing(id); if (ping && ping.state !== 'asked') break; }
+      } catch (e) { pingMsg.textContent = `Couldn\u2019t ping: ${e.message}`; btn.disabled = false; return; }
+      const answered = ping && ping.state !== 'asked' ? ping : null;
+      const last = lastTickOf(name);
+      pingMsg.textContent = pingText(name, answered, last);
+      if (answered?.state === 'answered') showWho(name, answered.lat, answered.lng, `${name}, now`);
+      else if (last) showWho(name, last.lat, last.lng, `${name}, last tick`);
+      btn.disabled = false;
+    }
+    await draw();
+    const timer = setInterval(draw, 20000);
+    setTimeout(() => m.invalidateSize(), 80);
+  }
 
   async function closeRun(r) {
     let lines; let st;

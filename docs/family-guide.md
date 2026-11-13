@@ -76,6 +76,9 @@ Anyone who opens the same run (for example from a texted link) sees the same lis
 ### No signal?
 Keep going. Ticks are saved on the phone and sent when there is signal ("3 to send" at the top). Photos need signal to save to the run; if one can't, it says so and lets you try again (you can still send it on WhatsApp).
 
+## If Dispatch pings you
+While you're **on duty**, Mike can tap **Ping** in Dispatch to see where you are right now (handy if you need a hand or a run is running late). Your phone answers once, and you'll always see a message: "Mike checked where you are." It only works while the app is open, and never when you're off duty.
+
 ## Your icon
 **⚙ Settings → My icon → Change**: pick one of the little robots, or tap **Upload a photo** to use a picture of yourself (it's cropped to a small circle). It shows beside your name, and Mike sees it in Dispatch. Only you can change yours.
 
