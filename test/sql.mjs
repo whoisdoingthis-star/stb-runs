@@ -197,6 +197,17 @@ check('a dispatcher sets an idea to planned', (await db.query(`select status fro
   check('every idea field the app sends is an ideas column', IDEA_COLUMNS.every((c) => cols.includes(c)));
 }
 
+// ---- Stan's Paper Run: scores ----
+await as('lisa@example.com');
+await db.query(`insert into game_scores(user_name, score, streets, delivered, best_streak, ended) values ('Lisa', 120, 1, 9, 4, 'complaints')`);
+check('someone saves their own game score', (await db.query(`select score from game_scores where user_name='Lisa'`)).rows[0]?.score === 120);
+blocked = false; try { await db.query(`insert into game_scores(user_name, score) values ('Mike', 99999)`); } catch { blocked = true; }
+check('nobody can post a score under someone else’s name', blocked);
+blocked = false; try { await db.query(`insert into game_scores(user_name, score) values ('Lisa', 5000000)`); } catch { blocked = true; }
+check('a score has to be a believable number', blocked);
+await as('mike@example.com');
+check('everyone in the family can see the scores', (await db.query(`select count(*)::int n from game_scores`)).rows[0].n === 1);
+
 // ---- people's icons ----
 await as('lisa@example.com');
 await db.query(`insert into avatars(user_name, kind, value) values ('Lisa', 'icon', 'rose')`);

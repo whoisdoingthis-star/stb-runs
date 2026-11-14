@@ -230,6 +230,10 @@ export class LocalStore extends Base {
   onPing() { return () => {}; }
   async answerPing() {}
   async loadAvatars() { return LS.get('stb.avatars', {}); }
+  // Stan's Paper Run (decision 0034): my own games are kept on the phone; the shared store adds the family's.
+  myScores() { return LS.get('stb.scores', []); }
+  async saveScore(row) { const r = { user_name: this.me?.name || 'Me', ...row, device_time: new Date().toISOString() }; LS.set('stb.scores', [...this.myScores(), r].sort((a, b) => b.score - a.score).slice(0, 20)); return r; }
+  async loadScores() { return this.myScores(); }
   async setAvatar(kind, value) { const m = { ...LS.get('stb.avatars', {}), [this.me?.name || 'Me']: { kind, value } }; LS.set('stb.avatars', m); return m; }
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
@@ -578,6 +582,20 @@ export class SupabaseStore extends Base {
     return () => { this.sb.removeChannel(ch); };
   }
   async answerPing(id, patch) { await this.sb.from('pings').update({ ...patch, answered_at: new Date().toISOString() }).eq('id', id); }
+  async saveScore(row) {
+    const r = await super.saveScore(row);
+    const { error } = await this.sb.from('game_scores').insert(r);
+    if (error) throw error;
+    return r;
+  }
+  /** The family's scores, best first; just my own when there's no signal. */
+  async loadScores() {
+    try {
+      const { data, error } = await this.sb.from('game_scores').select('user_name, score, streets, delivered, best_streak').order('score', { ascending: false }).limit(300);
+      if (error) throw error;
+      return [...data, ...this.myScores()];
+    } catch { return this.myScores(); }
+  }
   /** Everyone's icons by name (decision 0025); the last loaded copy when offline. */
   async loadAvatars() {
     try {

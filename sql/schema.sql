@@ -974,3 +974,26 @@ exception when undefined_object then null; end $$;
 create or replace view public.run_times with (security_invoker = true) as
 select run_id, min(device_time) as first_tick, max(device_time) as last_tick, count(*)::int as ticks
 from public.tap_events where done and method is distinct from 'paper' group by run_id;
+
+-- ---- Stan's Paper Run (Mike, 14 Nov 2026; docs/decisions/0034-stans-paper-run.md) ----
+-- Scores from the little game Stan offers when there are no runs to do. One row per finished game;
+-- the family board shows each person's best. Nothing here touches runs, ticks or shifts.
+create table if not exists public.game_scores (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid(),
+  user_name   text not null,
+  score       integer not null check (score between 0 and 100000),
+  streets     integer not null default 0 check (streets between 0 and 1000),
+  delivered   integer not null default 0 check (delivered between 0 and 10000),
+  best_streak integer not null default 0 check (best_streak between 0 and 10000),
+  ended       text check (ended in ('complaints', 'battery', 'quit')),
+  device_time timestamptz,
+  server_time timestamptz not null default now()
+);
+create index if not exists game_scores_top on public.game_scores (score desc);
+alter table public.game_scores enable row level security;
+drop policy if exists game_scores_read on public.game_scores;
+create policy game_scores_read on public.game_scores for select to authenticated using (public.is_member());
+drop policy if exists game_scores_add on public.game_scores;
+create policy game_scores_add on public.game_scores for insert to authenticated
+  with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());

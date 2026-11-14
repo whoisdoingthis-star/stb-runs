@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Stan gets bored, and there's a game** (Mike, 14 Nov): with no runs to do and off duty, after 5 seconds Stan yawns and offers **Stan's Paper Run**. Throw papers into letterboxes, jump the dogs and locked gates, mind the sprinklers, grab batteries. Three complaints and the run's over. **Family high scores** included. Never while on duty. ([decision 0034](docs/decisions/0034-stans-paper-run.md))
 - The **logo is at the top of the Runs page** now (Stan and "Send The Boy"), with "Runs" small underneath. And **Stan is bigger on the home-screen icon** (Mike, 14 Nov: he was a bit small).
 - **Stan is the face of the app** (Mike's designs, 14 Nov): a rounder Stan with his name on a black band; **a new home-screen icon** (his face on black); **a new opening** (he winks, spins and cheers, with the same chimes); and a **Send The Boy logo** with Stan on the sign-in page and the delivery report. His eyes go happy when a run is finished. ([decision 0033](docs/decisions/0033-brand.md))
 - Stan has a word of his own: finish a run and he says **"Stan-tastic!"** (Mike, 14 Nov).

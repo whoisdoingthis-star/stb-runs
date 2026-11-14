@@ -6,7 +6,7 @@ import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
-import { playSplash, soundOn, setSound } from './splash.js';
+import { playSplash, soundOn, setSound, chimes } from './splash.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays, stbLogo } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
 import { stanReply, STAN_HELLO } from './stanchat.js';
@@ -403,6 +403,27 @@ function myRuns() {
 function setMyRuns(ids) { try { localStorage.setItem('stb.myruns', JSON.stringify({ date: nzToday(), ids })); } catch { /* private mode */ } }
 const duty = () => currentDuty(app.store.myDuty());
 const onDuty = () => !!duty()?.onDuty;
+
+// Nothing to deliver and nobody on duty: after five seconds Stan gets bored and offers a game
+// (Mike, 14 Nov 2026; decision 0034). Never on duty, never with Stan switched off, never by itself.
+const BORED_MS = 5000;
+function boredStan(says) {
+  const box = h('div', { class: 'bored-box' }, says);
+  if (!stanOn()) return box;
+  setTimeout(() => {
+    if (!box.isConnected || onDuty() || document.querySelector('.sg, .sheet')) return;
+    const st = says.querySelector('.stan'); const p = says.querySelector('p');
+    if (st) st.className = 'stan st-idle st-bored';
+    if (p) p.textContent = 'Yawn… nothing to deliver. Fancy a game while we wait?';
+    box.append(h('button', { class: 'btn primary big bored-play', onclick: () => playStanGame() }, 'Play Stan’s Paper Run'));
+  }, globalThis.__stbBoredMs ?? BORED_MS);
+  return box;
+}
+async function playStanGame() {
+  if (onDuty()) return toast('Not while you’re on duty. Go off duty first.');
+  const { openStanGame } = await import('./stangame.js');
+  openStanGame({ store: app.store, me: app.me, sound: (f) => { if (soundOn()) chimes([[0, f]]); } });
+}
 /** Note a duty change, with where we are if we know (no new GPS prompt). */
 function noteDuty(state, extra = {}, fix) {
   const f = fix && Date.now() - fix.t < 120000 ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc } : {};
@@ -524,7 +545,7 @@ async function viewHome() {
     drawDuty(runs);
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
-        stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' }),
+        boredStan(stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' })),
         app.store.mode === 'shared' ? h('button', { class: 'btn primary big', onclick: () => openRefetch() }, 'Get Runs now') : null,
         h('button', { class: `btn big ${app.store.mode === 'shared' ? '' : 'primary'}`, style: 'margin-top:8px', onclick: () => fileInput.click() }, 'Upload a run sheet (PDF)')));
       return;
@@ -589,7 +610,7 @@ async function viewHome() {
     const pastDates = Object.keys(past).sort().reverse();
     list.replaceChildren(tabs, ...(homeTab === 'current'
       ? (curDates.length ? curDates.map((d) => daySection(d, cur)) : [h('div', { class: 'empty' }, Object.keys(byDate).some((d) => d >= today)
-        ? stanSays('All done! Finished runs are under History.', { pose: 'hop' }) : stanSays('No runs for today or tomorrow yet. They load themselves after 7pm.'))])
+        ? boredStan(stanSays('All done! Finished runs are under History.', { pose: 'hop' })) : boredStan(stanSays('No runs for today or tomorrow yet. They load themselves after 7pm.')))])
       : (pastDates.length ? pastDates.map((d) => daySection(d, past)) : [h('div', { class: 'empty' }, stanSays('Finished runs will show here.'))])));
   }
   await renderList();

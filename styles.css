@@ -850,3 +850,25 @@ html.big .chat-bubble, html.big .chat-input { font-size: 20px; }
 /* Big text: a not-delivered or short tile already says so in words; the big stamp overlapped them. */
 html.big .tile.done.futile .done-word, html.big .tile.done.short .done-word { display: none; }
 html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { font-size: 20px; margin-top: 4px; }
+
+/* ---- Stan's Paper Run (decision 0034): Stan gets bored on an empty Runs page and offers a game ---- */
+.bored-box { display: flex; flex-direction: column; align-items: center; gap: 12px; } .bored-play { margin-top: 2px; }
+.stan.st-bored .st-bob { animation: st-sway 1.6s ease-in-out infinite; transform-origin: 100px 230px; }
+.stan.st-bored .st-eye-l, .stan.st-bored .st-eye-open { transform: scaleY(.45); transform-origin: 100px 90px; }
+@keyframes st-sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+.sg { position: fixed; inset: 0; z-index: 2000; background: #07080a; color: #fff; display: flex; flex-direction: column; align-items: center; padding: max(8px, env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.sg > * { width: 100%; max-width: 720px; }
+.sg-top { display: flex; align-items: center; justify-content: space-between; font-size: 20px; padding: 4px 2px 8px; }
+.sg-x { font: inherit; width: 48px; height: 48px; border-radius: 12px; border: 2px solid #3a3f4a; background: #15171c; color: #fff; }
+.sg-hud { display: flex; gap: 12px; align-items: baseline; padding: 0 2px 6px; font-weight: 700; }
+.sg-score { font-size: 26px; color: #ffc400; min-width: 3ch; } .sg-street { flex: 1; color: #c9ccd1; font-size: 15px; } .sg-life { font-size: 20px; color: #f87171; letter-spacing: 3px; }
+.sg-c { aspect-ratio: 360 / 200; border-radius: 12px; border: 2px solid #2a2e37; background: #0d1b3a; }
+.sg-pad { display: flex; gap: 10px; margin-top: 10px; }
+.sg-btn { flex: 1; font: inherit; font-size: 22px; font-weight: 800; min-height: 84px; border-radius: 16px; border: 2px solid #3a3f4a; background: #1b1e25; color: #fff; }
+.sg-btn:active { background: #2a2e37; } .sg-throw { background: #ffc400; border-color: #c77700; color: #17130a; } .sg-throw:active { background: #e6b000; }
+.sg-panel { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); width: min(92vw, 420px); background: #15171c; border: 2px solid #ffc400; border-radius: 16px; padding: 14px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.sg-panel[hidden] { display: none; } .sg-panel h3 { margin: 0 0 8px; font-size: 20px; } .sg-panel .btn { width: 100%; margin-top: 10px; }
+.sg-how { margin: 0; padding-left: 18px; line-height: 1.5; } .sg-sum { margin: 0 0 8px; color: #c9ccd1; }
+.sg-board ol { margin: 6px 0 0; padding-left: 26px; } .sg-board li { padding: 2px 0; font-variant-numeric: tabular-nums; white-space: pre; } .sg-board li.me { color: #ffc400; font-weight: 800; }
+.sg-top-msg { margin: 6px 0 0; color: #ffc400; font-weight: 700; }
+@media (orientation: landscape) and (max-height: 520px) { .sg-top { display: none; } .sg-c { max-height: 62vh; width: auto; } .sg-btn { min-height: 56px; } }
