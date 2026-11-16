@@ -896,3 +896,11 @@ html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { font-s
 .ins-run-n { font-size: 26px; font-weight: 800; line-height: 1.15; margin-top: 2px; } .ins-tag { margin-left: 6px; font-size: 10.5px; padding: 1px 7px; border-radius: 8px; background: var(--line); letter-spacing: 0; text-transform: none; }
 .ins-facts { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; display: grid; gap: 3px; font-size: 13.5px; }
 .ins-fact { display: flex; justify-content: space-between; gap: 8px; } .ins-fact span { color: var(--muted); } .ins-fact b { text-align: right; } .ins-fact.good b { color: #15803d; } .ins-fact.bad b { color: #dc2626; }
+
+/* ---- Stan's "Did you know" card (decision 0036) ---- */
+.stan-card-slot:empty { display: none; }
+.stan-card { display: flex; gap: 12px; align-items: flex-start; border: 2px solid #22e6f2; border-radius: 16px; background: var(--card); padding: 12px 14px; margin: 0 0 12px; }
+.stan-card.tip { border-color: #ffc400; } .stan-card .stan { flex: none; }
+.stan-card-h { font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stan-card-body { flex: 1; min-width: 0; } .stan-card p { margin: 4px 0 10px; font-size: var(--t-m, 17px); line-height: 1.35; }
+.stan-card-btns { display: flex; gap: 8px; flex-wrap: wrap; } .stan-card-btns .btn { min-height: 44px; }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildInsights, runMornings, deadlineRecord, streetTimes, doubleBacks, proofStrength, metres, keyMetrics, duration } from '../js/insights.js';
+import { buildInsights, runMornings, deadlineRecord, streetTimes, doubleBacks, proofStrength, metres, keyMetrics, duration, driverCards, pickCard } from '../js/insights.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 // A small world: Run 6 on time each weekday, Run 13 always late, Run 8 delivered in one drop. NZ is UTC+13 in November.
@@ -85,4 +85,33 @@ t('the same data always gives the same findings', () => assert.deepEqual(buildIn
   t('runs finished by the deadline are counted across all runs', () => assert.deepEqual([K.onTime.n, K.onTime.of, K.onTime.pct], [0, 1, 0]));
 }
 t('the headline numbers come with the findings, a tile per run', () => { assert.deepEqual(I.metrics.perRun.map((r) => r.name), ['Run 6', 'Run 8', 'Run 13']); assert.equal(I.metrics.perRun[1].bulk, true); assert.equal(I.metrics.perRun[2].onTime, 0); assert.equal(I.metrics.onTime.pct, 67); assert.equal(I.metrics.difot.pct, null); });
+// Stan's "Did you know" cards for a driver (decision 0036)
+const mikeCards = driverCards({ name: 'Mike', runs, ticks, complaints });
+const lisaCards = driverCards({ name: 'Lisa', runs, ticks, complaints });
+const card = (cs, id) => cs.find((c) => c.id === id);
+t('a driver’s late run becomes a tip about their own mornings', () => { const c = card(mikeCards, 'late-HOWICK13-weekday'); assert.equal(c.kind, 'tip'); assert.match(c.text, /Run 13 has finished after the deadline on 4 of your last 4 weekday mornings, usually by about 25 minutes\. Starting 25 minutes earlier/); });
+t('cards are only about the runs that person drives', () => { assert.ok(!lisaCards.some((c) => /Run 13/.test(c.text))); assert.ok(!mikeCards.some((c) => /Run 6|Elm Street/.test(c.text))); });
+t('someone with no ticks gets no cards', () => assert.deepEqual(driverCards({ name: 'Zaph', runs, ticks }), []));
+t('a card never names another person', () => { for (const c of [...mikeCards, ...lisaCards]) assert.ok(!/Lisa|Mike|Moana|Lenny|Zaph/.test(c.text), c.text); });
+t('facts: papers delivered, quickest run, pace, a street, and a streak', () => {
+  assert.match(card(lisaCards, 'total').text, /^You’ve delivered 284 papers with me over 4 mornings\.$/);
+  assert.match(card(lisaCards, 'quickest-HOWICK06').text, /^Your quickest Run 6 was \w+day: 49 min, first tick to last\.$/);
+  assert.match(card(lisaCards, 'pace-HOWICK06').text, /^On Run 6 you average 1\.6 min a delivery, driving included\.$/);
+  assert.match(card(lisaCards, 'street-HOWICK06-Oak Road').text, /^Oak Road is where Run 6 takes you longest/);
+  assert.match(card(lisaCards, 'streak-HOWICK06').text, /4 mornings running with you driving\. Stan-tastic!/);
+});
+t('a phone that stopped recording GPS gets a tip to turn Location on', () => {
+  const blind = ticks.map((x) => (x.user_name === 'Mike' && x.device_time > nz('2026-11-12', '00:00:00') ? { ...x, lat: null, lng: null } : x));
+  assert.match(card(driverCards({ name: 'Mike', runs, ticks: blind }), 'gps').text, /didn’t record where you were on 8 of your 8 ticks on Thursday/);
+});
+t('a habit of ticking away from the letterbox becomes a gentle tip, with no percentage league', () => {
+  const moved = ticks.map((x) => (x.run_id === 'r6-2026-11-12' && /ELM STREET|OAK ROAD\|([1-9]|10)$/.test(x.address_key) ? { ...x, lat: x.lat + 0.003 } : x));
+  assert.match(card(driverCards({ name: 'Lisa', runs, ticks: moved }), 'away').text, /^About 1 in 8 of your ticks were made away from the letterbox\. Tick as the paper goes in/);
+});
+t('an address on their run that complained twice becomes a photo tip', () => assert.match(card(lisaCards, 'repeat-HOWICK|ELM STREET|3').text, /^3 Elm Street on Run 6 has complained 2 times\. A photo there each morning/));
+t('one card a day: tips and facts take turns', () => { const a = pickCard(lisaCards, { today: '2026-11-17' }); const b = pickCard(lisaCards, { today: '2026-11-18' }); assert.notEqual(a.kind, b.kind); });
+t('a card just shown is not shown again for a week', () => { const a = pickCard(mikeCards, { today: '2026-11-18' }); const again = pickCard(mikeCards, { today: '2026-11-20', seen: { [a.id]: '2026-11-18' } }); assert.notEqual(again?.id, a.id); });
+t('“less like this” rests that kind of card for a month', () => { const p = pickCard(mikeCards, { today: '2026-11-18', prefs: { time: { v: -1, date: '2026-11-17' }, fun: { v: -1, date: '2026-11-17' } } }); assert.ok(!p || !['time', 'fun'].includes(p.topic)); });
+t('“more like this” brings that kind of card forward', () => assert.equal(pickCard(lisaCards, { today: '2026-11-17', prefs: { streets: { v: 1, date: '2026-11-16' } } }).topic, 'streets'));
+t('when every card has been seen lately there is no card', () => assert.equal(pickCard(mikeCards, { today: '2026-11-18', seen: Object.fromEntries(mikeCards.map((c) => [c.id, '2026-11-17'])) }), null));
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

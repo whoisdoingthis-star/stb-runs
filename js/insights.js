@@ -276,3 +276,72 @@ export function buildInsights({ runs = [], ticks = [], lines = [], complaints = 
     counts: { act: F.filter((f) => f.level === 'act').length, watch: F.filter((f) => f.level === 'watch').length, good: F.filter((f) => f.level === 'good').length },
     findings: F.sort((a, b) => order[a.level] - order[b.level]) };
 }
+
+// ---------- Stan's "Did you know…" cards for a driver (decision 0036) ----------
+// The same sums, turned to face one person: only ever their own numbers, and the runs they drive.
+// A card is a fact or a tip, never a mark. topic groups cards for "more like this / less like this".
+
+const dayName = (date) => new Intl.DateTimeFormat('en-NZ', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
+const oneIn = (pct) => (pct >= 45 ? 'About half' : pct >= 29 ? 'About 1 in 3' : pct >= 22 ? 'About 1 in 4' : pct >= 17 ? 'About 1 in 5' : pct >= 12 ? 'About 1 in 8' : 'About 1 in 10');
+
+/**
+ * Every card that could be shown to `name` from the data. Returns [{ id, kind: 'tip' | 'fact', topic, text }], tips first.
+ * A run counts as theirs on a morning when they made most of its ticks.
+ */
+export function driverCards({ name, runs = [], ticks = [], complaints = [], deadlines = DEFAULT_DEADLINES } = {}) {
+  if (!name) return [];
+  const all = runMornings(runs, ticks, deadlines).filter((m) => m.ticks);
+  const mine = all.filter((m) => m.list.filter((t) => t.user_name === name).length > m.ticks / 2);
+  const myTicks = all.flatMap((m) => m.list.filter((t) => t.user_name === name).map((t) => ({ ...t, date: m.date })));
+  if (!myTicks.length) return [];
+  const cards = []; const tip = (id, topic, text) => cards.push({ id, kind: 'tip', topic, text }); const fact = (id, topic, text) => cards.push({ id, kind: 'fact', topic, text });
+  const lastDate = myTicks.map((t) => t.date).sort().pop();
+
+  // tips
+  const recent = myTicks.filter((t) => t.date === lastDate);
+  if (recent.length >= 5 && recent.filter((t) => t.lat != null).length / recent.length < 0.8) tip('gps', 'proof',
+    `Your phone didn’t record where you were on ${recent.filter((t) => t.lat == null).length} of your ${recent.length} ticks on ${dayName(lastDate)}. Allow Location for the app and I can back you up with the place as well as the time.`);
+  const me = proofStrength(all).people.find((p) => p.name === name);
+  if (me && me.checked >= 30 && me.awayPct >= 10) tip('away', 'proof',
+    `${oneIn(me.awayPct)} of your ticks were made away from the letterbox. Tick as the paper goes in and the GPS proves the delivery if anyone asks.`);
+  for (const r of deadlineRecord(mine)) {
+    if (r.days < MIN_DAYS || r.late < Math.ceil(r.days / 2)) continue;
+    tip(`late-${r.route}-${r.kind}`, 'time', `${shortRoute(r.route)} has finished after the deadline on ${r.late} of your last ${r.days} ${r.kind === 'weekday' ? 'weekday' : 'weekend'} mornings, usually by about ${r.typicalLateMin} minutes. Starting ${round5(r.typicalLateMin)} minutes earlier would bring it home in time.`);
+  }
+  const myRoutes = new Set(mine.map((m) => m.route)); const byAddr = new Map();
+  for (const c of complaints) { if (!myRoutes.has(c.route)) continue; const a = byAddr.get(c.address_key) || { n: 0, c }; a.n += 1; byAddr.set(c.address_key, a); }
+  const rep = [...byAddr.values()].filter((a) => a.n > 1).sort((a, b) => b.n - a.n)[0];
+  if (rep) tip(`repeat-${rep.c.address_key}`, 'complaints', `${addrOf(rep.c.address_key)} on ${shortRoute(rep.c.route)} has complained ${rep.n} times. A photo there each morning is the best answer we can give.`);
+
+  // facts
+  fact('total', 'fun', `You’ve delivered ${myTicks.length.toLocaleString('en-NZ')} papers with me over ${plural(new Set(myTicks.map((t) => t.date)).size, 'morning')}.`);
+  const byRoute = new Map(); for (const m of mine) { if (m.bulk || m.ticks < 5) continue; if (!byRoute.has(m.route)) byRoute.set(m.route, []); byRoute.get(m.route).push(m); }
+  for (const [route, ms] of byRoute) {
+    const n = shortRoute(route);
+    if (ms.length >= 2) { const best = [...ms].sort((a, b) => a.durationMs - b.durationMs)[0]; fact(`quickest-${route}`, 'time', `Your quickest ${n} was ${dayName(best.date)}: ${duration(mins(best.durationMs))}, first tick to last.`); }
+    if (ms.length >= MIN_DAYS) fact(`pace-${route}`, 'time', `On ${n} you average ${perStop(Math.round(median(ms.map((m) => m.durationMs / Math.max(1, m.ticks - 1))) / 1000))} a delivery, driving included.`);
+    const sorted = [...ms].sort((a, b) => b.date.localeCompare(a.date)); let streak = 0; for (const m of sorted) { if (m.lateMin === 0) streak += 1; else break; }
+    if (streak >= 3) fact(`streak-${route}`, 'fun', `${n} has made its deadline ${streak} mornings running with you driving. Stan-tastic!`);
+  }
+  const st = streetTimes(mine)[0];
+  if (st) fact(`street-${st.route}-${st.street}`, 'streets', `${st.street} is where ${shortRoute(st.route)} takes you longest: about ${Math.round(st.typicalMin)} minutes for ${plural(st.stops, 'stop')}.`);
+  const early = [...mine].sort((a, b) => (a.first - a.deadline) - (b.first - b.deadline))[0];
+  if (early && mine.length >= MIN_DAYS) fact('earliest', 'fun', `Your earliest start was ${dayName(early.date)}: first paper out at ${hm(early.first)}.`);
+  return cards;
+}
+
+/**
+ * Which card to show today. One a day at most. A card isn't repeated within a week (a fortnight for facts), topics the
+ * person asked for less of rest for a month, tips and facts take turns so it doesn't nag, and "more like this" goes first.
+ * seen: { id: 'YYYY-MM-DD' last shown } · prefs: { topic: { v: 1 | -1, date } } · returns a card or null.
+ */
+export function pickCard(cards, { today, seen = {}, prefs = {} } = {}) {
+  const daysSince = (d) => (d ? Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${d}T12:00:00Z`)) / 864e5) : Infinity);
+  const ok = cards.filter((c) => daysSince(seen[c.id]) >= (c.kind === 'tip' ? 7 : 14) && !(prefs[c.topic]?.v === -1 && daysSince(prefs[c.topic].date) < 30));
+  if (!ok.length) return null;
+  const dayNo = Math.floor(Date.parse(`${today}T12:00:00Z`) / 864e5);
+  const want = dayNo % 2 === 0 ? 'tip' : 'fact';
+  const score = (c) => (prefs[c.topic]?.v === 1 ? 0 : 1) * 10 + (c.kind === want ? 0 : 1);
+  const best = Math.min(...ok.map(score)); const pool = ok.filter((c) => score(c) === best);
+  return pool[dayNo % pool.length];
+}

@@ -239,6 +239,8 @@ export class LocalStore extends Base {
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
+  /** Rows for Stan's "Did you know" cards (decision 0036): the runs and ticks on this phone. */
+  async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: runs.flatMap((r) => this.cachedEvents(r.id)), complaints: [] }; }
   async setSetting(key, value) { LS.set(`stb.setting.${key}`, value); }
   // Demo mode: tabs on the same device talk to each other, so a second tab
   // behaves like a second driver (handy for trying out working a run together).
@@ -587,6 +589,22 @@ export class SupabaseStore extends Base {
     const { error } = await this.sb.from('game_scores').insert(r);
     if (error) throw error;
     return r;
+  }
+  /** Rows for Stan's "Did you know" cards (decision 0036): the last `days` of runs, their ticks, and the complaints list. */
+  async loadCardRows(days = 14) {
+    const from = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(Date.now() - days * 864e5));
+    const must = (r) => { if (r.error) throw r.error; return r.data; };
+    const runs = must(await this.sb.from('runs').select('id, route, delivery_date').gte('delivery_date', from).order('delivery_date').limit(500));
+    const ids = runs.map((r) => r.id); const ticks = [];
+    for (let i = 0; i < ids.length; i += 20) {
+      for (let page = 0; ; page += 1000) {
+        const rows = must(await this.sb.from('tap_events').select('run_id, address_key, done, outcome, method, user_name, device_time, lat, lng, accuracy_m').in('run_id', ids.slice(i, i + 20)).order('device_time').range(page, page + 999));
+        ticks.push(...rows); if (rows.length < 1000) break;
+      }
+    }
+    let complaints = [];
+    try { complaints = must(await this.sb.from('complaint_register').select('address_key, route, reported_on, happened_on').gte('reported_on', from).limit(500)); } catch { /* cards about complaints wait */ }
+    return { runs, ticks, complaints };
   }
   /** The family's scores, best first; just my own when there's no signal. */
   async loadScores() {

@@ -364,6 +364,39 @@ function stanSay(text, face) {
   };
   if (wantStanVoice() && v.state === 'ready') { try { v.audio(); } catch { /* phone voice */ } v.cancel(); v.say(text, { onstart: () => talk(true), onend: () => talk(false) }).catch(phone); } else phone();
 }
+// Stan's "Did you know…" card (Mike, 17 Nov 2026; decision 0036): one a day at most, on the Runs page, never on duty.
+// Only ever about this person's own ticks and the runs they drive. Worked out once a day and kept on the phone.
+const cardStore = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } } };
+function stanCardSlot() {
+  const slot = h('div', { class: 'stan-card-slot' });
+  if (!stanOn() || onDuty() || !app.me?.name) return slot;
+  const today = nzToday(); const key = `stb.card.${app.me.name}`;
+  const show = (st) => {
+    if (!st.card || st.done) return;
+    const finish = (pref) => {
+      cardStore.set(key, { ...st, done: true });
+      if (pref) { cardStore.set(`${key}.prefs`, { ...cardStore.get(`${key}.prefs`, {}), [st.card.topic]: { v: pref, date: today } }); toast(pref > 0 ? 'Righto, more of those.' : 'No worries, I’ll ease off those.', null, { stan: 'idle' }); }
+      slot.replaceChildren();
+    };
+    slot.replaceChildren(h('div', { class: `stan-card ${st.card.kind}`, role: 'note' },
+      stan({ pose: st.card.kind === 'fact' ? 'wave' : 'point', size: 64 }),
+      h('div', { class: 'stan-card-body' }, h('div', { class: 'stan-card-h' }, st.card.kind === 'tip' ? 'Stan’s tip' : 'Did you know…'), h('p', null, st.card.text),
+        h('div', { class: 'stan-card-btns' }, h('button', { class: 'btn primary', onclick: () => finish(0) }, 'Got it'),
+          h('button', { class: 'btn', onclick: () => finish(1), 'aria-label': 'More cards like this' }, '👍 More'), h('button', { class: 'btn', onclick: () => finish(-1), 'aria-label': 'Fewer cards like this' }, '👎 Less')))));
+  };
+  const st = cardStore.get(key, null);
+  if (st?.date === today) { show(st); return slot; }
+  (async () => {
+    try {
+      const [{ driverCards, pickCard }, rows, deadlines] = await Promise.all([import('./insights.js'), app.store.loadCardRows(14), app.store.getSetting('deadlines').catch(() => null)]);
+      const seen = cardStore.get(`${key}.seen`, {});
+      const card = pickCard(driverCards({ name: app.me.name, ...rows, deadlines: deadlines || undefined }), { today, seen, prefs: cardStore.get(`${key}.prefs`, {}) });
+      const now = { date: today, card, done: false }; cardStore.set(key, now);
+      if (card) { cardStore.set(`${key}.seen`, { ...seen, [card.id]: today }); if (slot.isConnected && !onDuty()) show(now); }
+    } catch { /* no signal or nothing to say: try again tomorrow, or next time the page opens */ }
+  })();
+  return slot;
+}
 function stanChatButton(screen) {
   return h('button', { class: 'btn stan-chat-btn', onclick: () => openStanChat(screen) }, stanOn() ? stan({ head: true, size: 28 }) : null, stanOn() ? 'Got an idea? Tell Stan' : 'Send an idea');
 }
@@ -533,6 +566,7 @@ async function viewHome() {
     app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
     fileInput,
     dutySlot,
+    stanCardSlot(),
     stanChatButton('home'),
     list));
 

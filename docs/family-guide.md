@@ -94,6 +94,8 @@ Stan is our little yellow robot, with a screen for a face, glowing blue eyes and
 **Stan has his own voice.** The first time, he asks to download it (about 100 MB, so do it on Wi-Fi: tap **Get it**). After that it loads by itself when you open the app and works with no signal. Until it's ready he uses the phone's voice. Prefer the phone's voice? **⚙ Settings → Voice → Phone's**. He also keeps you company when there's nothing to do (no runs yet, all done). Don't want him? **⚙ Settings → Stan → Hide**.
 
 
+**Did you know… (Stan's cards).** Once a day, on the Runs page when you're off duty, Stan may show you one card. A **yellow** card is a tip (for example, your phone isn't recording where you tick, or a run keeps finishing after 6 am and would need a 15-minute earlier start). A **blue** card is just something interesting (how many papers you've delivered, your quickest morning). It's only ever about **your own** deliveries, and nobody else sees it. Tap **Got it** to put it away, **👍 More** if you like that kind, or **👎 Less** and he'll leave that kind alone for a month. Turning Stan off in Settings turns the cards off.
+
 **Stan's Paper Run (a game).** When there are no runs to do and you're off duty, wait five seconds on the Runs page: Stan yawns and asks if you fancy a game. Tap **Play Stan's Paper Run**. **Throw** (yellow button) puts a paper in a letterbox; **Jump** gets Stan over dogs and locked gates. Don't throw while a sprinkler is spraying, and grab the green batteries or the phone dies. Three complaints and the run's over; finishing a street clears one. Your best score goes on the **family high scores**. It never shows while you're on duty, and turning Stan off in Settings turns it off.
 
 ## Changing the order of a run
