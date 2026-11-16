@@ -889,3 +889,10 @@ html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { font-s
 .ins-kpi.good { border-top-color: #16a34a; } .ins-kpi.watch { border-top-color: #f59e0b; } .ins-kpi.act { border-top-color: #dc2626; }
 .ins-kpi-l { font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .ins-kpi-n { font-size: 40px; font-weight: 800; line-height: 1.1; margin: 2px 0; } .ins-kpi-s { font-weight: 700; margin-bottom: 6px; }
+.ins-banner { display: grid; gap: 10px; } .ins-runs-h { font-weight: 800; margin-top: 2px; }
+.ins-runs { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
+.ins-run { border: 1px solid var(--line); border-top: 4px solid #9ca3af; border-radius: 12px; background: var(--card); padding: 10px 12px; }
+.ins-run.good { border-top-color: #16a34a; } .ins-run.watch { border-top-color: #f59e0b; } .ins-run.act { border-top-color: #dc2626; }
+.ins-run-n { font-size: 26px; font-weight: 800; line-height: 1.15; margin-top: 2px; } .ins-tag { margin-left: 6px; font-size: 10.5px; padding: 1px 7px; border-radius: 8px; background: var(--line); letter-spacing: 0; text-transform: none; }
+.ins-facts { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; display: grid; gap: 3px; font-size: 13.5px; }
+.ins-fact { display: flex; justify-content: space-between; gap: 8px; } .ins-fact span { color: var(--muted); } .ins-fact b { text-align: right; } .ins-fact.good b { color: #15803d; } .ins-fact.bad b { color: #dc2626; }

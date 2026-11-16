@@ -143,30 +143,46 @@ export function complaintPicture({ from, to, complaints, photos, ticks, delivere
  *  - Average completion time per run: first tick to last tick of the morning, averaged over the run's mornings.
  * lines: [{ run_id, line_key }] (every stop on every sheet); ticks carry line_key.
  */
-export function keyMetrics({ runs = [], lines = [], ticks = [], mornings = null, deadlines = DEFAULT_DEADLINES, complaintCount = 0 }) {
+export function keyMetrics({ runs = [], lines = [], ticks = [], mornings = null, deadlines = DEFAULT_DEADLINES, complaintCount = 0, complaintsByRoute = [] }) {
   const ms = mornings || runMornings(runs, ticks, deadlines);
   const dl = new Map(runs.map((r) => [r.id, deadlineFor(r.delivery_date, deadlines).at]));
   const latest = new Map(); // run|line -> its latest tick (ticks are only ever added; the last one is how the stop stands)
   for (const t of ticks) { if (!dl.has(t.run_id)) continue; const k = `${t.run_id}|${t.line_key}`; const cur = latest.get(k); if (!cur || String(t.device_time) > String(cur.device_time)) latest.set(k, t); }
   let due = 0; let paper = 0; let difot = 0; let late = 0; let short = 0; let futile = 0; let none = 0;
+  const routeOf = new Map(runs.map((r) => [r.id, r.route])); const rd = new Map(); // route -> [in full on time, measured]
+  const bump = (id, ok) => { const k = routeOf.get(id); const v = rd.get(k) || [0, 0]; v[1] += 1; if (ok) v[0] += 1; rd.set(k, v); };
   for (const l of lines) {
     if (!dl.has(l.run_id)) continue; due += 1;
     const e = latest.get(`${l.run_id}|${l.line_key}`);
-    if (!e || !e.done) { none += 1; continue; }
+    if (!e || !e.done) { none += 1; bump(l.run_id, false); continue; }
     if (e.method === 'paper') { paper += 1; continue; }
-    if (e.outcome === 'futile') { futile += 1; continue; }
-    if (e.outcome === 'short') { short += 1; continue; }
-    if (Date.parse(e.device_time) <= dl.get(l.run_id)) difot += 1; else late += 1;
+    if (e.outcome === 'futile') { futile += 1; bump(l.run_id, false); continue; }
+    if (e.outcome === 'short') { short += 1; bump(l.run_id, false); continue; }
+    const ok = Date.parse(e.device_time) <= dl.get(l.run_id); if (ok) difot += 1; else late += 1; bump(l.run_id, ok);
   }
   const measured = due - paper; const delivered = difot + late + short + paper;
-  const timed = ms.filter((m) => m.ticks >= 2 && !m.bulk);
-  const byRoute = new Map(); for (const m of timed) { if (!byRoute.has(m.route)) byRoute.set(m.route, []); byRoute.get(m.route).push(m.durationMs); }
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const clockMin = (t) => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: NZ, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(t)); return +p.find((x) => x.type === 'hour').value * 60 + +p.find((x) => x.type === 'minute').value; };
+  const asClock = (min) => (min == null ? null : `${((Math.floor(min / 60) + 11) % 12) + 1}:${String(Math.round(min) % 60).padStart(2, '0')} ${min >= 720 ? 'pm' : 'am'}`);
+  const cBy = new Map(complaintsByRoute);
+  // one tile per run: how long it takes, how fast each delivery is, when it starts and finishes, and how it does against the deadline
+  const groups = new Map(); for (const m of ms) { if (!groups.has(m.route)) groups.set(m.route, []); groups.get(m.route).push(m); }
+  const perRun = [...groups.entries()].map(([route, all]) => {
+    const t = all.filter((m) => m.ticks >= 2); const paperMornings = all.filter((m) => !m.ticks && m.paper).length;
+    const dur = t.map((m) => m.durationMs); const [ok, of] = rd.get(route) || [0, 0];
+    const stops = t.length ? Math.round(mean(t.map((m) => m.ticks))) : null;
+    return { route, name: shortRoute(route), mornings: t.length, paperMornings, bulk: t.length > 0 && t.filter((m) => m.bulk).length > t.length / 2,
+      avgMin: t.length ? Math.round(mean(dur) / 60e3) : null, fastestMin: t.length ? Math.round(Math.min(...dur) / 60e3) : null, slowestMin: t.length ? Math.round(Math.max(...dur) / 60e3) : null,
+      stops, perDeliverySec: t.length ? Math.round(mean(t.map((m) => m.durationMs / Math.max(1, m.ticks - 1))) / 1000) : null,
+      usualStart: asClock(median(t.map((m) => clockMin(m.first)))), usualFinish: asClock(median(t.map((m) => clockMin(m.last)))),
+      onTime: t.filter((m) => m.lateMin === 0).length, difotPct: of ? Math.round((ok / of) * 100) : null, difotN: ok, difotOf: of, complaints: cBy.get(route) || 0 };
+  }).filter((r) => r.mornings || r.paperMornings).sort((a, b) => a.route.localeCompare(b.route, 'en', { numeric: true }));
+  const timedAll = ms.filter((m) => m.ticks >= 2);
   return {
     difot: { pct: measured ? +((difot / measured) * 100).toFixed(1) : null, n: difot, of: measured, late, short, futile, notRecorded: none, paper, due },
     complaints: { n: complaintCount, of: delivered, pct: delivered ? +((complaintCount / delivered) * 100).toFixed(2) : null },
-    completion: { avgMin: timed.length ? Math.round(mean(timed.map((m) => m.durationMs)) / 60e3) : null, runs: timed.length,
-      byRoute: [...byRoute.entries()].map(([route, ds]) => ({ route, name: shortRoute(route), avgMin: Math.round(mean(ds) / 60e3), mornings: ds.length })).sort((a, b) => a.route.localeCompare(b.route)) },
+    onTime: { n: timedAll.filter((m) => m.lateMin === 0).length, of: timedAll.length, pct: timedAll.length ? Math.round((timedAll.filter((m) => m.lateMin === 0).length / timedAll.length) * 100) : null },
+    perRun,
   };
 }
 /** "1 h 05" or "48 min" */
@@ -240,10 +256,10 @@ export function buildInsights({ runs = [], ticks = [], lines = [], complaints = 
   if (bulk.length) add({ id: 'bulk', area: 'Proof', level: 'info', title: `${bulk.join(', ')}: ticked in one go`, text: `Most ticks on ${bulk.join(' and ')} are seconds apart at one spot, which is right for a run delivered in one drop. It’s left out of the street times and the letterbox check.`, basis: 'gaps between ticks' });
 
   // 4. complaints
-  let complaintCount = 0;
+  let complaintCount = 0; let complaintsByRoute = [];
   if (lo && hi) {
     const cp = complaintPicture({ from: lo, to: hi, complaints, photos, ticks, delivered });
-    complaintCount = cp.total;
+    complaintCount = cp.total; complaintsByRoute = cp.routes;
     if (cp.total) {
       add({ id: 'complaints', area: 'Complaints', level: cp.noRecord > cp.answered ? 'watch' : 'info', title: `${plural(cp.total, 'complaint')} for ${delivered.toLocaleString('en-NZ')} deliveries${cp.per1000 != null ? ` (${cp.per1000} per thousand)` : ''}`,
         text: `${cp.answered} can be answered with our own delivery record for that morning (${cp.timed} with a time). ${cp.noRecord} ${cp.noRecord === 1 ? 'has' : 'have'} no record to answer with. By type: ${cp.kinds.map(([k, n]) => `${k} ${n}`).join(', ')}.`,
@@ -256,7 +272,7 @@ export function buildInsights({ runs = [], ticks = [], lines = [], complaints = 
   }
   const order = { act: 0, watch: 1, good: 2, info: 3 };
   return { from: lo, to: hi, days, early: days < EARLY_DAYS, delivered, runs: mornings.filter((m) => m.ticks || m.paper).length,
-    metrics: keyMetrics({ runs: inRange, lines, ticks, mornings, deadlines, complaintCount }),
+    metrics: keyMetrics({ runs: inRange, lines, ticks, mornings, deadlines, complaintCount, complaintsByRoute }),
     counts: { act: F.filter((f) => f.level === 'act').length, watch: F.filter((f) => f.level === 'watch').length, good: F.filter((f) => f.level === 'good').length },
     findings: F.sort((a, b) => order[a.level] - order[b.level]) };
 }

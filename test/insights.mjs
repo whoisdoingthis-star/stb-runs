@@ -77,7 +77,12 @@ t('the same data always gives the same findings', () => assert.deepEqual(buildIn
   t('stops signed off on paper have no time, so they are counted apart and not against', () => { assert.equal(K.difot.paper, 10); assert.equal(K.difot.due, 20); });
   t('a stop that was delivered short is not in full', () => { const k = keyMetrics({ runs: R, lines: L, ticks: [...T, { run_id: 'a', line_key: 'L2', done: true, outcome: 'short', device_time: nz('2026-11-09', '05:59:00') }] }); assert.equal(k.difot.n, 5); assert.equal(k.difot.short, 1); });
   t('complaints are a share of everything delivered', () => assert.deepEqual([K.complaints.n, K.complaints.of, K.complaints.pct], [2, 18, 11.11]));
-  t('average completion time is first tick to last, averaged over each run’s mornings', () => { assert.equal(K.completion.avgMin, 75); assert.deepEqual(K.completion.byRoute.map((r) => [r.name, r.avgMin, r.mornings]), [['Run 6', 75, 1]]); assert.equal(duration(75), '1 h 15'); assert.equal(duration(48), '48 min'); });
+  const r6 = K.perRun.find((r) => r.name === 'Run 6');
+  t('each run has its own completion time, first tick to last, averaged over its mornings', () => { assert.deepEqual([r6.avgMin, r6.mornings, r6.fastestMin, r6.slowestMin], [75, 1, 75, 75]); assert.equal(duration(75), '1 h 15'); assert.equal(duration(48), '48 min'); });
+  t('each run shows its stops, time per delivery, and usual start and finish', () => assert.deepEqual([r6.stops, r6.perDeliverySec, r6.usualStart, r6.usualFinish], [9, 563, '5:05 am', '6:20 am']));
+  t('each run shows its own DIFOT and whether it finished by the deadline', () => assert.deepEqual([r6.difotN, r6.difotOf, r6.difotPct, r6.onTime], [6, 10, 60, 0]));
+  t('a run done only on paper is shown as paper, with no times', () => { const p = K.perRun.find((r) => r.name === 'Run 10'); assert.deepEqual([p.mornings, p.paperMornings, p.avgMin], [0, 1, null]); });
+  t('runs finished by the deadline are counted across all runs', () => assert.deepEqual([K.onTime.n, K.onTime.of, K.onTime.pct], [0, 1, 0]));
 }
-t('the headline numbers come with the findings', () => { assert.ok(I.metrics.completion.avgMin > 30); assert.equal(I.metrics.difot.pct, null); });
+t('the headline numbers come with the findings, a tile per run', () => { assert.deepEqual(I.metrics.perRun.map((r) => r.name), ['Run 6', 'Run 8', 'Run 13']); assert.equal(I.metrics.perRun[1].bulk, true); assert.equal(I.metrics.perRun[2].onTime, 0); assert.equal(I.metrics.onTime.pct, 67); assert.equal(I.metrics.difot.pct, null); });
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

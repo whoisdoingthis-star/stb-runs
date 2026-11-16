@@ -670,7 +670,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
     };
     const LEVEL = { act: ['Do something', 'act'], watch: ['Keep an eye on', 'watch'], good: ['Working well', 'good'], info: ['For interest', 'info'] };
     const asText = (I) => [`Send The Boy insights, ${I.from} to ${I.to} (${I.days} delivery days, ${I.delivered} deliveries)${I.early ? ' - early findings' : ''}`,
-      `DIFOT ${I.metrics.difot.pct ?? '-'}% (${I.metrics.difot.n} of ${I.metrics.difot.of} stops) | Complaints ${I.metrics.complaints.pct ?? '-'}% (${I.metrics.complaints.n} for ${I.metrics.complaints.of} deliveries) | Average completion time per run ${duration(I.metrics.completion.avgMin)}`, '',
+      `DIFOT ${I.metrics.difot.pct ?? '-'}% (${I.metrics.difot.n} of ${I.metrics.difot.of} stops) | Complaints ${I.metrics.complaints.pct ?? '-'}% (${I.metrics.complaints.n} for ${I.metrics.complaints.of} deliveries) | Runs finished on time ${I.metrics.onTime.pct ?? '-'}% (${I.metrics.onTime.n} of ${I.metrics.onTime.of})`,
+      ...I.metrics.perRun.filter((r) => r.mornings).map((r) => `${r.name}: ${duration(r.avgMin)} average, ${r.perDeliverySec} s per delivery, usually done by ${r.usualFinish}, on time ${r.onTime} of ${r.mornings}`), '',
       ...I.findings.filter((f) => f.level !== 'info').map((f) => `${LEVEL[f.level][0].toUpperCase()}: ${f.title}\n${f.text}${f.suggestion ? `\nSuggestion: ${f.suggestion}` : ''}`)].join('\n\n');
     const card = (f) => h('article', { class: `ins-card ins-${f.level}` },
       h('div', { class: 'ins-head' }, h('span', { class: `ins-badge ${LEVEL[f.level][1]}` }, LEVEL[f.level][0]), h('span', { class: 'small muted' }, f.area)),
@@ -681,14 +682,24 @@ export async function viewDispatch(ctx, tab = 'overview') {
     // The three headline numbers (Mike, 17 Nov 2026): DIFOT, complaints, average completion time per run.
     const banner = (I) => { const M = I.metrics; const n = (x) => x.toLocaleString('en-NZ'); const dlw = (D.deadlines || DEFAULT_DEADLINES);
       const tile = (cls, label, big, sub, note) => h('div', { class: `ins-kpi ${cls}` }, h('div', { class: 'ins-kpi-l' }, label), h('div', { class: 'ins-kpi-n' }, big), h('div', { class: 'ins-kpi-s' }, sub), note ? h('div', { class: 'small muted' }, note) : null);
-      const d = M.difot; const c = M.complaints; const t = M.completion;
+      const d = M.difot; const c = M.complaints; const o = M.onTime;
       const missed = [d.late ? `${n(d.late)} after the deadline` : '', d.short ? `${n(d.short)} short` : '', d.futile ? `${n(d.futile)} couldn’t deliver` : '', d.notRecorded ? `${n(d.notRecorded)} not ticked` : ''].filter(Boolean).join(', ');
-      return h('div', { class: 'ins-kpis' },
+      const fact = (k, v, cls = '') => (v == null || v === '' ? null : h('div', { class: `ins-fact ${cls}` }, h('span', null, k), h('b', null, v)));
+      const perDel = (s) => (s == null ? null : s >= 90 ? `${+(s / 60).toFixed(1)} min` : `${s} s`);
+      const runTile = (r) => h('div', { class: `ins-run ${r.mornings ? (r.onTime === r.mornings ? 'good' : r.onTime >= r.mornings / 2 ? 'watch' : 'act') : ''}` },
+        h('div', { class: 'ins-kpi-l' }, r.name, r.bulk ? h('span', { class: 'ins-tag' }, 'one drop') : null),
+        h('div', { class: 'ins-run-n' }, r.mornings ? duration(r.avgMin) : 'Paper only'), h('div', { class: 'small muted' }, r.mornings ? 'average completion time' : 'no times recorded'),
+        r.mornings ? h('div', { class: 'ins-facts' },
+          fact('Per delivery', perDel(r.perDeliverySec)), fact('Stops', r.stops), fact('Usually starts', r.usualStart), fact('Usually done by', r.usualFinish),
+          fact('On time', `${r.onTime} of ${r.mornings} mornings`, r.onTime === r.mornings ? 'good' : 'bad'), fact('DIFOT', r.difotPct == null ? null : `${r.difotPct}%`),
+          r.mornings > 1 ? fact('Quickest / slowest', `${duration(r.fastestMin)} / ${duration(r.slowestMin)}`) : null, fact('Complaints', r.complaints), r.paperMornings ? fact('On paper', `${r.paperMornings} morning${r.paperMornings === 1 ? '' : 's'}`) : null) : h('div', { class: 'ins-facts' }, fact('On paper', `${r.paperMornings} morning${r.paperMornings === 1 ? '' : 's'}`), fact('Complaints', r.complaints)));
+      return h('div', { class: 'ins-banner' }, h('div', { class: 'ins-kpis' },
         tile(d.pct == null ? '' : d.pct >= 95 ? 'good' : d.pct >= 85 ? 'watch' : 'act', 'DIFOT', d.pct == null ? '–' : `${d.pct}%`, d.of ? `${n(d.n)} of ${n(d.of)} stops` : 'No timed stops in these dates',
           `Delivered in full by the ${String(dlw.weekday).replace(/^0/, '')} am (weekend ${String(dlw.weekend).replace(/^0/, '')} am) deadline.${missed ? ` Missed: ${missed}.` : ''}${d.paper ? ` ${n(d.paper)} more were signed off on paper, with no times, so they’re not in this figure.` : ''}`),
         tile(c.pct == null ? '' : c.pct <= 0.2 ? 'good' : c.pct <= 0.5 ? 'watch' : 'act', 'Complaints', c.pct == null ? '–' : `${c.pct}%`, `${n(c.n)} for ${n(c.of)} deliveries`, 'Complaints about or received in these dates, against every delivery recorded (app and paper).'),
-        tile('', 'Avg completion time per run', duration(t.avgMin), t.runs ? `across ${n(t.runs)} run-mornings` : 'No timed runs in these dates',
-          t.byRoute.length ? `First tick to last. ${t.byRoute.map((r) => `${r.name} ${duration(r.avgMin)}`).join(' · ')}. Runs delivered in one drop are left out.` : null));
+        tile(o.pct == null ? '' : o.pct >= 95 ? 'good' : o.pct >= 80 ? 'watch' : 'act', 'Runs finished on time', o.pct == null ? '–' : `${o.pct}%`, o.of ? `${n(o.n)} of ${n(o.of)} runs` : 'No timed runs in these dates', 'A run is on time when its last stop is ticked by the deadline.')),
+        M.perRun.length ? h('div', { class: 'ins-runs-h' }, 'Run by run', h('span', { class: 'small muted' }, ' · completion time is first tick to last tick of the morning, averaged; “per delivery” is that time shared across the stops')) : null,
+        M.perRun.length ? h('div', { class: 'ins-runs' }, M.perRun.map(runTile)) : null);
     };
     function paint() {
       const I = INS.data;
