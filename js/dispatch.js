@@ -39,6 +39,7 @@ import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
 import { runMapData, pingText } from './runmap.js';
 import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './report.js';
+import { buildInsights, EARLY_DAYS } from './insights.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -190,7 +191,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   // ---- layout
-  const tabs = [['overview', 'Overview'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'Change log']];
+  const tabs = [['overview', 'Overview'], ['insights', 'Insights'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'Change log']];
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
   const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
@@ -216,7 +217,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null,
       k === 'complaints' && D.register.some((c) => c.status === 'open') ? h('span', { class: 'dz-count bad' }, D.register.filter((c) => c.status === 'open').length) : null)));
     body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
-      ({ overview: renderOverview, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
+      ({ overview: renderOverview, insights: renderInsights, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
   // Morning watch keeps itself fresh: every minute while the Overview is showing a day with a run still under way.
@@ -632,6 +633,64 @@ export async function viewDispatch(ctx, tab = 'overview') {
         catch (err) { msg.textContent = `Couldn\u2019t make the report: ${err.message}`; msg.className = 'small bad'; e.currentTarget.disabled = false; }
       } }, 'Make the report'));
   }
+  // ================= Insights (decision 0035) =================
+  // What the collected data says, with a suggestion each. The sums are in js/insights.js (tested);
+  // this loads the rows for the dates and lays the findings out.
+  const INS = { from: null, to: null, data: null, loading: false, error: null };
+  async function loadInsights(from, to) {
+    if (app.store.loadInsights) return app.store.loadInsights(from, to, D.register); // (test page)
+    const runs = must(await sb.from('runs').select('id, route, delivery_date').gte('delivery_date', from).lte('delivery_date', to).order('delivery_date').limit(2000));
+    const ids = runs.map((r) => r.id); const ticks = [];
+    // a few runs at a time, a thousand rows a page: a month is tens of thousands of ticks
+    for (let i = 0; i < ids.length; i += 20) {
+      for (let page = 0; ; page += 1000) {
+        const rows = must(await sb.from('tap_events').select('run_id, address_key, done, outcome, reason, method, user_name, device_time, lat, lng, accuracy_m').in('run_id', ids.slice(i, i + 20)).order('device_time').range(page, page + 999));
+        ticks.push(...rows); if (rows.length < 1000) break;
+      }
+    }
+    const lo = new Date(Date.parse(`${from}T00:00:00Z`) - 36 * 3600e3).toISOString(); const hi = new Date(Date.parse(`${to}T00:00:00Z`) + 36 * 3600e3).toISOString();
+    const photos = must(await sb.from('photos').select('address_key, taken_at, user_name, route, path').gte('taken_at', lo).lte('taken_at', hi).order('taken_at').limit(5000));
+    return { runs, ticks, photos, complaints: D.register };
+  }
+  function renderInsights() {
+    const today = nzDate(Date.now()); const back = (n) => nzDate(Date.now() - n * 864e5);
+    if (!INS.from) { INS.from = back(28); INS.to = today; }
+    const box = h('div', { class: 'ins' });
+    const from = h('input', { type: 'date', value: INS.from, max: today, 'aria-label': 'From' }); const to = h('input', { type: 'date', value: INS.to, max: today, 'aria-label': 'To' });
+    const run = async () => {
+      if (!from.value || !to.value || from.value > to.value) return toast('Pick a From date on or before the To date.');
+      INS.from = from.value; INS.to = to.value; INS.loading = true; INS.error = null; paint();
+      try { const rows = await loadInsights(INS.from, INS.to); INS.data = buildInsights({ ...rows, deadlines: D.deadlines || DEFAULT_DEADLINES, from: INS.from, to: INS.to }); }
+      catch (e) { INS.error = e.message; }
+      INS.loading = false; paint();
+    };
+    const LEVEL = { act: ['Do something', 'act'], watch: ['Keep an eye on', 'watch'], good: ['Working well', 'good'], info: ['For interest', 'info'] };
+    const asText = (I) => [`Send The Boy insights, ${I.from} to ${I.to} (${I.days} delivery days, ${I.delivered} deliveries)${I.early ? ' - early findings' : ''}`, '',
+      ...I.findings.filter((f) => f.level !== 'info').map((f) => `${LEVEL[f.level][0].toUpperCase()}: ${f.title}\n${f.text}${f.suggestion ? `\nSuggestion: ${f.suggestion}` : ''}`)].join('\n\n');
+    const card = (f) => h('article', { class: `ins-card ins-${f.level}` },
+      h('div', { class: 'ins-head' }, h('span', { class: `ins-badge ${LEVEL[f.level][1]}` }, LEVEL[f.level][0]), h('span', { class: 'small muted' }, f.area)),
+      h('h3', null, f.title), h('p', null, f.text),
+      f.suggestion ? h('p', { class: 'ins-sug' }, h('b', null, 'Suggestion: '), f.suggestion) : null,
+      f.rows?.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table dz-fit' }, h('thead', null, h('tr', null, f.cols.map((c) => h('th', null, c)))), h('tbody', null, f.rows.map((r) => h('tr', null, r.map((c) => h('td', null, String(c)))))))) : null,
+      h('p', { class: 'small muted ins-basis' }, `Based on: ${f.basis}`));
+    function paint() {
+      const I = INS.data;
+      box.replaceChildren(...[
+        h('div', { class: 'dz-card' }, h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'What the ticks, photos and complaints we’ve collected are telling us, each with a suggestion. The sums are fixed: the same dates always give the same findings.'),
+          h('div', { class: 'ins-dates' }, h('label', null, 'From ', from), h('label', null, 'To ', to), h('button', { class: 'btn primary', onclick: run, disabled: INS.loading || null }, INS.loading ? 'Working it out…' : I ? 'Update' : 'Show insights'),
+            I ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(asText(I)); toast('Copied. Paste it into a message.'); } catch { toast('Couldn’t copy on this device.'); } } }, 'Copy as text') : null)),
+        INS.error ? h('p', { class: 'bad' }, `Couldn’t work it out: ${INS.error}`) : null,
+        !I ? null : h('div', { class: 'ins-sum' }, h('div', null, h('b', null, I.days), ` delivery day${I.days === 1 ? '' : 's'}`), h('div', null, h('b', null, I.delivered.toLocaleString('en-NZ')), ' deliveries'),
+          h('div', { class: 'act' }, h('b', null, I.counts.act), ' to do something about'), h('div', { class: 'watch' }, h('b', null, I.counts.watch), ' to keep an eye on'), h('div', { class: 'good' }, h('b', null, I.counts.good), ' working well')),
+        I?.early ? h('p', { class: 'ins-early' }, h('b', null, 'Early findings. '), `There are ${I.days} delivery days in these dates. Patterns firm up after about ${EARLY_DAYS}; until then treat these as pointers, not verdicts.`) : null,
+        I && !I.findings.length ? stanSays('Nothing to report for these dates yet. I need a few mornings of ticks first.', { pose: 'idle' }) : null,
+        ...(I ? I.findings.map(card) : [])].filter(Boolean));
+    }
+    paint();
+    if (!INS.data && !INS.loading) run();
+    return box;
+  }
+
   async function loadReport(from, to) {
     if (app.store.loadReport) return app.store.loadReport(from, to, D.register); // (test page)
     // NZ days -> UTC window, a day wider each side; the report itself keeps only what falls in the dates.

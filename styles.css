@@ -872,3 +872,15 @@ html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { font-s
 .sg-board ol { margin: 6px 0 0; padding-left: 26px; } .sg-board li { padding: 2px 0; font-variant-numeric: tabular-nums; white-space: pre; } .sg-board li.me { color: #ffc400; font-weight: 800; }
 .sg-top-msg { margin: 6px 0 0; color: #ffc400; font-weight: 700; }
 @media (orientation: landscape) and (max-height: 520px) { .sg-top { display: none; } .sg-c { max-height: 62vh; width: auto; } .sg-btn { min-height: 56px; } }
+
+/* ---- Insights (decision 0035) ---- */
+.ins { display: grid; gap: 12px; max-width: 900px; }
+.ins-dates { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; } .ins-dates input { font: inherit; padding: 6px 8px; }
+.ins-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); } .ins-sum b { font-size: 22px; }
+.ins-sum .act b { color: #dc2626; } .ins-sum .watch b { color: #b45309; } .ins-sum .good b { color: #15803d; }
+.ins-early { margin: 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #f59e0b 16%, var(--card)); border: 1px solid color-mix(in srgb, #f59e0b 50%, var(--line)); }
+.ins-card { border: 1px solid var(--line); border-left: 6px solid #9ca3af; border-radius: 12px; background: var(--card); padding: 12px 14px; }
+.ins-card.ins-act { border-left-color: #dc2626; } .ins-card.ins-watch { border-left-color: #f59e0b; } .ins-card.ins-good { border-left-color: #16a34a; }
+.ins-card h3 { margin: 6px 0 4px; font-size: 18px; } .ins-card p { margin: 0 0 6px; } .ins-head { display: flex; gap: 10px; align-items: center; }
+.ins-badge { font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 10px; background: #e5e7eb; color: #374151; } .ins-badge.act { background: #dc2626; color: #fff; } .ins-badge.watch { background: #f59e0b; color: #1c1917; } .ins-badge.good { background: #16a34a; color: #fff; }
+.ins-sug { padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, #22e6f2 12%, var(--card)); } .ins-basis { margin: 6px 0 0 !important; }

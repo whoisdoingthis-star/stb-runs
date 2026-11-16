@@ -150,6 +150,8 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 
 - (Mike, 14 Nov 2026) **The game is for waiting, not working.** Stan offers his game only when there are no runs to do and the person is off duty, after 5 seconds, and never starts it himself. ([decision 0034](decisions/0034-stans-paper-run.md))
 
+- (Mike, 17 Nov 2026) **Insights.** The collected data is analysed and reported on the dispatch board with suggestions. Comparisons between people stay on the dispatch board; a driver is only ever shown their own numbers. Findings state facts and suggest; they don't score people. ([decision 0035](decisions/0035-insights.md))
+
 ## Run map and Ping (Mike, 13 Nov 2026, via Chat with Stan)
 - Dispatch can see each run on a map: a pin per address (to do / done / couldn't deliver) and the trail in delivery order. ([decision 0026](decisions/0026-run-map-and-ping.md))
 - **Ping** shows where a driver is only when a dispatcher asks, only while that driver is on duty with the app open, and the driver is always told. Off duty, nothing is shared. No continuous tracking.
