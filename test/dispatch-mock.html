@@ -103,7 +103,10 @@ const openSheet = (title, ...content) => { const close = () => panel.remove(); c
     for (let i = 0; i < 9; i++) add(`i13-${d}`, `HOWICK|GRANGER ROAD|${i + 1}`, tz(d, 5 + Math.floor((52 + i * 4 + di) / 60), (52 + i * 4 + di) % 60), { user_name: who, lat: who === 'Lenny' ? null : -36.95 + i * 0.0003, lng: who === 'Lenny' ? null : 174.93 });
     for (let i = 0; i < 40; i++) add(`i8-${d}`, `HOWICK|VILLAGE WAY|${i + 1}`, tz(d, 5, 30 + Math.floor((i * 2) / 60), (i * 2) % 60), { lat: -36.97 });
   });
-  T.insights = { runs, ticks, photos: [], complaints: [
+  ticks.forEach((t) => { t.line_key = t.address_key; });
+  const lines = [...new Map(ticks.map((t) => [`${t.run_id}|${t.line_key}`, { run_id: t.run_id, line_key: t.line_key }])).values()];
+  runs.forEach((r) => lines.push({ run_id: r.id, line_key: 'never-ticked' }));
+  T.insights = { runs, ticks, lines, photos: [], complaints: [
     { address_key: 'HOWICK|MOORE STREET|4', number: '4', street: 'MOORE STREET', route: 'HOWICK06', kind: 'MISSED', happened_on: '2026-11-04', reported_on: '2026-11-05', status: 'open' },
     { address_key: 'HOWICK|MOORE STREET|4', number: '4', street: 'MOORE STREET', route: 'HOWICK06', kind: 'WET', happened_on: '2026-11-06', reported_on: '2026-11-07', status: 'open' },
     { address_key: 'HOWICK|GRANGER ROAD|3', number: '3', street: 'GRANGER ROAD', route: 'HOWICK13', kind: 'MISSED', happened_on: '2026-11-09', reported_on: '2026-11-10', status: 'open' }] }; }

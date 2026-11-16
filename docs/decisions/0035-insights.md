@@ -14,6 +14,10 @@ Mike (17 Nov 2026): after the first weeks of use, start analysing what's been co
   - **Time on the road:** time street by street (gaps between ticks; breaks over 10 minutes left out), short streets that cost over 2 minutes a stop, and streets a run leaves and comes back to on most mornings.
   - **Proof:** share of app ticks with GPS, by person, so a phone with Location switched off shows up; deliveries signed off on paper; and ticks made **away from the letterbox**: more than 60 m from where that address is usually ticked.
   - **Complaints:** per thousand deliveries, by type and run, how many our own records can answer, addresses that complain more than once, and complaint addresses with no photo.
+- **Three headline numbers at the top** (Mike, 17 Nov 2026), each as a percentage or time with the count beside it:
+  - **DIFOT:** stops delivered in full, on time, out of the stops that can be measured. *In full* = ticked delivered, not short and not "couldn't deliver". *On time* = ticked by that morning's deadline (6 am weekdays, 7 am weekends and holidays). Stops never ticked count against. Stops signed off from the paper sheet have no time, so they are counted beside the figure, not in it. (The Overview's daily DIFOTIS table is a different measure: its "on time" is the address's own time rules.)
+  - **Complaints:** complaints about or received in the dates, as a share of every delivery recorded.
+  - **Average completion time per run:** first tick to last tick of the morning, averaged over run-mornings, with each run's own average underneath. Runs delivered in one drop are left out.
 - **Enough evidence first.** A pattern needs 3 mornings. With under 14 delivery days the page says the findings are early: pointers, not verdicts.
 - **A run delivered in one drop** (ticks seconds apart at one spot, like Run 8's village) is recognised and left out of street times and the letterbox check: that is how it's meant to be done.
 - **A stray tick isn't the run:** only ticks within 5 hours before and 4 hours after the deadline count as that morning.

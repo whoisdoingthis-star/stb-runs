@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Insights: three headline numbers** at the top (Mike, 17 Nov): **DIFOT** (% and stops, delivered in full by the 6 am / 7 am deadline), **Complaints** (% and number) and **Average completion time per run**.
 - **Insights** (Mike, 17 Nov): a new page in Dispatch that reads the ticks, photos and complaints for the dates you pick and reports what it finds, each with a suggestion: runs finishing after their deadline, where the time goes street by street, phones not recording GPS, ticks made away from the letterbox, and complaint patterns. Marked "early" until there are two weeks of data. ([decision 0035](docs/decisions/0035-insights.md))
 - **Stan gets bored, and there's a game** (Mike, 14 Nov): with no runs to do and off duty, after 5 seconds Stan yawns and offers **Stan's Paper Run**. Throw papers into letterboxes, jump the dogs and locked gates, mind the sprinklers, grab batteries. Three complaints and the run's over. **Family high scores** included. Never while on duty. ([decision 0034](docs/decisions/0034-stans-paper-run.md))
 - The **logo is at the top of the Runs page** now (Stan and "Send The Boy"), with "Runs" small underneath. And **Stan is bigger on the home-screen icon** (Mike, 14 Nov: he was a bit small).

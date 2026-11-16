@@ -39,7 +39,7 @@ import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
 import { runMapData, pingText } from './runmap.js';
 import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './report.js';
-import { buildInsights, EARLY_DAYS } from './insights.js';
+import { buildInsights, EARLY_DAYS, duration } from './insights.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -640,17 +640,21 @@ export async function viewDispatch(ctx, tab = 'overview') {
   async function loadInsights(from, to) {
     if (app.store.loadInsights) return app.store.loadInsights(from, to, D.register); // (test page)
     const runs = must(await sb.from('runs').select('id, route, delivery_date').gte('delivery_date', from).lte('delivery_date', to).order('delivery_date').limit(2000));
-    const ids = runs.map((r) => r.id); const ticks = [];
+    const ids = runs.map((r) => r.id); const ticks = []; const lines = [];
     // a few runs at a time, a thousand rows a page: a month is tens of thousands of ticks
     for (let i = 0; i < ids.length; i += 20) {
       for (let page = 0; ; page += 1000) {
-        const rows = must(await sb.from('tap_events').select('run_id, address_key, done, outcome, reason, method, user_name, device_time, lat, lng, accuracy_m').in('run_id', ids.slice(i, i + 20)).order('device_time').range(page, page + 999));
+        const rows = must(await sb.from('tap_events').select('run_id, line_key, address_key, done, outcome, reason, method, user_name, device_time, lat, lng, accuracy_m').in('run_id', ids.slice(i, i + 20)).order('device_time').range(page, page + 999));
         ticks.push(...rows); if (rows.length < 1000) break;
+      }
+      for (let page = 0; ; page += 1000) { // every stop on those sheets, for DIFOT
+        const rows = must(await sb.from('run_lines').select('run_id, line_key').in('run_id', ids.slice(i, i + 20)).order('run_id').order('line_key').range(page, page + 999));
+        lines.push(...rows); if (rows.length < 1000) break;
       }
     }
     const lo = new Date(Date.parse(`${from}T00:00:00Z`) - 36 * 3600e3).toISOString(); const hi = new Date(Date.parse(`${to}T00:00:00Z`) + 36 * 3600e3).toISOString();
     const photos = must(await sb.from('photos').select('address_key, taken_at, user_name, route, path').gte('taken_at', lo).lte('taken_at', hi).order('taken_at').limit(5000));
-    return { runs, ticks, photos, complaints: D.register };
+    return { runs, ticks, lines, photos, complaints: D.register };
   }
   function renderInsights() {
     const today = nzDate(Date.now()); const back = (n) => nzDate(Date.now() - n * 864e5);
@@ -665,7 +669,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
       INS.loading = false; paint();
     };
     const LEVEL = { act: ['Do something', 'act'], watch: ['Keep an eye on', 'watch'], good: ['Working well', 'good'], info: ['For interest', 'info'] };
-    const asText = (I) => [`Send The Boy insights, ${I.from} to ${I.to} (${I.days} delivery days, ${I.delivered} deliveries)${I.early ? ' - early findings' : ''}`, '',
+    const asText = (I) => [`Send The Boy insights, ${I.from} to ${I.to} (${I.days} delivery days, ${I.delivered} deliveries)${I.early ? ' - early findings' : ''}`,
+      `DIFOT ${I.metrics.difot.pct ?? '-'}% (${I.metrics.difot.n} of ${I.metrics.difot.of} stops) | Complaints ${I.metrics.complaints.pct ?? '-'}% (${I.metrics.complaints.n} for ${I.metrics.complaints.of} deliveries) | Average completion time per run ${duration(I.metrics.completion.avgMin)}`, '',
       ...I.findings.filter((f) => f.level !== 'info').map((f) => `${LEVEL[f.level][0].toUpperCase()}: ${f.title}\n${f.text}${f.suggestion ? `\nSuggestion: ${f.suggestion}` : ''}`)].join('\n\n');
     const card = (f) => h('article', { class: `ins-card ins-${f.level}` },
       h('div', { class: 'ins-head' }, h('span', { class: `ins-badge ${LEVEL[f.level][1]}` }, LEVEL[f.level][0]), h('span', { class: 'small muted' }, f.area)),
@@ -673,6 +678,18 @@ export async function viewDispatch(ctx, tab = 'overview') {
       f.suggestion ? h('p', { class: 'ins-sug' }, h('b', null, 'Suggestion: '), f.suggestion) : null,
       f.rows?.length ? h('div', { class: 'dz-scroll' }, h('table', { class: 'dz-table dz-fit' }, h('thead', null, h('tr', null, f.cols.map((c) => h('th', null, c)))), h('tbody', null, f.rows.map((r) => h('tr', null, r.map((c) => h('td', null, String(c)))))))) : null,
       h('p', { class: 'small muted ins-basis' }, `Based on: ${f.basis}`));
+    // The three headline numbers (Mike, 17 Nov 2026): DIFOT, complaints, average completion time per run.
+    const banner = (I) => { const M = I.metrics; const n = (x) => x.toLocaleString('en-NZ'); const dlw = (D.deadlines || DEFAULT_DEADLINES);
+      const tile = (cls, label, big, sub, note) => h('div', { class: `ins-kpi ${cls}` }, h('div', { class: 'ins-kpi-l' }, label), h('div', { class: 'ins-kpi-n' }, big), h('div', { class: 'ins-kpi-s' }, sub), note ? h('div', { class: 'small muted' }, note) : null);
+      const d = M.difot; const c = M.complaints; const t = M.completion;
+      const missed = [d.late ? `${n(d.late)} after the deadline` : '', d.short ? `${n(d.short)} short` : '', d.futile ? `${n(d.futile)} couldn’t deliver` : '', d.notRecorded ? `${n(d.notRecorded)} not ticked` : ''].filter(Boolean).join(', ');
+      return h('div', { class: 'ins-kpis' },
+        tile(d.pct == null ? '' : d.pct >= 95 ? 'good' : d.pct >= 85 ? 'watch' : 'act', 'DIFOT', d.pct == null ? '–' : `${d.pct}%`, d.of ? `${n(d.n)} of ${n(d.of)} stops` : 'No timed stops in these dates',
+          `Delivered in full by the ${String(dlw.weekday).replace(/^0/, '')} am (weekend ${String(dlw.weekend).replace(/^0/, '')} am) deadline.${missed ? ` Missed: ${missed}.` : ''}${d.paper ? ` ${n(d.paper)} more were signed off on paper, with no times, so they’re not in this figure.` : ''}`),
+        tile(c.pct == null ? '' : c.pct <= 0.2 ? 'good' : c.pct <= 0.5 ? 'watch' : 'act', 'Complaints', c.pct == null ? '–' : `${c.pct}%`, `${n(c.n)} for ${n(c.of)} deliveries`, 'Complaints about or received in these dates, against every delivery recorded (app and paper).'),
+        tile('', 'Avg completion time per run', duration(t.avgMin), t.runs ? `across ${n(t.runs)} run-mornings` : 'No timed runs in these dates',
+          t.byRoute.length ? `First tick to last. ${t.byRoute.map((r) => `${r.name} ${duration(r.avgMin)}`).join(' · ')}. Runs delivered in one drop are left out.` : null));
+    };
     function paint() {
       const I = INS.data;
       box.replaceChildren(...[
@@ -680,6 +697,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
           h('div', { class: 'ins-dates' }, h('label', null, 'From ', from), h('label', null, 'To ', to), h('button', { class: 'btn primary', onclick: run, disabled: INS.loading || null }, INS.loading ? 'Working it out…' : I ? 'Update' : 'Show insights'),
             I ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(asText(I)); toast('Copied. Paste it into a message.'); } catch { toast('Couldn’t copy on this device.'); } } }, 'Copy as text') : null)),
         INS.error ? h('p', { class: 'bad' }, `Couldn’t work it out: ${INS.error}`) : null,
+        !I ? null : banner(I),
         !I ? null : h('div', { class: 'ins-sum' }, h('div', null, h('b', null, I.days), ` delivery day${I.days === 1 ? '' : 's'}`), h('div', null, h('b', null, I.delivered.toLocaleString('en-NZ')), ' deliveries'),
           h('div', { class: 'act' }, h('b', null, I.counts.act), ' to do something about'), h('div', { class: 'watch' }, h('b', null, I.counts.watch), ' to keep an eye on'), h('div', { class: 'good' }, h('b', null, I.counts.good), ' working well')),
         I?.early ? h('p', { class: 'ins-early' }, h('b', null, 'Early findings. '), `There are ${I.days} delivery days in these dates. Patterns firm up after about ${EARLY_DAYS}; until then treat these as pointers, not verdicts.`) : null,

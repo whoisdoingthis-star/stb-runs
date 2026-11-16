@@ -884,3 +884,8 @@ html.big .tile.done.futile .outcome, html.big .tile.done.short .outcome { font-s
 .ins-card h3 { margin: 6px 0 4px; font-size: 18px; } .ins-card p { margin: 0 0 6px; } .ins-head { display: flex; gap: 10px; align-items: center; }
 .ins-badge { font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 10px; background: #e5e7eb; color: #374151; } .ins-badge.act { background: #dc2626; color: #fff; } .ins-badge.watch { background: #f59e0b; color: #1c1917; } .ins-badge.good { background: #16a34a; color: #fff; }
 .ins-sug { padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, #22e6f2 12%, var(--card)); } .ins-basis { margin: 6px 0 0 !important; }
+.ins-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.ins-kpi { border: 1px solid var(--line); border-top: 6px solid #9ca3af; border-radius: 12px; background: var(--card); padding: 12px 14px; }
+.ins-kpi.good { border-top-color: #16a34a; } .ins-kpi.watch { border-top-color: #f59e0b; } .ins-kpi.act { border-top-color: #dc2626; }
+.ins-kpi-l { font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ins-kpi-n { font-size: 40px; font-weight: 800; line-height: 1.1; margin: 2px 0; } .ins-kpi-s { font-weight: 700; margin-bottom: 6px; }

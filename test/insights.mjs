@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildInsights, runMornings, deadlineRecord, streetTimes, doubleBacks, proofStrength, metres } from '../js/insights.js';
+import { buildInsights, runMornings, deadlineRecord, streetTimes, doubleBacks, proofStrength, metres, keyMetrics, duration } from '../js/insights.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 // A small world: Run 6 on time each weekday, Run 13 always late, Run 8 delivered in one drop. NZ is UTC+13 in November.
@@ -63,4 +63,21 @@ t('complaint addresses with no photo are listed', () => assert.match(IC.findings
 t('with under two weeks of data the page says the findings are early', () => { assert.equal(I.days, 4); assert.equal(I.early, true); });
 t('a pattern needs three mornings: two late days are not a finding', () => { const two = buildInsights({ runs: runs.filter((r) => r.delivery_date <= '2026-11-10'), ticks }); assert.ok(!two.findings.some((f) => f.id.startsWith('late-'))); });
 t('the same data always gives the same findings', () => assert.deepEqual(buildInsights({ runs, ticks, complaints }).findings.map((f) => f.title), buildInsights({ runs: [...runs].reverse(), ticks: [...ticks].reverse(), complaints }).findings.map((f) => f.title)));
+// The headline numbers (Mike, 17 Nov 2026)
+{ const R = [{ id: 'a', route: 'HOWICK06', delivery_date: '2026-11-09' }, { id: 'b', route: 'HOWICK10', delivery_date: '2026-11-09' }];
+  const L = []; const T = []; const tk = (run_id, n, time, extra = {}) => T.push({ run_id, line_key: `L${n}`, address_key: `HOWICK|X ROAD|${n}`, done: true, user_name: 'Lisa', device_time: nz('2026-11-09', time), ...extra });
+  for (let i = 1; i <= 10; i++) L.push({ run_id: 'a', line_key: `L${i}` }, { run_id: 'b', line_key: `L${i}` });
+  for (let i = 1; i <= 6; i++) tk('a', i, at(5, i * 5));          // 6 delivered before 6:00
+  tk('a', 7, at(6, 10)); tk('a', 8, at(6, 20));                    // 2 delivered after the deadline
+  tk('a', 9, at(5, 50), { outcome: 'futile' });                    // 1 couldn't deliver; L10 never ticked
+  tk('a', 1, at(5, 2), { done: false });                           // an earlier untick of L1 doesn't matter: the later tick stands
+  for (let i = 1; i <= 10; i++) tk('b', i, at(7, 0), { method: 'paper' });
+  const K = keyMetrics({ runs: R, lines: L, ticks: T, complaintCount: 2 });
+  t('DIFOT is stops delivered in full by the deadline, out of the stops that can be measured', () => { assert.deepEqual([K.difot.n, K.difot.of, K.difot.pct], [6, 10, 60]); assert.deepEqual([K.difot.late, K.difot.futile, K.difot.notRecorded], [2, 1, 1]); });
+  t('stops signed off on paper have no time, so they are counted apart and not against', () => { assert.equal(K.difot.paper, 10); assert.equal(K.difot.due, 20); });
+  t('a stop that was delivered short is not in full', () => { const k = keyMetrics({ runs: R, lines: L, ticks: [...T, { run_id: 'a', line_key: 'L2', done: true, outcome: 'short', device_time: nz('2026-11-09', '05:59:00') }] }); assert.equal(k.difot.n, 5); assert.equal(k.difot.short, 1); });
+  t('complaints are a share of everything delivered', () => assert.deepEqual([K.complaints.n, K.complaints.of, K.complaints.pct], [2, 18, 11.11]));
+  t('average completion time is first tick to last, averaged over each run’s mornings', () => { assert.equal(K.completion.avgMin, 75); assert.deepEqual(K.completion.byRoute.map((r) => [r.name, r.avgMin, r.mornings]), [['Run 6', 75, 1]]); assert.equal(duration(75), '1 h 15'); assert.equal(duration(48), '48 min'); });
+}
+t('the headline numbers come with the findings', () => { assert.ok(I.metrics.completion.avgMin > 30); assert.equal(I.metrics.difot.pct, null); });
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
