@@ -32,7 +32,7 @@ These are remembered on that phone only.
 - **Choose my runs**: tap your runs in the order you'll do them (a number appears on each), then **Start my runs**. When you finish one, the app says "✓ Run 11 done. On to Run 6" and carries on with the next.
 - Helping someone else finish theirs? Just open their run and tick. When it's done, the app offers **Go to** your next run.
 - The bar at the top of a run shows **finish about 6:35 am**: about when all the runs you have open will be done, at the pace you're going. If that's later than you'd like, ring someone for a hand. It also shows on the On duty card.
-- At the end, tap **Off duty**. After your last run the app asks if you're finished.
+- At the end, tap **Off duty**. After your last run the app asks if you're finished. **Forgot?** Once all of the day's runs are finished (every stop ticked, or the run closed), the app puts you off duty by itself, from the time the last run finished, and Stan tells you next time you open it.
 
 ## Doing a run
 If you do a run on the **paper sheet**, that's fine: Mike closes it in Dispatch afterwards and it shows on the Runs page as **✓ Closed, done on paper by** you. You can still open it.

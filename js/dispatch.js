@@ -41,7 +41,7 @@ import { runMapData, pingText } from './runmap.js';
 import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './report.js';
 import { buildInsights, EARLY_DAYS, duration } from './insights.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
-import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty } from './shifts.js';
+import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
   if (app.store.mode !== 'shared') {
@@ -96,6 +96,12 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const from = new Date(Date.parse(`${focus}T00:00:00Z`) - 14 * 3600e3);
     const nzDay = (t) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(t));
     D.duty = (await app.store.loadDuty(from.toISOString(), new Date(from.getTime() + 40 * 3600e3).toISOString())).filter((e) => nzDay(e.device_time) === focus);
+    // Anyone left on duty after all of that day's runs were closed is shown as off duty from when the last run closed (decision 0038).
+    // Their phone records the same thing for real the next time it opens the Runs page; until then this stands in for it.
+    for (const n of [...new Set(D.duty.map((e) => e.user_name))]) {
+      const off = autoOffAt(D.duty.filter((e) => e.user_name === n), D.runs);
+      if (off) D.duty.push({ id: `auto-${n}`, user_name: n, state: 'off_duty', source: 'auto', device_time: new Date(off).toISOString(), assumed: true });
+    }
     D.depot = await app.store.getSetting('depot');
     try { D.ideas = await app.store.loadIdeas(); } catch { D.ideas = null; } // null = table not there yet
     // Morning watch (decision 0028): the deadlines, and how long each run has taken before (app ticks only).

@@ -14,6 +14,8 @@
 export const DUTY_LABEL = { on_duty: 'On duty', depot: 'At the depot', on_run: 'On the run', between: 'Between runs', off_duty: 'Off duty' };
 export const PAUSE_MS = 10 * 60 * 1000;
 export const FORGOT_MS = 12 * 3600 * 1000;
+import { runComplete } from './rows.js';
+
 const ms = (t) => (typeof t === 'number' ? t : new Date(t).getTime());
 
 /** The latest duty state from a person's duty events (null = never went on duty). */
@@ -165,4 +167,27 @@ export function estimateFinish({ tickTimes = [], done = 0, remaining = 0, unstar
   if (active <= 0) return null;
   const per = active / Math.max(1, done - 1);
   return { at: now + per * remaining + unstarted * travelMs, per };
+}
+
+/**
+ * Someone left On duty after the morning's work is finished (decision 0038, Mike 18 Nov 2026):
+ * when every run for their shift's delivery day is finished, the shift ends at the moment the last one finished.
+ * A run is finished when it's closed, or when every stop on it has been dealt with (the same rule that moves it to History).
+ * events: one person's duty changes · runs: [{ delivery_date, closed_at, done, summary: { lines }, lastTick }]
+ * Returns that time (ms) or null. Null when they're off duty already, when any of that day's runs is unfinished,
+ * when there are no runs for the day, or when they went on duty after the last run had finished.
+ */
+export function runFinishedAt(r) {
+  if (r.closed_at) return ms(r.closed_at);
+  return runComplete(r) && r.lastTick ? ms(r.lastTick) : null;
+}
+export function autoOffAt(events, runs) {
+  const cur = currentDuty(events); const start = shiftStart(events);
+  if (!cur?.onDuty || start == null) return null;
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(start));
+  const times = (runs || []).filter((r) => r.delivery_date === day).map(runFinishedAt);
+  if (!times.length || times.some((t) => t == null)) return null;
+  const finished = Math.max(...times);
+  if (!(finished > start)) return null;
+  return Math.max(finished, ms(cur.device_time) + 1000); // never before their own last recorded change
 }

@@ -182,6 +182,7 @@ export class LocalStore extends Base {
     return this.runs().map((r) => {
       const st = statusFrom(this.cachedEvents(r.id));
       r.done = Object.values(st).filter((e) => e.done).length;
+      r.lastTick = Object.values(st).filter((e) => e.done).map((e) => e.device_time).sort().pop() || null;
       r.notDelivered = Object.values(st).filter((e) => e.done && e.outcome === 'futile').length;
       return r;
     }).sort((a, b) => (b.delivery_date + b.route < a.delivery_date + a.route ? -1 : 1));
@@ -348,9 +349,9 @@ export class SupabaseStore extends Base {
     if (error) { const c = LS.get('stb.runlist', []); if (c.length) return c; throw error; }
     const ids = data.map((r) => r.id);
     if (ids.length) {
-      const { data: st } = await this.sb.from('run_progress').select('run_id, done, not_delivered, ticked_by').in('run_id', ids);
+      const { data: st } = await this.sb.from('run_progress').select('run_id, done, not_delivered, last_tick, ticked_by').in('run_id', ids);
       const by = Object.fromEntries((st || []).map((x) => [x.run_id, x]));
-      data.forEach((r) => { r.done = by[r.id]?.done || 0; r.notDelivered = by[r.id]?.not_delivered || 0; r.tickedBy = by[r.id]?.ticked_by || ''; });
+      data.forEach((r) => { r.done = by[r.id]?.done || 0; r.notDelivered = by[r.id]?.not_delivered || 0; r.lastTick = by[r.id]?.last_tick || null; r.tickedBy = by[r.id]?.ticked_by || ''; });
     }
     LS.set('stb.runlist', data);
     return data;

@@ -12,7 +12,7 @@ import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice
 import { stanReply, STAN_HELLO } from './stanchat.js';
 import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
 import { readExif, photoProof } from './exif.js';
-import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish } from './shifts.js';
+import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -552,6 +552,12 @@ async function viewHome() {
   const dutySlot = h('div');
   let dutyEl = null;
   const drawDuty = (runs) => {
+    // Left on duty after the morning's runs were all closed? End the shift at the time the last run closed (decision 0038).
+    const off = autoOffAt(app.store.myDuty(), runs);
+    if (off) {
+      noteDuty('off_duty', { source: 'auto', device_time: new Date(off).toISOString() });
+      toast(`All of today\u2019s runs are finished, so I\u2019ve put you off duty from ${new Date(off).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}.`, null, { stan: 'wave' });
+    }
     if (dutyEl?._timer) clearInterval(dutyEl._timer);
     const today = nzToday();
     dutyEl = dutyCard(runs.filter((r) => r.delivery_date === today), () => renderList());

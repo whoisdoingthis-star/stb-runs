@@ -1,6 +1,6 @@
 // On Duty and the shift timeline (decision 0020): every minute accounted for.
 import assert from 'node:assert/strict';
-import { shiftSegments, runOwners, currentDuty, shiftStart, MotionWatch, clock, parseLatLng, estimateFinish } from '../js/shifts.js';
+import { shiftSegments, runOwners, currentDuty, shiftStart, MotionWatch, clock, parseLatLng, estimateFinish, autoOffAt } from '../js/shifts.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log(`✓ ${name}`); } catch (e) { failed++; console.log(`✗ ${name}\n  ${e.message}`); } };
 const at = (hm) => new Date(`2026-11-12T${hm}:00+13:00`).getTime();
@@ -94,5 +94,20 @@ t('a ?q= link', () => assert.ok(near(parseLatLng('https://maps.google.com/?q=-36
 t('plain numbers', () => assert.ok(near(parseLatLng(' -36.91 , 174.93 '), -36.91, 174.93)));
 t('a short link asks for the long one', () => assert.ok(parseLatLng('https://goo.gl/maps/MeVfNr2m4MDgvYGj8?g_st=ac')?.short === true));
 t('nonsense is nothing', () => assert.ok(parseLatLng('the depot') === null));
+
+// Left on duty after the runs are closed (decision 0038)
+{ const on = [{ state: 'on_duty', device_time: at('04:30') }, { state: 'on_run', device_time: at('04:55') }];
+  const iso = (hm) => new Date(at(hm)).toISOString();
+  const closedAll = [{ delivery_date: '2026-11-12', closed_at: iso('05:40') }, { delivery_date: '2026-11-12', closed_at: iso('06:35') }, { delivery_date: '2026-11-13', closed_at: null }];
+  t('when every run for the day is closed, someone still on duty is put off duty at the time the last run closed', () => assert.equal(autoOffAt(on, closedAll), at('06:35')));
+  t('while any of the day’s runs is still open, nobody is put off duty', () => assert.equal(autoOffAt(on, [{ delivery_date: '2026-11-12', closed_at: iso('05:40') }, { delivery_date: '2026-11-12', closed_at: null }]), null));
+  t('someone already off duty is left alone', () => assert.equal(autoOffAt([...on, { state: 'off_duty', device_time: at('06:10') }], closedAll), null));
+  t('someone who went on duty after the runs had closed is left alone', () => assert.equal(autoOffAt([{ state: 'on_duty', device_time: at('07:30') }], closedAll), null));
+  const tickedAll = [{ delivery_date: '2026-11-12', done: 30, summary: { lines: 30 }, lastTick: iso('05:50') }, { delivery_date: '2026-11-12', done: 32, summary: { lines: 32 }, lastTick: iso('06:32') }];
+  t('a run with every stop ticked counts as finished, at its last tick, even if nobody closed it', () => assert.equal(autoOffAt(on, tickedAll), at('06:32')));
+  t('one stop left unticked on an unclosed run keeps people on duty', () => assert.equal(autoOffAt(on, [tickedAll[0], { ...tickedAll[1], done: 31 }]), null));
+  t('a day with no runs puts nobody off duty', () => assert.equal(autoOffAt(on, [{ delivery_date: '2026-11-13', closed_at: iso('06:00') }]), null));
+  t('the automatic off-duty time is never before their own last change', () => assert.equal(autoOffAt([...on, { state: 'between', device_time: at('06:50') }], closedAll), at('06:50') + 1000));
+}
 
 if (failed) { console.log(`${failed} failed`); process.exit(1); }
