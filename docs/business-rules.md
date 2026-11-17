@@ -154,6 +154,8 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 
 - (Mike, 17 Nov 2026) **Stan's cards.** Findings are passed to each driver as one card a day at most, off duty only, about their own numbers only, worded as a fact or a suggestion that they can take or leave. ([decision 0036](decisions/0036-stan-did-you-know.md))
 
+- (Mike, 18 Nov 2026) **A real delivery mustn't be undone by a second tap.** A tick older than a minute, or made by someone else, asks before it's unticked, and offers "Delivered just now". ([decision 0037](decisions/0037-ask-before-unticking.md))
+
 ## Run map and Ping (Mike, 13 Nov 2026, via Chat with Stan)
 - Dispatch can see each run on a map: a pin per address (to do / done / couldn't deliver) and the trail in delivery order. ([decision 0026](decisions/0026-run-map-and-ping.md))
 - **Ping** shows where a driver is only when a dispatcher asks, only while that driver is on duty with the app open, and the driver is always told. Off duty, nothing is shared. No continuous tracking.

@@ -1046,7 +1046,7 @@ async function viewRun(ids) {
   // ---- bottom bar: what you just did (with Undo and Photo), and where to go next
   const abMain = h('div', { class: 'ab-main' });
   const abSub = h('div', { class: 'ab-sub' });
-  const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey); } } }, icon('undo'), 'Undo');
+  const abUndo = h('button', { class: 'ab-btn', hidden: true, onclick: () => { const l = S.last; if (l) { S.last = null; tapMany(l.lines, l.label, l.flashKey, { sure: true }); } } }, icon('undo'), 'Undo');
   // Photo and Problem are always in the bar (Mike, 12 Nov 2026: he couldn't find them). They work for the stop
   // just ticked or the next stop: with both, it asks which one, so a photo or "gate locked" never needs a tick first.
   const nextTarget = () => {
@@ -1301,10 +1301,31 @@ async function viewRun(ids) {
   // records an entry for every paper in it, same time and GPS, so the audit
   // keeps each obligation while the driver makes one handover.
   async function tap(line) { return tapMany([line], addrText(line), `${line.run_id}::${line.line_key}`); }
-  async function tapMany(lines, label, flashKey) {
+  // Tapping a green tile unticks it. That's right for a slip made a moment ago, but a tile ticked a while back (or by
+  // someone else) is more often tapped by a driver arriving at the letterbox, which silently undid a real delivery
+  // (Run 13, 18 Nov 2026). So an older tick asks first, and offers "Delivered just now", which keeps it ticked with the
+  // right time and place. decision 0037
+  const UNTICK_ASK_MS = 60e3;
+  function askUntick(lines, label, flashKey, cur) {
+    const latest = cur.reduce((a, b) => (String(a.device_time) > String(b.device_time) ? a : b));
+    const who = [...new Set(cur.map((c) => c.user_name).filter(Boolean))]; const mine = who.length === 1 && who[0] === app.me.name;
+    const when = new Date(latest.device_time).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+    const close = openSheet('Already ticked',
+      h('p', { style: 'margin:0 0 12px' }, `${label} was ticked at ${when}${mine ? '' : ` by ${who.join(' and ') || 'someone'}`}. What would you like to do?`),
+      h('div', { class: 'menu-group' },
+        menuItem('✓ Delivered just now', () => { close(); tapMany(lines, label, flashKey, { redo: true }); }, { hint: 'Keeps it ticked, with the time and place from now' }),
+        menuItem('Untick it', () => { close(); tapMany(lines, label, flashKey, { sure: true }); }, { hint: 'It hasn’t been delivered yet' }),
+        menuItem('Leave it as it is', () => close(), { hint: `Stays ticked at ${when}` })));
+  }
+  async function tapMany(lines, label, flashKey, opts = {}) {
     const st = status();
-    const done = !lines.every((l) => st[`${l.run_id}::${l.line_key}`]?.done);
+    const done = opts.redo || !lines.every((l) => st[`${l.run_id}::${l.line_key}`]?.done);
     const now = Date.now();
+    if (!done && !opts.sure) {
+      const cur = lines.map((l) => st[`${l.run_id}::${l.line_key}`]).filter(Boolean);
+      const newest = Math.max(...cur.map((c) => Date.parse(c.device_time) || 0));
+      if (now - newest > (globalThis.__stbUntickAskMs ?? UNTICK_ASK_MS) || cur.some((c) => c.user_name && c.user_name !== app.me.name)) return askUntick(lines, label, flashKey, cur);
+    }
     const fresh = geo.last && now - geo.last.t < 15000;
     const evs = lines.map((l) => {
       const e = {
