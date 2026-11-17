@@ -757,7 +757,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         paper ? row('Time', 'Not recorded for each stop (paper run sheet)') : row(d.outcome === 'futile' ? 'Attempted' : 'Delivered', h('b', { class: 'rp-time' }, time(d.at))),
         d.outcome === 'futile' ? row('Outcome', `Could not deliver${d.reason ? `: ${d.reason}` : ''}`) : d.outcome === 'short' ? row('Outcome', 'Delivered short') : null,
         d.method === 'photo' ? null : row('By', d.by || 'Not recorded'),
-        row('How recorded', paper ? 'Run done from the paper run sheet and signed off afterwards' : d.method === 'photo' ? `From the delivery photo: the time is when the photo was taken. Added to the run afterwards${d.by ? ` by ${d.by}` : ''}` : 'Driver tapped the stop in the app at the address'),
+        row('How recorded', paper ? 'Run done from the paper run sheet and signed off afterwards' : d.method === 'photo' ? `From the delivery photo: the time is when the photo was taken. Added to the run afterwards${d.by ? ` by ${d.by}` : ''}` : d.method === 'correction' ? `Corrected record. ${d.note || 'Entered afterwards by a dispatcher; the original records are kept.'}` : 'Driver tapped the stop in the app at the address'),
         paper ? null : row('Position', d.lat != null ? [`${d.method === 'photo' ? 'From the photo' : 'Recorded at the address'}${d.accuracy_m ? `, accurate to about ${Math.round(d.accuracy_m)} m` : ''} · `, mapLink(d), h('span', { class: 'rp-coords' }, ` (${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)})`)] : 'No GPS fix at that moment')));
     };
     const sinceLine = (x) => { const d = x.delivery; const ok = d && d.outcome !== 'undone';

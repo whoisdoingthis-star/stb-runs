@@ -14,5 +14,8 @@ Wed 18 Nov 2026, Run 13: 36 Clifton Road showed as not delivered. The record sho
   - **Leave it as it is**.
 - Nothing is ever rewritten: each choice adds a new record, so the earlier tick and the correction both stay in the history.
 
+## The 18 Nov record
+At Mike's request a correcting record was added for 36 Clifton Road on Run 13: delivered at 6:17:41 am, with the time and position copied from the driver's own tap at that moment, `method = 'correction'`, and a note in `reason` saying what happened and who asked. The 5:48 tick and the 6:17 untick are untouched. The delivery report shows such a record as "Corrected record" with its note. Corrections are added by hand, on a dispatcher's say-so, never by the app.
+
 ## Consequences
 One extra tap when someone really does want to untick an older stop. A wrong early tick that nobody taps again still stands with its wrong time; Insights' "away from the letterbox" check is what shows those up.

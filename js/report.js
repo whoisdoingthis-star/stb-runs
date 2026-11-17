@@ -56,7 +56,7 @@ export function buildReport({ from, to, complaints = [], photos = [], ticks = []
     const t = tickBy.get(`${address_key}|${day}`);
     if (!t) return null;
     const outcome = t.outcome || (t.done ? 'delivered' : 'undone');
-    return { by: t.user_name || null, at: t.device_time, outcome, reason: t.reason || null, method: t.method === 'paper' ? 'paper' : t.method === 'photo' ? 'photo' : 'app',
+    return { by: t.user_name || null, at: t.device_time, outcome, reason: t.reason || null, method: t.method === 'paper' ? 'paper' : t.method === 'photo' ? 'photo' : t.method === 'correction' ? 'correction' : 'app', note: t.method === 'correction' ? t.reason || null : null,
       lat: t.lat ?? null, lng: t.lng ?? null, accuracy_m: t.accuracy_m ?? null };
   };
   const used = new Set();
@@ -100,7 +100,7 @@ export const reportRef = (from, to, made = Date.now()) => `ZDR-${from.slice(2).r
 export function evidenceText(d, fmtTime = (t) => new Date(t).toLocaleTimeString('en-NZ', { timeZone: NZ, hour: 'numeric', minute: '2-digit', second: '2-digit' })) {
   if (!d) return 'No delivery record for that day in the app.';
   const what = d.outcome === 'delivered' ? 'Delivered' : d.outcome === 'futile' ? `Not delivered${d.reason ? ` (${d.reason})` : ''}` : d.outcome === 'short' ? 'Delivered short' : 'Tick undone';
-  const how = d.method === 'paper' ? 'recorded from the paper run sheet, so no GPS' : d.method === 'photo' ? 'time from the delivery photo, added afterwards' : 'ticked in the app';
+  const how = d.method === 'paper' ? 'recorded from the paper run sheet, so no GPS' : d.method === 'photo' ? 'time from the delivery photo, added afterwards' : d.method === 'correction' ? 'corrected record, see note' : 'ticked in the app';
   const gps = d.method !== 'paper' && d.lat != null ? ` · GPS ${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)}${d.accuracy_m ? `, to about ${Math.round(d.accuracy_m)} m` : ''}` : d.method !== 'paper' ? ' · no GPS fix' : '';
   return `${what}${d.by ? ` by ${d.by}` : ''}${d.method === 'paper' ? '' : ` at ${fmtTime(d.at)}`} (${how})${gps}`;
 }
