@@ -12,6 +12,7 @@ import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice
 import { stanReply, STAN_HELLO } from './stanchat.js';
 import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
 import { readExif, photoProof } from './exif.js';
+import { cleanNotice, expiryFor, unreadFor, boardFor, seenBy, NOTICE_DAYS } from './notices.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -478,25 +479,111 @@ function goOffDuty(after) {
     h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); } }, 'Off duty'),
     h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
 }
+// ---- The notice board (decision 0041) ----
+const noticeWhen = (iso) => new Date(iso).toLocaleString('en-NZ', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+const memberNames = () => (app.crew || []).filter((c) => !c.extra).map((c) => c.name);
+function writeNotice(after) {
+  const text = h('textarea', { rows: 4, maxlength: 500, placeholder: 'e.g. Papers will be late tomorrow, about 2:45.', 'aria-label': 'Your note' });
+  const others = memberNames().filter((n) => n !== app.me.name); const to = new Set(); let keep = 'days';
+  const toRow = h('div', { class: 'who-row' }); const keepRow = h('div', { class: 'who-row' }); const msg = h('p', { class: 'small muted' }, 'Stan shows it when they next open the app. For anything urgent, ring or text as well.');
+  const draw = () => {
+    toRow.replaceChildren(h('button', { class: `btn who-btn ${to.size ? '' : 'on'}`, 'aria-pressed': String(!to.size), onclick: () => { to.clear(); draw(); } }, `${to.size ? '' : '✓ '}Everyone`),
+      ...others.map((n) => h('button', { class: `btn who-btn ${to.has(n) ? 'on' : ''}`, 'aria-pressed': String(to.has(n)), onclick: () => { if (to.has(n)) to.delete(n); else to.add(n); draw(); } }, `${to.has(n) ? '✓ ' : ''}${n}`)));
+    keepRow.replaceChildren(...[['days', `For ${NOTICE_DAYS} days`], ['forever', 'Until I remove it']].map(([k, label]) => h('button', { class: `btn who-btn ${keep === k ? 'on' : ''}`, 'aria-pressed': String(keep === k), onclick: () => { keep = k; draw(); } }, `${keep === k ? '✓ ' : ''}${label}`)));
+  };
+  draw();
+  const close = openSheet('Leave a note', text,
+    h('div', { class: 'stan-card-h', style: 'margin-top:10px' }, 'Who is it for?'), toRow,
+    h('div', { class: 'stan-card-h', style: 'margin-top:10px' }, 'Keep it up'), keepRow, msg,
+    h('button', { class: 'btn primary big', onclick: async (e) => {
+      const body = cleanNotice(text.value); if (!body) { msg.textContent = 'Write the note first.'; msg.className = 'small bad'; return; }
+      e.currentTarget.disabled = true;
+      try { await app.store.addNotice({ body, to_names: [...to], expires_at: expiryFor(keep) }); close(); toast(`Posted. ${to.size ? listNames([...to]) : 'Everyone'} will see it when they next open the app.`, null, { stan: 'wave' }); after?.(); }
+      catch (err) { msg.textContent = `Couldn’t post it: ${err.message}. Check the signal and try again.`; msg.className = 'small bad'; e.currentTarget.disabled = false; }
+    } }, 'Post it'));
+}
+function openBoard(data, refresh) {
+  const mine = boardFor(data.notices, app.me.name); const people = memberNames();
+  const close = openSheet('Notice board',
+    mine.length ? h('div', { class: 'nb-list' }, mine.map((n) => { const s = seenBy(n, data.seen, people); const own = n.from_name === app.me.name;
+      return h('div', { class: 'nb-note' }, h('div', { class: 'nb-from' }, `${own ? 'You' : n.from_name} · ${noticeWhen(n.created_at)}${n.to_names?.length ? ` · for ${listNames(n.to_names)}` : ''}`), h('p', null, n.body),
+        h('div', { class: 'small muted' }, [s.seen.length ? `Seen by ${listNames(s.seen)}` : null, s.waiting.length ? `not yet ${listNames(s.waiting)}` : null].filter(Boolean).join('; ') || 'Nobody to show it to yet', n.expires_at ? '' : ' · stays until removed'),
+        own || app.me.role === 'dispatcher' ? h('button', { class: 'link small danger', onclick: async () => { try { await app.store.removeNotice(n.id); close(); toast('Note taken down.'); refresh(); } catch (e) { toast(`Couldn’t take it down: ${e.message}`); } } }, 'Take it down') : null); }))
+      : h('p', { class: 'muted' }, 'No notes at the moment.'),
+    h('button', { class: 'btn primary big', style: 'margin-top:12px', onclick: () => { close(); writeNotice(refresh); } }, 'Leave a note'));
+}
+/** The Notice board button on the Runs page; Stan pops up with any notes this person hasn't acknowledged. */
+function noticeSlot() {
+  const slot = h('div', { class: 'notice-slot' });
+  if (!app.me?.name) { slot._update = () => {}; return slot; }
+  let data = { notices: [], seen: [] }; let showing = false;
+  const draw = () => { const n = boardFor(data.notices, app.me.name).length; slot.replaceChildren(h('button', { class: 'btn notice-btn', onclick: () => openBoard(data, load) }, '📌 Notice board', n ? h('span', { class: 'notice-count' }, String(n)) : null)); };
+  const pop = (tries = 0) => {
+    const unread = unreadFor(data.notices, data.seen, app.me.name);
+    if (!unread.length || showing || !slot.isConnected) return;
+    if (document.querySelector('.sheet-backdrop')) { if (tries < 80) setTimeout(() => pop(tries + 1), 1500); return; }   // wait for the plan (or anything else) to be closed
+    showing = true;
+    const close = openSheet(unread.length > 1 ? `${unread.length} notes for you` : 'A note for you',
+      h('div', { class: 'plan-hello' }, stan({ pose: 'wave', size: 64 }), h('div', { class: 'plan-who' }, unread.length > 1 ? 'The family left you some notes.' : `${unread[0].from_name} left ${unread[0].to_names?.length ? 'you' : 'everyone'} a note.`)),
+      h('div', { class: 'nb-list' }, unread.map((n) => h('div', { class: 'nb-note' }, h('div', { class: 'nb-from' }, `${n.from_name} · ${noticeWhen(n.created_at)}`), h('p', null, n.body)))),
+      h('button', { class: 'btn primary big', onclick: async () => { const ids = unread.map((n) => n.id); close(); showing = false; data = { ...data, seen: [...data.seen, ...ids.map((id) => ({ notice_id: id, user_name: app.me.name }))] }; try { await app.store.markNoticesSeen(ids); } catch { /* kept on this phone, sent later */ } } }, 'Got it'));
+    const watch = setInterval(() => { if (!document.querySelector('.sheet-backdrop')) { clearInterval(watch); showing = false; } }, 1000);   // closed with ✕: not acknowledged, so it comes back next time
+  };
+  const load = async () => { try { if (!app.crew) app.crew = await app.store.crewList().catch(() => []); data = await app.store.loadNotices(); } catch { /* keep what we have */ } if (slot.isConnected) { draw(); pop(); } };
+  draw();
+  slot._update = () => { load(); };
+  return slot;
+}
 // ---- Stan's day plan, and drivers and helpers (decision 0040) ----
 const dayLabel = (date) => new Intl.DateTimeFormat('en-NZ', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
 const listNames = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] || '');
-/** Going on duty. A driver is asked who is helping (one tap); a helper, or anyone when the list isn't known, starts straight away. */
-function startShift(rerender) {
+/** Going on duty (decisions 0040, 0041). A driver must say who is with them, then whether they're prepping or ready to go.
+ *  A helper says who is driving. If the drivers-and-helpers list isn't known, it's one tap as before. */
+function startShift(rerender, todayRuns = []) {
   const fix = quietFix();
-  const go = async (helpers) => { noteDuty('on_duty', helpers ? { helpers } : {}, await fix); rerender(); };
   const crew = app.crew || [];
   const me = crew.find((c) => c.name === app.me?.name);
-  const helpers = crew.filter((c) => c.crew === 'helper' && c.name !== app.me?.name).map((c) => c.name);
-  if (!me || me.crew !== 'driver' || !helpers.length) return go(null);
-  const planned = app.plan?.today && app.plan.part.role === 'driver' ? app.plan.part.helpers : [];
-  const picked = new Set(planned.filter((n) => helpers.includes(n)));
-  const btns = helpers.map((n) => { const b = h('button', { class: `btn big who-btn ${picked.has(n) ? 'on' : ''}`, 'aria-pressed': String(picked.has(n)), onclick: () => { if (picked.has(n)) picked.delete(n); else picked.add(n); b.classList.toggle('on', picked.has(n)); b.setAttribute('aria-pressed', String(picked.has(n))); b.firstChild.textContent = picked.has(n) ? '✓ ' : ''; } }, h('span', null, picked.has(n) ? '✓ ' : ''), n); return b; });
-  const close = openSheet('Who’s with you?',
-    h('p', { class: 'muted' }, 'Tap anyone helping you this morning, then start. On your own? Just start.'),
-    h('div', { class: 'who-row' }, btns),
-    h('button', { class: 'btn primary big', style: 'margin-top:12px', onclick: () => { close(); go(helpers.filter((n) => picked.has(n))); } }, 'Start my shift'));
-  return null;
+  if (!me) { (async () => { noteDuty('on_duty', {}, await fix); rerender(); })(); return; }
+  const today = app.plan?.today ? app.plan.part : null;
+  if (me.crew === 'helper') {
+    const drivers = crew.filter((c) => c.crew === 'driver').map((c) => c.name);
+    if (!drivers.length) { (async () => { noteDuty('on_duty', {}, await fix); rerender(); })(); return; }
+    const planned = today?.role === 'helper' ? today.driver : null;
+    const close = openSheet('Who’s driving?',
+      h('p', { class: 'muted' }, 'Tap who you’re helping this morning.'),
+      h('div', { class: 'who-row' }, drivers.map((n) => h('button', { class: `btn big who-btn ${n === planned ? 'primary' : ''}`, onclick: async () => { close(); noteDuty('on_duty', { driver: n }, await fix); rerender(); } }, n))));
+    return;
+  }
+  const picked = new Set((today?.role === 'driver' ? today.helpers : []));
+  let alone = false;
+  const row = h('div', { class: 'who-row' }); const next = h('div', { class: 'who-next' });
+  const names = () => [...new Set([...crew.filter((c) => c.crew === 'helper' && c.name !== app.me.name).map((c) => c.name), ...picked])];
+  const begin = async (prepped) => {
+    close();
+    const helpers = alone ? [] : names().filter((n) => picked.has(n));
+    const t = Date.now(); const f = await fix;
+    noteDuty('on_duty', { helpers, device_time: new Date(t).toISOString() }, f);
+    if (prepped) { const first = myRuns().map((id) => todayRuns.find((r) => r.id === id)).find((r) => r && !runComplete(r)); noteDuty('on_run', { run_id: first?.id, device_time: new Date(t + 1).toISOString() }, f); toast('On the run. Drive safe!', null, { stan: 'wave' }); }
+    rerender();
+  };
+  const draw = () => {
+    const ok = alone || picked.size > 0;
+    row.replaceChildren(
+      ...names().map((n) => h('button', { class: `btn big who-btn ${picked.has(n) ? 'on' : ''}`, 'aria-pressed': String(picked.has(n)), onclick: () => { if (picked.has(n)) picked.delete(n); else { picked.add(n); alone = false; } draw(); } }, `${picked.has(n) ? '✓ ' : ''}${n}`)),
+      h('button', { class: 'btn big who-btn who-other', onclick: () => {
+        const input = h('input', { type: 'text', maxlength: 30, placeholder: 'Their name', 'aria-label': 'Helper’s name', autocapitalize: 'words' });
+        const add = () => { const n = input.value.replace(/\s+/g, ' ').trim().slice(0, 30); if (!n) return; const same = names().find((x) => x.toLowerCase() === n.toLowerCase()) || n; picked.add(same); alone = false; if (same === n) app.store.addHelperName(n).then(() => { if (!app.crew.some((c) => c.name === n)) app.crew = [...app.crew, { name: n, crew: 'helper', extra: true }]; }).catch(() => {}); draw(); };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+        row.append(h('div', { class: 'who-add' }, input, h('button', { class: 'btn primary', onclick: add }, 'Add'))); input.focus();
+      } }, 'Other…'),
+      h('button', { class: `btn big who-btn who-alone ${alone ? 'on' : ''}`, 'aria-pressed': String(alone), onclick: () => { alone = !alone; if (alone) picked.clear(); draw(); } }, `${alone ? '✓ ' : ''}Just me`));
+    next.replaceChildren(
+      h('p', { class: 'muted who-hint' }, ok ? 'Where are you up to?' : 'Tap who’s helping, or Just me, to carry on.'),
+      h('button', { class: 'btn primary big', disabled: ok ? null : true, onclick: () => begin(false) }, 'Prepping at the depot'),
+      h('button', { class: 'btn big', style: 'margin-top:8px', disabled: ok ? null : true, onclick: () => begin(true) }, 'Prepped: starting the run'));
+  };
+  const close = openSheet('Who’s with you?', row, next);
+  draw();
 }
 /** What Stan says about the plan: shown once per plan, and again from the plan card. */
 function openPlan({ row, part, today, lined }) {
@@ -506,7 +593,7 @@ function openPlan({ row, part, today, lined }) {
   const main = part.runs.filter((r) => !r.during);
   const setUp = [
     part.runs.length ? (today && lined ? `Your runs are lined up in this order: ${part.runs.map((r) => r.name.replace('Run ', '')).join(' → ')}. Tap Continue to start.` : `${today ? 'When the run sheets are in' : 'In the morning'}, your runs will be lined up in this order: ${part.runs.map((r) => r.name.replace('Run ', '')).join(' → ')}.`) : null,
-    part.role === 'driver' && part.helpers.length ? `When you tap On duty I’ll ask who’s with you. ${listNames(part.helpers)} ${part.helpers.length > 1 ? 'are' : 'is'} already ticked.` : null,
+    part.role === 'driver' && part.helpers.length ? `When you tap On duty I’ll ask who’s with you. ${listNames(part.helpers)} ${part.helpers.length > 1 ? 'are' : 'is'} already ticked. Then tap Prepping at the depot, and Leaving the depot now when you drive off.` : null,
     part.role === 'driver' && !part.helpers.length ? 'I’ve allowed time at the depot for folding and bagging before you leave.' : null,
     part.role === 'helper' ? `${part.driver} drives. You fold and bag on the way, and take the letterboxes on your side.` : null,
     ...(p.news || [])].filter(Boolean);
@@ -527,7 +614,7 @@ const nzDay = (plus = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacifi
 /** The plan card on the Runs page. update(runs) is called each time the runs are listed. */
 function planSlot(redrawDuty) {
   const slot = h('div', { class: 'plan-slot' });
-  if (!app.me?.name) { slot._update = () => {}; return slot; }
+  if (!app.me?.name) { slot._update = async () => {}; return slot; }
   const loaded = (async () => {
     try {
       const [mod, plans, crew] = await Promise.all([import('./dayplan.js'), app.store.loadDayPlans(), app.store.crewList().catch(() => [])]);
@@ -576,7 +663,7 @@ function dutyCard(todayRuns, rerender) {
     const firstTime = stanOn() && !(() => { try { return localStorage.getItem('stb.duty'); } catch { return null; } })();
     const hint = h('p', { class: 'muted duty-hint' }, firstTime ? 'Hi, I’m Stan! Tap On duty when you get to the depot, and I’ll count your time from there, sorting and loading too.' : 'Tap when you get to the depot. It counts sorting and loading too.');
     card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), firstTime ? h('div', { class: 'duty-hello' }, stan({ pose: 'wave', size: 44 }), hint) : hint,
-      h('button', { class: 'btn primary big duty-btn', onclick: () => startShift(rerender) }, 'On duty'),
+      h('button', { class: 'btn primary big duty-btn', onclick: () => startShift(rerender, todayRuns) }, 'On duty'),
       mineRow, pickBtn].filter(Boolean));
     // At the depot already? Say so (only if GPS is already allowed, and the depot is set in Dispatch).
     app.store.getSetting('depot').then(async (dep) => {
@@ -592,6 +679,8 @@ function dutyCard(todayRuns, rerender) {
   card.append(...[
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
+    st.state === 'on_duty' && (app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')
+      ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast('On the run. Drive safe!', null, { stan: 'wave' }); rerender(); } }, 'Leaving the depot now') : null,
     mineRow, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
   card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
   return card;
@@ -636,6 +725,7 @@ async function viewHome() {
   const dutySlot = h('div');
   let dutyEl = null;
   const planEl = planSlot((runs) => drawDuty(runs));
+  const noticeEl = noticeSlot(); let noticesAsked = false;
   const drawDuty = (runs) => {
     // Left on duty after the morning's runs were all closed? End the shift at the time the last run closed (decision 0038).
     const off = autoOffAt(app.store.myDuty(), runs);
@@ -660,6 +750,7 @@ async function viewHome() {
     planEl,
     stanCardSlot(),
     stanChatButton('home'),
+    noticeEl,
     list));
 
   async function renderList() {
@@ -669,7 +760,7 @@ async function viewHome() {
       return;
     }
     drawDuty(runs);
-    planEl._update(runs);
+    planEl._update(runs).finally(() => { if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } });
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
         boredStan(stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' })),

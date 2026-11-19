@@ -1,6 +1,6 @@
 // On Duty and the shift timeline (decision 0020): every minute accounted for.
 import assert from 'node:assert/strict';
-import { shiftSegments, runOwners, currentDuty, shiftStart, MotionWatch, clock, parseLatLng, estimateFinish, autoOffAt } from '../js/shifts.js';
+import { shiftSegments, runOwners, currentDuty, shiftStart, MotionWatch, clock, parseLatLng, estimateFinish, autoOffAt, shiftCrews } from '../js/shifts.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log(`✓ ${name}`); } catch (e) { failed++; console.log(`✗ ${name}\n  ${e.message}`); } };
 const at = (hm) => new Date(`2026-11-12T${hm}:00+13:00`).getTime();
@@ -108,6 +108,14 @@ t('nonsense is nothing', () => assert.ok(parseLatLng('the depot') === null));
   t('one stop left unticked on an unclosed run keeps people on duty', () => assert.equal(autoOffAt(on, [tickedAll[0], { ...tickedAll[1], done: 31 }]), null));
   t('a day with no runs puts nobody off duty', () => assert.equal(autoOffAt(on, [{ delivery_date: '2026-11-13', closed_at: iso('06:00') }]), null));
   t('the automatic off-duty time is never before their own last change', () => assert.equal(autoOffAt([...on, { state: 'between', device_time: at('06:50') }], closedAll), at('06:50') + 1000));
+}
+
+{
+  const e = (user_name, state, time, extra = {}) => ({ user_name, state, device_time: `2026-11-20T0${time}:00+13:00`, ...extra });
+  t('the driver says who is helping, and that is the crew', () => assert.deepEqual(shiftCrews([e('Lisa', 'on_duty', '2:30', { helpers: ['Lenny', 'Seira'] }), e('Lisa', 'on_run', '2:40')]), [{ driver: 'Lisa', helpers: ['Lenny', 'Seira'], from: 'driver' }]));
+  t('the driver’s answer is the boss when a helper says something different', () => assert.deepEqual(shiftCrews([e('Lisa', 'on_duty', '2:30', { helpers: ['Lenny'] }), e('Mike', 'on_duty', '2:31', { helpers: [] }), e('Lenny', 'on_duty', '2:32', { driver: 'Mike' })]), [{ driver: 'Lisa', helpers: ['Lenny'], from: 'driver' }, { driver: 'Mike', helpers: [], from: 'driver' }]));
+  t('a helper’s answer counts when the driver gave none', () => assert.deepEqual(shiftCrews([e('Moana', 'on_duty', '2:30'), e('Zaph', 'on_duty', '2:31', { driver: 'Moana' }), e('Lenny', 'on_duty', '2:33', { driver: 'Moana' })]), [{ driver: 'Moana', helpers: ['Zaph', 'Lenny'], from: 'helpers' }]));
+  t('nobody asked, no crews', () => assert.deepEqual(shiftCrews([e('Lisa', 'on_duty', '2:30')]), []));
 }
 
 if (failed) { console.log(`${failed} failed`); process.exit(1); }

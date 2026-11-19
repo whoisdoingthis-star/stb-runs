@@ -42,8 +42,20 @@ When Mike or Lisa has made a plan in Dispatch, **Stan pops up once** the next ti
 
 Tap **Got it**. The plan stays on the Runs page in a yellow box; tap it to see it again. On the morning, **My runs** is already filled in in that order, so you just tap **Continue**.
 
-### Who's with you?
-If you're a driver, tapping **On duty** asks who is helping you. Tap their names (anyone in the plan is already ticked), then **Start my shift**. On your own? Just tap **Start my shift**. Helpers aren't asked: one tap and you're on duty.
+### Going on duty: who's with you?
+**Drivers:** tap **On duty** and the app asks who is helping you.
+1. Tap each helper's name. Someone not on the list? Tap **Other…**, type their name and tap **Add**; they'll be a button next time. On your own? Tap **Just me**. You can't carry on until you've picked.
+2. Then tap **Prepping at the depot** (still folding, bagging or loading) or **Prepped: starting the run** (ready to drive off).
+3. If you were prepping, tap **Leaving the depot now** when you drive off. (If you forget, the app works it out when the car moves or you tick your first stop.)
+
+**Helpers:** tap **On duty**, then tap **who's driving**. That's it.
+
+### The notice board
+The **📌 Notice board** button on the Runs page is for telling the family something: "papers will be late", "the gate code has changed".
+- **To leave a note:** Notice board → **Leave a note**. Type it, choose **Everyone** or the people it's for, choose **For 3 days** or **Until I remove it**, then **Post it**.
+- **When someone has left you a note,** Stan pops up with it when you next open the app. Tap **Got it** so they know you've seen it.
+- The board shows who has seen each note and who hasn't yet. You can take down your own notes.
+- It only shows when the app is opened, so **ring or text for anything urgent**.
 
 ## Doing a run
 If you do a run on the **paper sheet**, that's fine: Mike closes it in Dispatch afterwards and it shows on the Runs page as **✓ Closed, done on paper by** you. You can still open it.

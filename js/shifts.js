@@ -191,3 +191,24 @@ export function autoOffAt(events, runs) {
   if (!(finished > start)) return null;
   return Math.max(finished, ms(cur.device_time) + 1000); // never before their own last recorded change
 }
+
+/**
+ * Who worked together on a day, from the duty events (decision 0041). A driver says who is helping when they go on duty;
+ * a helper says who is driving. The driver's answer is the boss: a helper's answer only counts where the driver gave none.
+ * Returns [{ driver, helpers: [names], from: 'driver' | 'helpers' }].
+ */
+export function shiftCrews(events) {
+  const ev = [...(events || [])].sort((a, b) => ms(a.device_time) - ms(b.device_time));
+  const said = new Map(); const claims = new Map();
+  for (const e of ev) {
+    if (Array.isArray(e.helpers)) said.set(e.user_name, e.helpers);          // the driver's latest answer
+    if (e.driver) claims.set(e.user_name, e.driver);                         // the helper's latest answer
+  }
+  const out = [...said.entries()].map(([driver, helpers]) => ({ driver, helpers: [...helpers], from: 'driver' }));
+  for (const [helper, driver] of claims) {
+    if (said.has(driver)) continue;                                          // the driver answered: theirs stands
+    let c = out.find((x) => x.driver === driver); if (!c) { c = { driver, helpers: [], from: 'helpers' }; out.push(c); }
+    if (!c.helpers.includes(helper)) c.helpers.push(helper);
+  }
+  return out;
+}

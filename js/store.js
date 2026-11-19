@@ -166,7 +166,7 @@ class Base {
 const HOLD_MS = 10000;
 export const IDEA_COLUMNS = ['id', 'user_name', 'text', 'topic', 'screen', 'app_version', 'device_time'];
 const nzDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
-export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m', 'helpers'];
+export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m', 'helpers', 'driver'];
 export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device', 'outcome', 'reason', 'qty_delivered', 'method'];
 
 // ---------------------------------------------------------------------------
@@ -247,6 +247,16 @@ export class LocalStore extends Base {
     LS.set('stb.dayplans', [...LS.get('stb.dayplans', []).filter((p) => p.delivery_date !== date), row]); return row;
   }
   async crewList() { return LS.get('stb.crew', []); }
+  /** A helper with no login ("Other…" on Who's with you?): kept so they're a button next time. */
+  async addHelperName(name) { const list = LS.get('stb.crew', []); if (!list.some((c) => c.name.toLowerCase() === name.toLowerCase())) LS.set('stb.crew', [...list, { name, crew: 'helper', extra: true }]); }
+  // The notice board (decision 0041). Demo mode keeps notes on this phone.
+  async loadNotices() { return { notices: LS.get('stb.notices', []), seen: LS.get('stb.noticeseen', []) }; }
+  async addNotice({ body, to_names, expires_at }) {
+    const n = { id: uuid(), from_name: this.me?.name || 'Me', body, to_names: to_names?.length ? to_names : null, created_at: new Date().toISOString(), expires_at: expires_at || null };
+    LS.set('stb.notices', [...LS.get('stb.notices', []), n]); return n;
+  }
+  async markNoticesSeen(ids) { const me = this.me?.name || 'Me'; const have = LS.get('stb.noticeseen', []); LS.set('stb.noticeseen', [...have, ...ids.filter((id) => !have.some((s) => s.notice_id === id && s.user_name === me)).map((id) => ({ notice_id: id, user_name: me, seen_at: new Date().toISOString() }))]); }
+  async removeNotice(id) { LS.set('stb.notices', LS.get('stb.notices', []).map((n) => (n.id === id ? { ...n, removed_at: new Date().toISOString(), removed_by: this.me?.name || 'Me' } : n))); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
   /** Rows for Stan's "Did you know" cards (decision 0036): the runs and ticks on this phone. */
   async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: runs.flatMap((r) => this.cachedEvents(r.id)), complaints: [] }; }
@@ -676,8 +686,43 @@ export class SupabaseStore extends Base {
       const { data, error } = await this.sb.from('members').select('display_name, crew, active');
       if (error) throw error;
       const list = data.filter((m) => m.active !== false).map((m) => ({ name: m.display_name, crew: m.crew || 'driver' }));
+      try { const x = await this.sb.from('helper_names').select('name').order('name'); for (const r of x.data || []) if (!list.some((c) => c.name.toLowerCase() === r.name.toLowerCase())) list.push({ name: r.name, crew: 'helper', extra: true }); } catch { /* the list of logins is enough */ }
       LS.set('stb.crew', list); return list;
     } catch { return super.crewList(); }
+  }
+  async addHelperName(name) {
+    await super.addHelperName(name);
+    try { await this.sb.from('helper_names').upsert({ name, added_by: this.me?.name || null }, { onConflict: 'name', ignoreDuplicates: true }); } catch { /* it is on this phone; the duty record carries the name anyway */ }
+  }
+  /** Live notes and who has seen them; what this phone last fetched when there's no signal. Sends any Got its still waiting. */
+  async loadNotices() {
+    try {
+      const waiting = LS.get('stb.noticeseenpending', []);
+      if (waiting.length) { const { error } = await this.sb.from('notice_seen').upsert(waiting.map((id) => ({ notice_id: id, user_name: this.me.name })), { onConflict: 'notice_id,user_name', ignoreDuplicates: true }); if (!error) LS.set('stb.noticeseenpending', []); }
+      const a = await this.sb.from('notices').select('id, from_name, body, to_names, created_at, expires_at, removed_at').is('removed_at', null).order('created_at', { ascending: false }).limit(50);
+      if (a.error) throw a.error;
+      const ids = a.data.map((n) => n.id);
+      const b = ids.length ? await this.sb.from('notice_seen').select('notice_id, user_name, seen_at').in('notice_id', ids) : { data: [] };
+      if (b.error) throw b.error;
+      const seen = [...b.data, ...LS.get('stb.noticeseenpending', []).map((id) => ({ notice_id: id, user_name: this.me.name }))];
+      LS.set('stb.notices', a.data); LS.set('stb.noticeseen', seen);
+      return { notices: a.data, seen };
+    } catch { return super.loadNotices(); }
+  }
+  async addNotice({ body, to_names, expires_at }) {
+    const n = { id: uuid(), from_name: this.me.name, body, to_names: to_names?.length ? to_names : null, expires_at: expires_at || null };
+    const { error } = await this.sb.from('notices').insert(n);
+    if (error) throw error;
+    return n;
+  }
+  async markNoticesSeen(ids) {
+    await super.markNoticesSeen(ids);   // so it never pops up twice on this phone, signal or not
+    try { const { error } = await this.sb.from('notice_seen').upsert(ids.map((id) => ({ notice_id: id, user_name: this.me.name })), { onConflict: 'notice_id,user_name', ignoreDuplicates: true }); if (error) throw error; }
+    catch { LS.set('stb.noticeseenpending', [...new Set([...LS.get('stb.noticeseenpending', []), ...ids])]); }
+  }
+  async removeNotice(id) {
+    const { error } = await this.sb.from('notices').update({ removed_at: new Date().toISOString(), removed_by: this.me.name }).eq('id', id);
+    if (error) throw error;
   }
   /** Everyone's duty changes between two times (for Dispatch), or mine today if the table isn't there yet. */
   async loadDuty(from, to) {

@@ -1044,3 +1044,52 @@ drop policy if exists day_plans_add on public.day_plans;
 create policy day_plans_add on public.day_plans for insert to authenticated with check (public.is_dispatcher());
 drop policy if exists day_plans_change on public.day_plans;
 create policy day_plans_change on public.day_plans for update to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());
+
+-- ---- Crew check and the notice board (Mike, 19 Nov 2026; docs/decisions/0041-crew-check-and-notice-board.md) ----
+-- A helper going on duty says who is driving. The driver's own answer (helpers) is the one that counts.
+alter table public.duty_events add column if not exists driver text;
+-- Helpers with no login, typed under "Other…" on "Who's with you?", so they are a button next time.
+create table if not exists public.helper_names (
+  name     text primary key check (char_length(name) between 1 and 30),
+  added_by text,
+  added_at timestamptz not null default now()
+);
+alter table public.helper_names enable row level security;
+drop policy if exists helper_names_read on public.helper_names;
+create policy helper_names_read on public.helper_names for select to authenticated using (public.is_member());
+drop policy if exists helper_names_add on public.helper_names;
+create policy helper_names_add on public.helper_names for insert to authenticated with check (public.is_member());
+drop policy if exists helper_names_remove on public.helper_names;
+create policy helper_names_remove on public.helper_names for delete to authenticated using (public.is_dispatcher());
+-- Notes anyone leaves for the family. to_names null = everyone. Never deleted: taken down with removed_at.
+create table if not exists public.notices (
+  id         uuid primary key,
+  user_id    uuid not null default auth.uid(),
+  from_name  text not null,
+  body       text not null check (char_length(body) between 1 and 500),
+  to_names   text[],
+  created_at timestamptz not null default now(),
+  expires_at timestamptz,
+  removed_at timestamptz,
+  removed_by text
+);
+alter table public.notices enable row level security;
+drop policy if exists notices_read on public.notices;
+create policy notices_read on public.notices for select to authenticated using (public.is_member());
+drop policy if exists notices_add on public.notices;
+create policy notices_add on public.notices for insert to authenticated with check (public.is_member() and user_id = auth.uid() and from_name = public.my_name());
+drop policy if exists notices_remove on public.notices;
+create policy notices_remove on public.notices for update to authenticated using (user_id = auth.uid() or public.is_dispatcher()) with check (user_id = auth.uid() or public.is_dispatcher());
+-- Who has tapped Got it on a note.
+create table if not exists public.notice_seen (
+  notice_id uuid not null references public.notices (id) on delete cascade,
+  user_name text not null,
+  user_id   uuid not null default auth.uid(),
+  seen_at   timestamptz not null default now(),
+  primary key (notice_id, user_name)
+);
+alter table public.notice_seen enable row level security;
+drop policy if exists notice_seen_read on public.notice_seen;
+create policy notice_seen_read on public.notice_seen for select to authenticated using (public.is_member());
+drop policy if exists notice_seen_add on public.notice_seen;
+create policy notice_seen_add on public.notice_seen for insert to authenticated with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());

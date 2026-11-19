@@ -42,7 +42,7 @@ import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './
 import { buildInsights, EARLY_DAYS, duration, runMornings } from './insights.js';
 import { runStats, buildPlan, planText, clockTime } from './dayplan.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
-import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt } from './shifts.js';
+import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt, shiftCrews } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
   const { app, h, mount, toast, titleCase, shortRoute, paperSummary, openRefetch, pickSheets, fmtStamp, fmtDate, changeSummary, openSheet } = ctx;
   if (app.store.mode !== 'shared') {
@@ -375,6 +375,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
       return h('div', { class: 'dz-shift' },
         h('div', { class: 'dz-shift-head' }, avatar(p, 26), h('b', null, p),
           ` ${hm(x.start)}–${x.open ? 'now' : hm(x.end)} · ${clock(x.totals.shift)}`,
+          (() => { const cs = shiftCrews(D.duty); const mineC = cs.find((c) => c.driver === p); const helping = cs.find((c) => c.helpers.includes(p));
+            return mineC ? h('span', { class: 'small muted' }, mineC.helpers.length ? ` · with ${mineC.helpers.join(' and ')}` : ' · on their own') : helping ? h('span', { class: 'small muted' }, ` · helping ${helping.driver}`) : null; })(),
           x.forgot ? h('span', { class: 'small warn' }, ' · didn’t tap Off duty (ends at the last tick)') : null,
           x.open ? h('span', { class: 'dz-duty-now' }, ` · ${DUTY_LABEL[now.state]}${now.run_id ? `: ${name(now.run_id)}` : ''}`) : null,
           duty.length ? null : h('span', { class: 'small muted' }, ' · didn’t tap On duty (from first to last tick)')),
@@ -1402,6 +1404,11 @@ export async function viewDispatch(ctx, tab = 'overview') {
       h('table', { class: 'dz-table' },
         h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Email'), h('th', null, 'Access'), h('th', null, 'On the run'), h('th', null, 'Active'), h('th', null, ''))),
         h('tbody', null, rows)),
+      h('h3', null, 'Helpers without a login'),
+      h('p', { class: 'small muted' }, 'Names a driver typed under “Other…” when going on duty. They show as buttons on “Who’s with you?”. Remove one if it was a typo.'),
+      (() => { const box = h('div', { class: 'dz-polgrid' }, h('span', { class: 'small muted' }, 'Loading…'));
+        sb.from('helper_names').select('name').order('name').then(({ data }) => { box.replaceChildren(...((data || []).length ? data.map((r) => h('span', { class: 'chip' }, r.name, ' ', h('button', { class: 'link small danger', 'aria-label': `Remove ${r.name}`, onclick: () => act(async () => { const { error } = await sb.from('helper_names').delete().eq('name', r.name); if (error) throw error; }, `${r.name} removed.`) }, '✕'))) : [h('span', { class: 'small muted' }, 'None yet.')])); });
+        return box; })(),
       h('h3', null, 'Add a person'),
       h('div', { class: 'dz-polgrid' }, name, email, role, pw,
         h('button', { class: 'btn primary', onclick: () => act(() => adminCall({ action: 'add', name: name.value, email: email.value, role: role.value, password: pw.value }), `${name.value} added. Give them the password in person.`) }, 'Add')),

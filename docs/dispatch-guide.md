@@ -119,4 +119,6 @@ Each can be limited to certain days (none ticked = every day) and to **dates** (
 
 Every change on the dashboard is logged (who, when, what) in `dispatch_history`.
 
+**Helpers without a login:** names a driver typed under "Other…" when going on duty (Serene, Seira). Remove one here if it was a typo.
+
 **Driver or Helper** (the *On the run* column): drivers take runs; helpers ride with a driver. Stan's day plan and the "Who's with you?" question use it. It doesn't change what anyone can see or do in the app.

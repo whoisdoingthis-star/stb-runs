@@ -30,6 +30,9 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 
 | `avatars` | Each person's icon: `kind` (icon or photo) and `value` (a ready-made icon's name, or a 96×96 JPEG as a data URL made on the phone). One row per person; only they can add or change it; everyone on the list reads. ([decision 0025](decisions/0025-avatars.md)) |
 | `day_plans` | Stan's plan for a delivery day ([decision 0040](decisions/0040-day-plan.md)) | One row per `delivery_date`: `plan` (JSON: the crews, each with its driver, helpers, runs in order and times; the deadline; what was assumed), `note`, `updated_by`, `updated_at`. Members read; dispatchers write. |
+| `notices` | Notes on the notice board ([decision 0041](decisions/0041-crew-check-and-notice-board.md)) | `from_name`, `body` (up to 500 characters), `to_names` (null = everyone), `created_at`, `expires_at` (null = until removed), `removed_at`, `removed_by`. Members read and add their own; the writer or a dispatcher takes one down. |
+| `notice_seen` | Who has tapped Got it on a note | One row per `notice_id` and `user_name`, with `seen_at`. Members read; each person adds only their own. |
+| `helper_names` | Helpers with no login, typed under "Other…" | `name`, `added_by`, `added_at`. Members read and add; dispatchers remove (People page). |
 | `game_scores` | Scores from Stan's Paper Run ([decision 0034](decisions/0034-stans-paper-run.md)) | One row per finished game: `user_name`, `score`, `streets`, `delivered`, `best_streak`, `ended` (complaints, battery, quit). Everyone on the list reads; you can only add a score under your own name. Nothing to do with runs or ticks. |
 
 | `pings` | Dispatch asking where an on-duty driver is: `target_name`, `asked_by`, `asked_at`, then the phone's answer (`state` answered / off_duty / no_gps, position, `answered_at`). Dispatchers add; only the pinged person's phone answers; kept as a record. ([decision 0026](decisions/0026-run-map-and-ping.md)) |
@@ -60,3 +63,5 @@ Write the change into `sql/schema.sql` in re-runnable form, run it in the Supaba
 
 
 **Drivers and helpers (19 Nov 2026):** `members.crew` is `driver` or `helper` (default `driver`), separate from `role` (access). `duty_events.helpers` is the list of helpers' names a driver gave when going on duty (empty when on their own; null when not asked, as for a helper's own shift).
+
+**Who's driving (19 Nov 2026):** `duty_events.driver` is the driver a helper named when going on duty. Read crews with `shiftCrews` in `js/shifts.js`: the driver's `helpers` wins over a helper's `driver`.

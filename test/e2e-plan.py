@@ -1,4 +1,4 @@
-# Stan's day plan on the phone, and "Who's with you?" (decision 0040), in demo mode.
+# Stan's day plan on the phone (decision 0040), the crew check when going on duty and the notice board (decision 0041), in demo mode.
 #   python3 -m http.server 8765 &   then   python3 test/e2e-plan.py /path/to/Report.pdf [screenshot-folder]
 import json, sys, time
 from playwright.sync_api import sync_playwright
@@ -22,7 +22,7 @@ SEED = """([me, helpers, dayOffset, driver]) => {
   const plan = { date: day(dayOffset), deadline: t + 5 * m, crews: [{ driver, helpers, runs: list, prepMin: 5, roadMin: 30 * list.length, travelMin: 5 * list.length, depotAt: now + 14 * m, leaveDepotAt: now + 19 * m, firstPaperAt: now + 20 * m, finishAt: t - 5 * m, shiftMin: 35 * list.length + 5 }], assumptions: [], news: ['New: I now know who drives and who helps.'] };
   localStorage.setItem('stb.dayplans', JSON.stringify([{ delivery_date: day(dayOffset), plan, note: 'Papers are due at 2:15.', updated_by: 'Mike', updated_at: '2026-11-19T07:00:00Z' }]));
   localStorage.setItem('stb.crew', JSON.stringify([{ name: 'Me', crew: me }, { name: 'Lenny', crew: 'helper' }, { name: 'Zaph', crew: 'helper' }, { name: 'Lisa', crew: 'driver' }]));
-  localStorage.removeItem('stb.plan.seen.Me'); localStorage.removeItem('stb.myruns'); localStorage.removeItem('stb.duty'); localStorage.removeItem('stb.dutypending');
+  localStorage.removeItem('stb.plan.seen.Me'); localStorage.removeItem('stb.notices'); localStorage.removeItem('stb.noticeseen'); localStorage.removeItem('stb.myruns'); localStorage.removeItem('stb.duty'); localStorage.removeItem('stb.dutypending');
   return routes;
 }"""
 
@@ -39,7 +39,7 @@ with sync_playwright() as p:
     page.wait_for_selector('text=Check the sheet', timeout=20000)
     page.locator('.stickybar button').click()
     page.wait_for_selector('.tile')
-    home = lambda: (page.goto('http://localhost:8765/#/'), page.reload(), page.wait_for_selector('.duty-card'), page.wait_for_selector('.splash', state='detached', timeout=5000), page.wait_for_timeout(500))
+    home = lambda: (page.goto('http://localhost:8765/#/'), page.reload(), page.wait_for_selector('.duty-card'), page.wait_for_selector('.splash', state='detached', timeout=5000), page.wait_for_timeout(900))
     duty = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.duty') || '[]')")
 
     # ---- a driver, with a plan for today ----
@@ -67,15 +67,25 @@ with sync_playwright() as p:
     # ---- going on duty: who's with you? ----
     page.locator('.duty-btn').click(); page.wait_for_timeout(300)
     sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
-    check('On duty asks a driver who is with them, listing the helpers only', 'Who’s with you?' in sheet and page.locator('.who-btn').count() == 2 and 'Lisa' not in sheet, sheet)
-    check('the planned helper is already ticked', page.locator('.who-btn.on').count() == 1 and 'Lenny' in page.locator('.who-btn.on').inner_text())
-    check('nothing is recorded until the shift is started', len(duty()) == 0)
+    check('On duty asks a driver who is with them: the helpers, Other and Just me, never another driver', 'Who’s with you?' in sheet and page.locator('.who-btn').count() == 4 and 'Lisa' not in sheet and 'Other…' in sheet and 'Just me' in sheet, sheet)
+    check('the planned helper is already ticked, so the next step is open', page.locator('.who-btn.on').count() == 1 and 'Lenny' in page.locator('.who-btn.on').inner_text() and page.locator('.who-next button[disabled]').count() == 0)
+    page.locator('.who-btn', has_text='Lenny').click(); page.wait_for_timeout(100)
+    check('with nobody picked, the next step is locked', page.locator('.who-next button[disabled]').count() == 2 and 'Tap who’s helping, or Just me' in page.inner_text('.who-next'))
+    page.locator('.who-next button').first.click(force=True); page.wait_for_timeout(200)
+    check('nothing is recorded while it is locked', len(duty()) == 0 and page.locator('.sheet').count() == 1)
+    page.locator('.who-btn', has_text='Other…').click(); page.fill('.who-add input', '  seira '); page.locator('.who-add button').click(); page.wait_for_timeout(200)
+    check('Other: a typed name becomes a ticked helper', page.locator('.who-btn.on').count() == 1 and page.locator('.who-btn.on').inner_text() == '✓ seira')
+    page.locator('.who-btn', has_text='Lenny').click(); page.wait_for_timeout(100)
     if SHOTS: page.screenshot(path=f'{SHOTS}/who-with-you.png')
-    page.locator('.who-btn', has_text='Zaph').click(); page.locator('.who-btn', has_text='Zaph').click(); page.locator('.who-btn', has_text='Zaph').click()
-    page.locator('.sheet button', has_text='Start my shift').click(); page.wait_for_timeout(600)
+    page.locator('.sheet button', has_text='Prepping at the depot').click(); page.wait_for_timeout(600)
     d = duty()
-    check('starting the shift records on duty with the helpers', len(d) == 1 and d[0]['state'] == 'on_duty' and d[0].get('helpers') == ['Lenny', 'Zaph'], json.dumps(d))
-    check('the duty card shows on duty', 'On duty' in page.inner_text('.duty-card') and page.locator('.duty-card.on').count() == 1)
+    check('Prepping at the depot: on duty, with the helpers on the record', len(d) == 1 and d[0]['state'] == 'on_duty' and sorted(d[0].get('helpers')) == ['Lenny', 'seira'], json.dumps(d))
+    check('the duty card then offers Leaving the depot now', page.locator('.duty-card.on .leave-btn').count() == 1 and 'On duty' in page.inner_text('.duty-card'))
+    if SHOTS: page.screenshot(path=f'{SHOTS}/leaving-depot.png')
+    page.locator('.leave-btn').click(); page.wait_for_timeout(600)
+    d = duty()
+    check('Leaving the depot now starts the run', len(d) == 2 and d[1]['state'] == 'on_run' and 'On the run' in page.inner_text('.duty-card') and page.locator('.leave-btn').count() == 0, json.dumps(d))
+    check('the typed name is kept as a helper for next time', any(c['name'] == 'seira' and c['crew'] == 'helper' for c in page.evaluate("JSON.parse(localStorage.getItem('stb.crew'))")))
 
     # ---- on their own ----
     page.evaluate(SEED, ['driver', [], 0, 'Me']); page.evaluate("localStorage.setItem('stb.dayplans', JSON.stringify(JSON.parse(localStorage.getItem('stb.dayplans')).map((p) => ({ ...p, updated_at: '2026-11-19T08:00:00Z' }))))")
@@ -84,9 +94,10 @@ with sync_playwright() as p:
     check('a changed plan pops up again; on their own, Stan says so and allows for folding', 'You’re driving on your own.' in pop and 'folding and bagging' in pop, pop[:300])
     page.locator('.sheet button', has_text='Got it').click()
     page.locator('.duty-btn').click(); page.wait_for_timeout(300)
-    check('on their own: nobody is ticked, and one tap starts the shift', page.locator('.who-btn.on').count() == 0)
-    page.locator('.sheet button', has_text='Start my shift').click(); page.wait_for_timeout(600)
-    d = duty(); check('on their own: on duty with no helpers', len(d) == 1 and d[0].get('helpers') == [], json.dumps(d))
+    check('on their own: nobody is ticked and the next step is locked until Just me', page.locator('.who-btn.on').count() == 0 and page.locator('.who-next button[disabled]').count() == 2)
+    page.locator('.who-btn', has_text='Just me').click(); page.wait_for_timeout(100)
+    page.locator('.sheet button', has_text='Prepped: starting the run').click(); page.wait_for_timeout(600)
+    d = duty(); check('Just me, already prepped: on duty with no helpers, and straight on the run', len(d) == 2 and d[0]['state'] == 'on_duty' and d[0].get('helpers') == [] and d[1]['state'] == 'on_run' and d[1]['device_time'] > d[0]['device_time'] and 'On the run' in page.inner_text('.duty-card'), json.dumps(d))
 
     # ---- a helper ----
     page.evaluate(SEED, ['helper', ['Me'], 0, 'Lisa'])
@@ -95,8 +106,11 @@ with sync_playwright() as p:
     check('a helper gets the plan too: who they are helping and what to do', 'You’re helping Lisa.' in pop and 'Lisa drives. You fold and bag on the way' in pop, pop[:300])
     page.locator('.sheet button', has_text='Got it').click()
     check('the helper’s card says who they are helping', 'Helping Lisa' in page.inner_text('.plan-card'))
-    page.locator('.duty-btn').click(); page.wait_for_timeout(600)
-    d = duty(); check('a helper goes on duty with one tap, no question', page.locator('.sheet').count() == 0 and len(d) == 1 and 'helpers' not in d[0], json.dumps(d))
+    page.locator('.duty-btn').click(); page.wait_for_timeout(300)
+    sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
+    check('a helper is asked who is driving: the drivers only, the planned one first', 'Who’s driving?' in sheet and page.locator('.who-btn').count() == 1 and page.locator('.who-btn.primary').inner_text() == 'Lisa' and len(duty()) == 0, sheet)
+    page.locator('.who-btn', has_text='Lisa').click(); page.wait_for_timeout(600)
+    d = duty(); check('tapping the driver puts the helper on duty, with the driver on the record', page.locator('.sheet').count() == 0 and len(d) == 1 and d[0].get('driver') == 'Lisa' and 'helpers' not in d[0] and page.locator('.leave-btn').count() == 0, json.dumps(d))
 
     # ---- tomorrow's plan, seen the evening before ----
     page.evaluate(SEED, ['driver', ['Lenny'], 1, 'Me'])
@@ -114,6 +128,54 @@ with sync_playwright() as p:
     home()
     page.locator('.duty-btn').click(); page.wait_for_timeout(600)
     d = duty(); check('with no drivers-and-helpers list, On duty works as before: one tap', page.locator('.sheet').count() == 0 and len(d) == 1 and d[0]['state'] == 'on_duty', json.dumps(d))
+
+    # ---- the notice board ----
+    page.evaluate(SEED, ['driver', ['Lenny'], 0, 'Lisa'])
+    page.evaluate("""() => { const now = Date.now(); localStorage.setItem('stb.notices', JSON.stringify([
+      { id: 'n1', from_name: 'Mike', body: 'Papers will be late: about 2:45.', to_names: null, created_at: new Date(now - 3600e3).toISOString(), expires_at: new Date(now + 2 * 864e5).toISOString() },
+      { id: 'n2', from_name: 'Lisa', body: 'Just for you: bring the trolley.', to_names: ['Me'], created_at: new Date(now - 1800e3).toISOString(), expires_at: null },
+      { id: 'n3', from_name: 'Mike', body: 'Not for me.', to_names: ['Lenny'], created_at: new Date(now - 900e3).toISOString(), expires_at: null },
+      { id: 'n4', from_name: 'Mike', body: 'Old news.', to_names: null, created_at: new Date(now - 9 * 864e5).toISOString(), expires_at: new Date(now - 6 * 864e5).toISOString() }])); }""")
+    home(); page.wait_for_timeout(600)
+    pop = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
+    check('Stan pops up with the notes for me: to everyone and to me, not someone else’s or an expired one', '2 notes for you' in pop and 'Papers will be late' in pop and 'bring the trolley' in pop and 'Not for me' not in pop and 'Old news' not in pop, pop)
+    if SHOTS: page.screenshot(path=f'{SHOTS}/notice-popup.png')
+    page.locator('.sheet .icon-btn').click(); page.wait_for_timeout(300)
+    home(); page.wait_for_timeout(600)
+    check('closed without Got it, it comes back the next time', page.locator('.sheet').count() == 1 and '2 notes for you' in page.inner_text('.sheet'))
+    page.locator('.sheet button', has_text='Got it').click(); page.wait_for_timeout(400)
+    seen = page.evaluate("JSON.parse(localStorage.getItem('stb.noticeseen') || '[]')")
+    check('Got it is recorded for each note, under my name', sorted(x['notice_id'] for x in seen) == ['n1', 'n2'] and all(x['user_name'] == 'Me' for x in seen), json.dumps(seen))
+    home(); page.wait_for_timeout(600)
+    check('acknowledged notes do not pop up again; the board button counts the live notes for me', page.locator('.sheet').count() == 0 and page.locator('.notice-count').inner_text() == '2')
+    page.locator('.notice-btn').click(); page.wait_for_timeout(300)
+    board = page.inner_text('.sheet')
+    check('the board lists my notes with who has seen them', 'Papers will be late' in board and 'Seen by Me; not yet Lenny, Zaph and Lisa' in board and 'Not for me' not in board, board)
+    page.locator('.sheet button', has_text='Leave a note').click(); page.wait_for_timeout(300)
+    page.locator('.sheet button', has_text='Post it').click(); page.wait_for_timeout(200)
+    check('an empty note is not posted', 'Write the note first.' in page.inner_text('.sheet'))
+    check('a new note is for Everyone and for three days unless changed', page.locator('.who-btn.on').count() == 2 and 'Everyone' in page.locator('.who-btn.on').first.inner_text() and 'For 3 days' in page.locator('.who-btn.on').nth(1).inner_text())
+    page.fill('.sheet textarea', 'Gate code at the village has changed. Ask Mike.')
+    page.locator('.who-btn', has_text='Lenny').click(); page.locator('.who-btn', has_text='Until I remove it').click()
+    if SHOTS: page.screenshot(path=f'{SHOTS}/notice-write.png')
+    page.locator('.sheet button', has_text='Post it').click(); page.wait_for_timeout(600)
+    notes = page.evaluate("JSON.parse(localStorage.getItem('stb.notices'))"); mine = [n for n in notes if n['from_name'] == 'Me']
+    check('posting saves the note with who it is for and how long', len(mine) == 1 and mine[0]['to_names'] == ['Lenny'] and mine[0]['expires_at'] is None and mine[0]['body'].startswith('Gate code'), json.dumps(mine))
+    check('my own note never pops up for me', page.locator('.sheet').count() == 0)
+    page.locator('.notice-btn').click(); page.wait_for_timeout(300)
+    board = page.inner_text('.sheet')
+    check('my note is on the board, waiting for Lenny, and I can take it down', 'You ·' in board and 'for Lenny' in board and 'not yet Lenny' in board and page.locator('.nb-note button', has_text='Take it down').count() == 1, board)
+    if SHOTS: page.screenshot(path=f'{SHOTS}/notice-board.png')
+    page.locator('.nb-note button', has_text='Take it down').click(); page.wait_for_timeout(500)
+    check('taking it down removes it from the board', page.locator('.notice-count').inner_text() == '2' and any(n.get('removed_at') for n in page.evaluate("JSON.parse(localStorage.getItem('stb.notices'))")))
+    # with a plan and a note both waiting: the plan first, then the note
+    page.evaluate(SEED, ['driver', ['Lenny'], 0, 'Me'])
+    page.evaluate("localStorage.setItem('stb.notices', JSON.stringify([{ id: 'n9', from_name: 'Mike', body: 'One more thing.', to_names: null, created_at: new Date().toISOString(), expires_at: null }]))")
+    home()
+    check('with a plan and a note both waiting, the plan shows first', page.locator('.sheet .plan-pop').count() == 1 and page.locator('.sheet-backdrop').count() == 1)
+    page.locator('.sheet button', has_text='Got it').click(); page.wait_for_timeout(2500)
+    check('and the note follows once the plan is closed', page.locator('.sheet').count() == 1 and 'One more thing.' in page.inner_text('.sheet'))
+    page.locator('.sheet button', has_text='Got it').click()
     check('no page errors', not errors, str(errors))
     b.close()
 

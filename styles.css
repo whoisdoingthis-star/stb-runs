@@ -927,3 +927,14 @@ html.big .plan-card-main { font-size: 21px; } html.big .plan-card-sub { font-siz
 .dp-card.late { border-top-color: #dc2626; } .dp-card h3 { margin: 0 0 6px; } .dp-big { display: flex; gap: 18px; flex-wrap: wrap; margin: 6px 0 8px; } .dp-big div span { display: block; font-size: 12px; color: var(--muted); } .dp-big div b { font-size: 22px; }
 .dp-card table { width: 100%; border-collapse: collapse; font-size: 14px; } .dp-card td { padding: 3px 0; border-top: 1px solid var(--line); } .dp-card td:last-child { text-align: right; color: var(--muted); }
 .dp-late { color: #dc2626; font-weight: 700; margin: 6px 0 0; } .dp-assume { font-size: 13.5px; color: var(--muted); max-width: 760px; } .dp-sent { margin: 8px 0; }
+
+/* ---- Who's with you / who's driving, and the notice board (decision 0041) ---- */
+.who-btn.who-alone, .who-btn.who-other { border-style: dashed; } .who-add { grid-column: 1 / -1; display: flex; gap: 8px; } .who-add input { flex: 1; min-width: 0; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+.who-next { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 4px; } .who-next .btn[disabled] { opacity: .4; } .who-hint { margin: 8px 0; }
+.leave-btn { margin: 4px 0 10px; }
+.notice-slot { margin: 0 0 12px; } .notice-btn { width: 100%; min-height: 48px; display: flex; gap: 8px; align-items: center; justify-content: center; }
+.notice-count { background: #ffc400; color: #111; border-radius: 99px; min-width: 24px; padding: 1px 7px; font-weight: 800; font-size: 14px; }
+.nb-list { display: grid; gap: 10px; margin: 4px 0 12px; } .nb-note { border: 1px solid var(--line); border-left: 4px solid #22e6f2; border-radius: 12px; padding: 10px 12px; }
+.nb-note p { margin: 4px 0 6px; font-size: var(--t-m, 17px); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; } .nb-from { font-size: 13.5px; font-weight: 700; color: var(--muted); }
+.sheet textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+html.big .nb-note p { font-size: 21px; } html.big .nb-from { font-size: 16px; }
