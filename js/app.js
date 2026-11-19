@@ -478,6 +478,90 @@ function goOffDuty(after) {
     h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); } }, 'Off duty'),
     h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
 }
+// ---- Stan's day plan, and drivers and helpers (decision 0040) ----
+const dayLabel = (date) => new Intl.DateTimeFormat('en-NZ', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
+const listNames = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] || '');
+/** Going on duty. A driver is asked who is helping (one tap); a helper, or anyone when the list isn't known, starts straight away. */
+function startShift(rerender) {
+  const fix = quietFix();
+  const go = async (helpers) => { noteDuty('on_duty', helpers ? { helpers } : {}, await fix); rerender(); };
+  const crew = app.crew || [];
+  const me = crew.find((c) => c.name === app.me?.name);
+  const helpers = crew.filter((c) => c.crew === 'helper' && c.name !== app.me?.name).map((c) => c.name);
+  if (!me || me.crew !== 'driver' || !helpers.length) return go(null);
+  const planned = app.plan?.today && app.plan.part.role === 'driver' ? app.plan.part.helpers : [];
+  const picked = new Set(planned.filter((n) => helpers.includes(n)));
+  const btns = helpers.map((n) => { const b = h('button', { class: `btn big who-btn ${picked.has(n) ? 'on' : ''}`, 'aria-pressed': String(picked.has(n)), onclick: () => { if (picked.has(n)) picked.delete(n); else picked.add(n); b.classList.toggle('on', picked.has(n)); b.setAttribute('aria-pressed', String(picked.has(n))); b.firstChild.textContent = picked.has(n) ? '✓ ' : ''; } }, h('span', null, picked.has(n) ? '✓ ' : ''), n); return b; });
+  const close = openSheet('Who’s with you?',
+    h('p', { class: 'muted' }, 'Tap anyone helping you this morning, then start. On your own? Just start.'),
+    h('div', { class: 'who-row' }, btns),
+    h('button', { class: 'btn primary big', style: 'margin-top:12px', onclick: () => { close(); go(helpers.filter((n) => picked.has(n))); } }, 'Start my shift'));
+  return null;
+}
+/** What Stan says about the plan: shown once per plan, and again from the plan card. */
+function openPlan({ row, part, today, lined }) {
+  const p = row.plan; const name = app.me.name; const when = today ? 'today' : row.delivery_date === nzDay(1) ? 'tomorrow' : dayLabel(row.delivery_date);
+  const t = app.planClock;
+  const who = part.role === 'driver' ? (part.helpers.length ? `You’re driving, with ${listNames(part.helpers)} helping.` : 'You’re driving on your own.') : `You’re helping ${part.driver}.`;
+  const main = part.runs.filter((r) => !r.during);
+  const setUp = [
+    part.runs.length ? (today && lined ? `Your runs are lined up in this order: ${part.runs.map((r) => r.name.replace('Run ', '')).join(' → ')}. Tap Continue to start.` : `${today ? 'When the run sheets are in' : 'In the morning'}, your runs will be lined up in this order: ${part.runs.map((r) => r.name.replace('Run ', '')).join(' → ')}.`) : null,
+    part.role === 'driver' && part.helpers.length ? `When you tap On duty I’ll ask who’s with you. ${listNames(part.helpers)} ${part.helpers.length > 1 ? 'are' : 'is'} already ticked.` : null,
+    part.role === 'driver' && !part.helpers.length ? 'I’ve allowed time at the depot for folding and bagging before you leave.' : null,
+    part.role === 'helper' ? `${part.driver} drives. You fold and bag on the way, and take the letterboxes on your side.` : null,
+    ...(p.news || [])].filter(Boolean);
+  const close = openSheet('Stan’s plan',
+    h('div', { class: 'plan-pop' },
+      h('div', { class: 'plan-hello' }, stan({ pose: 'point', size: 72 }), h('div', null, h('div', { class: 'plan-hi' }, `${name}, here’s the plan for ${when}.`), h('div', { class: 'plan-who' }, who))),
+      h('div', { class: 'plan-times' },
+        h('div', null, h('span', null, 'At the depot by'), h('b', null, t(part.depotAt))),
+        h('div', null, h('span', null, 'First paper by'), h('b', null, t(part.firstPaperAt))),
+        h('div', null, h('span', null, 'All done by'), h('b', null, t(part.finishAt)))),
+      p.deadline ? h('p', { class: 'muted plan-dl' }, `The deadline is ${t(p.deadline)}. ${main.length > 1 ? `${main.length} runs` : 'One run'}${part.runs.length > main.length ? `, with ${listNames(part.runs.filter((r) => r.during).map((r) => r.name))} dropped off on the way` : ''}.`) : null,
+      h('ol', { class: 'plan-runs' }, part.runs.map((r) => h('li', null, h('b', null, r.name), h('span', null, r.during ? `on the way through ${r.duringName}` : `${t(r.startAt)} to ${t(r.finishAt)}`)))),
+      row.note ? h('p', { class: 'plan-note' }, `${row.updated_by || 'Dispatch'} says: ${row.note}`) : null,
+      setUp.length ? h('div', { class: 'plan-setup' }, h('div', { class: 'stan-card-h' }, 'What I’ve set up'), h('ul', null, setUp.map((x) => h('li', null, x)))) : null,
+      h('button', { class: 'btn primary big', onclick: () => close() }, 'Got it')));
+}
+const nzDay = (plus = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(Date.now() + plus * 864e5));
+/** The plan card on the Runs page. update(runs) is called each time the runs are listed. */
+function planSlot(redrawDuty) {
+  const slot = h('div', { class: 'plan-slot' });
+  if (!app.me?.name) { slot._update = () => {}; return slot; }
+  const loaded = (async () => {
+    try {
+      const [mod, plans, crew] = await Promise.all([import('./dayplan.js'), app.store.loadDayPlans(), app.store.crewList().catch(() => [])]);
+      app.crew = crew; app.planClock = mod.clockTime;
+      const row = plans.find((p) => mod.myPart(p.plan, app.me.name));
+      return row ? { row, part: mod.myPart(row.plan, app.me.name) } : null;
+    } catch { return null; }
+  })();
+  let popped = false;
+  slot._update = async (runs) => {
+    const got = await loaded; app.plan = null;
+    if (!got || !slot.isConnected) return;
+    try {
+      const { row, part } = got; const today = row.delivery_date === nzToday();
+      const day = runs.filter((r) => r.delivery_date === row.delivery_date);
+      const mine = part.runs.map((p) => day.find((r) => r.route === p.route)).filter(Boolean);
+      if (today && ((mine.length && mine.every(runComplete)) || Date.now() > part.finishAt + 3 * 3600e3)) { slot.replaceChildren(); return; }
+      if (today && mine.length && !myRuns().length) { setMyRuns(mine.map((r) => r.id)); redrawDuty(runs); }
+      const lined = today && mine.length > 0 && myRuns().join() === mine.map((r) => r.id).join();
+      const info = { row, part, today, lined }; app.plan = info;
+      const t = app.planClock;
+      slot.replaceChildren(h('button', { class: 'plan-card', onclick: () => openPlan(info) },
+        stan({ pose: 'point', size: 48 }),
+        h('div', { class: 'plan-card-body' },
+          h('div', { class: 'stan-card-h' }, `Stan’s plan for ${today ? 'today' : row.delivery_date === nzDay(1) ? 'tomorrow' : dayLabel(row.delivery_date)}`),
+          h('div', { class: 'plan-card-main' }, part.role === 'driver' ? `Depot by ${t(part.depotAt)} · first paper by ${t(part.firstPaperAt)}` : `Helping ${part.driver} · depot by ${t(part.depotAt)}`),
+          h('div', { class: 'plan-card-sub' }, `${part.runs.map((r) => r.name.replace('Run ', '')).join(' → ')} · done by ${t(part.finishAt)}`)),
+        h('span', { class: 'rt-go' }, 'See')));
+      const stamp = `${row.delivery_date}|${row.updated_at}`; const key = `stb.plan.seen.${app.me.name}`;
+      if (!popped && pref(key, '') !== stamp && !document.querySelector('.sheet-backdrop')) { popped = true; try { localStorage.setItem(key, stamp); } catch { /* private mode */ } openPlan(info); }
+    } catch { slot.replaceChildren(); }
+  };
+  return slot;
+}
 /** The duty card on the Runs page: On duty button, or the shift timer and where I am. */
 function dutyCard(todayRuns, rerender) {
   const st = duty();
@@ -492,7 +576,7 @@ function dutyCard(todayRuns, rerender) {
     const firstTime = stanOn() && !(() => { try { return localStorage.getItem('stb.duty'); } catch { return null; } })();
     const hint = h('p', { class: 'muted duty-hint' }, firstTime ? 'Hi, I’m Stan! Tap On duty when you get to the depot, and I’ll count your time from there, sorting and loading too.' : 'Tap when you get to the depot. It counts sorting and loading too.');
     card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), firstTime ? h('div', { class: 'duty-hello' }, stan({ pose: 'wave', size: 44 }), hint) : hint,
-      h('button', { class: 'btn primary big duty-btn', onclick: async () => { noteDuty('on_duty', {}, await quietFix()); rerender(); } }, 'On duty'),
+      h('button', { class: 'btn primary big duty-btn', onclick: () => startShift(rerender) }, 'On duty'),
       mineRow, pickBtn].filter(Boolean));
     // At the depot already? Say so (only if GPS is already allowed, and the depot is set in Dispatch).
     app.store.getSetting('depot').then(async (dep) => {
@@ -551,6 +635,7 @@ async function viewHome() {
   const list = h('div', null, h('p', { class: 'muted' }, 'Loading runs…'));
   const dutySlot = h('div');
   let dutyEl = null;
+  const planEl = planSlot((runs) => drawDuty(runs));
   const drawDuty = (runs) => {
     // Left on duty after the morning's runs were all closed? End the shift at the time the last run closed (decision 0038).
     const off = autoOffAt(app.store.myDuty(), runs);
@@ -572,6 +657,7 @@ async function viewHome() {
     app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
     fileInput,
     dutySlot,
+    planEl,
     stanCardSlot(),
     stanChatButton('home'),
     list));
@@ -583,6 +669,7 @@ async function viewHome() {
       return;
     }
     drawDuty(runs);
+    planEl._update(runs);
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
         boredStan(stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' })),

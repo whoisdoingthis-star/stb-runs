@@ -1018,3 +1018,29 @@ create policy game_scores_read on public.game_scores for select to authenticated
 drop policy if exists game_scores_add on public.game_scores;
 create policy game_scores_add on public.game_scores for insert to authenticated
   with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());
+
+-- ---- Drivers and helpers, and Stan's day plan (Mike, 19 Nov 2026; docs/decisions/0040-day-plan.md) ----
+-- crew: a driver takes runs; a helper rides with a driver (folds, bags, takes the passenger-side letterboxes).
+alter table public.members add column if not exists crew text not null default 'driver';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'members_crew_check') then
+    alter table public.members add constraint members_crew_check check (crew in ('driver', 'helper'));
+  end if;
+end $$;
+-- Who was helping, noted when a driver goes on duty (empty = on their own; null = not asked).
+alter table public.duty_events add column if not exists helpers text[];
+-- One plan per delivery day: who drives which runs, in what order, and the times, as worked out in Dispatch.
+create table if not exists public.day_plans (
+  delivery_date date primary key,
+  plan          jsonb not null,
+  note          text,
+  updated_by    text,
+  updated_at    timestamptz not null default now()
+);
+alter table public.day_plans enable row level security;
+drop policy if exists day_plans_read on public.day_plans;
+create policy day_plans_read on public.day_plans for select to authenticated using (public.is_member());
+drop policy if exists day_plans_add on public.day_plans;
+create policy day_plans_add on public.day_plans for insert to authenticated with check (public.is_dispatcher());
+drop policy if exists day_plans_change on public.day_plans;
+create policy day_plans_change on public.day_plans for update to authenticated using (public.is_dispatcher()) with check (public.is_dispatcher());

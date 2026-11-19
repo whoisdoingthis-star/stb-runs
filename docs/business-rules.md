@@ -208,6 +208,8 @@ Rules attached to exactly one group, operating location, service location or add
 ## People and access
 - **App only** (`driver`): runs, ticks, photos, reordering.
 - **App + Dispatch** (`dispatcher`): also the dispatch dashboard: the register, locations, policies and users. Mike is the first dispatcher. (Mike, 8 Nov 2026)
+- **Drivers and helpers** (Mike, 19 Nov 2026): separately from access, each person is a **driver** or a **helper**. Drivers (Mike, Lisa, Moana) take runs. Helpers (Lenny, Zaph, Serene) only ever ride with a driver: they fold the papers, bag the ones for "throw" addresses and get them ready while the driver drives, and sit on the other side of the car so the driver doesn't run round it for a letterbox on that side. A driver with a helper leaves the depot sooner (about 30 minutes sooner on Run 6), because a driver alone folds and bags at the depot first. ([decision 0040](decisions/0040-day-plan.md))
+- **The day plan aims to finish 10 minutes before the deadline**, and works back from there (19 Nov 2026, Claude's proposal, accepted by Mike with stage 1).
 - Enforced by the database, not just the screens: only dispatchers can change locations, policies, assignments or people.
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.

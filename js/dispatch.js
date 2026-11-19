@@ -39,7 +39,8 @@ import { IDEA_STATUS } from './stanchat.js';
 import { avatar } from './avatars.js';
 import { runMapData, pingText } from './runmap.js';
 import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './report.js';
-import { buildInsights, EARLY_DAYS, duration } from './insights.js';
+import { buildInsights, EARLY_DAYS, duration, runMornings } from './insights.js';
+import { runStats, buildPlan, planText, clockTime } from './dayplan.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -197,7 +198,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   // ---- layout
-  const tabs = [['overview', 'Overview'], ['insights', 'Insights'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'Change log']];
+  const tabs = [['overview', 'Overview'], ['insights', 'Insights'], ['plan', 'Day plan'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'Change log']];
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
   const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
@@ -223,7 +224,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null,
       k === 'complaints' && D.register.some((c) => c.status === 'open') ? h('span', { class: 'dz-count bad' }, D.register.filter((c) => c.status === 'open').length) : null)));
     body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
-      ({ overview: renderOverview, insights: renderInsights, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
+      ({ overview: renderOverview, insights: renderInsights, plan: renderPlan, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
   // Morning watch keeps itself fresh: every minute while the Overview is showing a day with a run still under way.
@@ -661,6 +662,80 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const lo = new Date(Date.parse(`${from}T00:00:00Z`) - 36 * 3600e3).toISOString(); const hi = new Date(Date.parse(`${to}T00:00:00Z`) + 36 * 3600e3).toISOString();
     const photos = must(await sb.from('photos').select('address_key, taken_at, user_name, route, path').gte('taken_at', lo).lte('taken_at', hi).order('taken_at').limit(5000));
     return { runs, ticks, lines, photos, complaints: D.register };
+  }
+  // ================= Day plan (decision 0040) =================
+  // Who is driving, who is helping, and Stan works out the order and the start times from how long the runs really take.
+  const PLAN = { date: null, crews: null, plan: null, saved: undefined, loading: false, error: null, note: '' };
+  function renderPlan() {
+    const box = h('div', { class: 'dp' });
+    const dates = [...new Set(D.runs.map((r) => r.delivery_date))].sort(); const today = nzDate(Date.now());
+    if (!PLAN.date) PLAN.date = dates.find((d) => d > today) || focusDate();
+    const people = D.members.filter((m) => m.active !== false);
+    const drivers = people.filter((m) => (m.crew || 'driver') === 'driver').map((m) => m.display_name); const helpers = people.filter((m) => m.crew === 'helper').map((m) => m.display_name);
+    if (!PLAN.crews) PLAN.crews = Object.fromEntries(drivers.map((n) => [n, { on: false, helpers: [] }]));
+    for (const n of drivers) PLAN.crews[n] ||= { on: false, helpers: [] };
+    const dayRuns = () => D.runs.filter((r) => r.delivery_date === PLAN.date);
+    const dl = () => deadlineFor(PLAN.date, D.deadlines || DEFAULT_DEADLINES);
+    const loadSaved = async () => {
+      try { const { data, error } = app.store.loadDayPlan ? { data: await app.store.loadDayPlan(PLAN.date) } : await sb.from('day_plans').select('*').eq('delivery_date', PLAN.date).maybeSingle(); if (error) throw error; PLAN.saved = data || null; }
+      catch { PLAN.saved = null; }
+      if (PLAN.saved && !PLAN.plan) { for (const c of PLAN.saved.plan.crews || []) if (PLAN.crews[c.driver]) PLAN.crews[c.driver] = { on: true, helpers: [...c.helpers] }; PLAN.note = PLAN.saved.note || ''; }
+      paint();
+    };
+    const work = async () => {
+      const crews = drivers.filter((n) => PLAN.crews[n].on).map((n) => ({ driver: n, helpers: PLAN.crews[n].helpers }));
+      if (!crews.length) return toast('Tick at least one driver.');
+      if (!dayRuns().length) return toast('No run sheets are loaded for that day yet.');
+      PLAN.loading = true; PLAN.error = null; paint();
+      try {
+        const from = nzDate(Date.parse(`${PLAN.date}T00:00:00Z`) - 28 * 864e5);
+        const rows = await loadInsights(from, PLAN.date);
+        const stats = runStats(runMornings(rows.runs.filter((r) => r.delivery_date < PLAN.date), rows.ticks, D.deadlines || DEFAULT_DEADLINES));
+        const runs = dayRuns().map((r) => ({ route: r.route, stops: r.summary?.copies ?? r.summary?.lines }));
+        PLAN.plan = { ...buildPlan({ runs, crews, stats, deadline: dl().at, depot: D.depot?.lat ? D.depot : null, usual: runs.map((r) => r.route).sort() }), date: PLAN.date, deadline: dl().at, madeAt: new Date().toISOString() };
+      } catch (e) { PLAN.error = e.message; }
+      PLAN.loading = false; paint();
+    };
+    const send = async (note) => {
+      try {
+        if (app.store.saveDayPlan) await app.store.saveDayPlan(PLAN.date, PLAN.plan, note);
+        else { const { error } = await sb.from('day_plans').upsert({ delivery_date: PLAN.date, plan: PLAN.plan, note: note || null, updated_by: app.me.name, updated_at: new Date().toISOString() }); if (error) throw error; }
+        toast('Plan sent. Stan will show it to everyone in it the next time they open the app.'); PLAN.plan = null; PLAN.saved = undefined; loadSaved();
+      } catch (e) { toast(`Didn’t send: ${e.message}`); }
+    };
+    const crewCard = (c, deadline) => {
+      const lateBy = Date.now() > c.depotAt && Date.now() < deadline ? Math.round((Date.now() + c.shiftMin * 60e3 - deadline) / 60e3) : 0;
+      return h('div', { class: `dp-card ${lateBy > 0 ? 'late' : ''}` },
+        h('h3', null, `${c.driver}${c.helpers.length ? ` with ${c.helpers.join(' and ')}` : ', on their own'}`),
+        h('div', { class: 'dp-big' }, h('div', null, h('span', null, 'At the depot by'), h('b', null, clockTime(c.depotAt))), h('div', null, h('span', null, 'First paper by'), h('b', null, clockTime(c.firstPaperAt))), h('div', null, h('span', null, 'All done by'), h('b', null, clockTime(c.finishAt)))),
+        h('table', null, h('tbody', null, c.runs.map((r) => h('tr', null, h('td', null, h('b', null, r.name), r.during ? ` (on the way through ${r.duringName})` : ''), h('td', null, r.during ? '' : `${clockTime(r.startAt)} to ${clockTime(r.finishAt)} · ${r.minutes} min${r.own ? '' : ' (all drivers)'}`))))),
+        h('p', { class: 'small muted' }, `${duration(c.shiftMin)} in all: ${c.prepMin} min at the depot, ${c.roadMin} min delivering, ${c.travelMin} min between runs.`),
+        lateBy > 0 ? h('p', { class: 'dp-late' }, `It’s past the depot time. Starting now, the last paper lands about ${clockTime(Date.now() + c.shiftMin * 60e3)}: ${lateBy} minutes after the deadline.`) : null);
+    };
+    function paint() {
+      const date = h('select', { 'aria-label': 'Delivery day', onchange: (e) => { PLAN.date = e.target.value; PLAN.plan = null; PLAN.saved = undefined; PLAN.crews = null; render(); } }, dates.filter((d) => d >= today).concat(dates.includes(PLAN.date) || PLAN.date >= today ? [] : [PLAN.date]).map((d) => h('option', { value: d, selected: d === PLAN.date || null }, new Intl.DateTimeFormat('en-NZ', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`)))));
+      const rows = drivers.map((n) => { const c = PLAN.crews[n];
+        return h('div', { class: 'dp-crew' }, h('label', { class: 'dp-name' }, h('input', { type: 'checkbox', checked: c.on || null, onchange: (e) => { c.on = e.target.checked; if (!c.on) c.helpers = []; PLAN.plan = null; paint(); } }), n),
+          c.on ? helpers.map((x) => h('label', null, h('input', { type: 'checkbox', checked: c.helpers.includes(x) || null, onchange: (e) => { for (const k of drivers) PLAN.crews[k].helpers = PLAN.crews[k].helpers.filter((y) => y !== x); if (e.target.checked) c.helpers.push(x); PLAN.plan = null; paint(); } }), `with ${x}`)) : h('span', { class: 'small muted' }, 'not driving')); });
+      const shown = PLAN.plan || PLAN.saved?.plan; const note = h('textarea', { rows: 2, placeholder: 'A note for the crew (optional), e.g. “Papers are due at the depot at 2:15”', style: 'width:100%;max-width:720px' }, PLAN.note);
+      note.addEventListener('input', () => { PLAN.note = note.value; });
+      box.replaceChildren(...[
+        h('p', { class: 'muted', style: 'max-width:760px' }, 'Tick who is driving and who is helping them. Stan works out who takes which runs, the order, and when to be at the depot, from how long each run has really taken over the last four weeks.'),
+        h('div', { class: 'ins-dates' }, h('label', null, 'Delivery day ', date), h('span', { class: 'small muted' }, `${dayRuns().length} run${dayRuns().length === 1 ? '' : 's'} loaded · deadline ${clockTime(dl().at)}`)),
+        h('div', { class: 'dp-crews' }, rows, drivers.length ? null : h('p', { class: 'muted' }, 'Nobody is marked as a driver yet: see People.')),
+        h('button', { class: 'btn primary', onclick: work, disabled: PLAN.loading || null }, PLAN.loading ? 'Working it out…' : 'Work out the plan'),
+        PLAN.error ? h('div', { class: 'banner bad' }, `Couldn’t work it out: ${PLAN.error}`) : null,
+        PLAN.saved && !PLAN.plan ? h('div', { class: 'banner dp-sent' }, `This plan was sent to the phones by ${PLAN.saved.updated_by || 'someone'} at ${clockTime(PLAN.saved.updated_at)} on ${new Intl.DateTimeFormat('en-NZ', { day: 'numeric', month: 'short', timeZone: 'Pacific/Auckland' }).format(new Date(PLAN.saved.updated_at))}.${PLAN.saved.note ? ` Note: ${PLAN.saved.note}` : ''}`) : null,
+        PLAN.plan ? h('div', { class: 'banner dp-sent' }, 'Not sent yet. Check it, then send it to the phones.') : null,
+        shown ? h('div', { class: 'dp-plan' }, shown.crews.map((c) => crewCard(c, shown.deadline))) : null,
+        shown ? h('ul', { class: 'dp-assume' }, (shown.assumptions || []).map((a) => h('li', null, a))) : null,
+        PLAN.plan ? note : null,
+        shown ? h('div', { class: 'dz-polgrid' }, PLAN.plan ? h('button', { class: 'btn primary', onclick: () => send(PLAN.note.trim()) }, PLAN.saved ? 'Send the new plan to the phones' : 'Send to the phones') : null,
+          h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(planText(shown, { date: shown.date || PLAN.date, deadline: shown.deadline })); toast('Copied.'); } catch { toast('Couldn’t copy.'); } } }, 'Copy as a message')) : null,
+      ].filter(Boolean));
+    }
+    paint(); if (PLAN.saved === undefined) loadSaved();
+    return box;
   }
   function renderInsights() {
     const today = nzDate(Date.now()); const back = (n) => nzDate(Date.now() - n * 864e5);
@@ -1300,10 +1375,14 @@ export async function viewDispatch(ctx, tab = 'overview') {
       const role = h('select', { onchange: (e) => act(() => adminCall({ action: 'role', email: m.email, role: e.target.value }), `${m.display_name}: ${e.target.value === 'dispatcher' ? 'app + dispatch' : 'app only'}.`) },
         h('option', { value: 'driver' }, 'App only'), h('option', { value: 'dispatcher' }, 'App + Dispatch'));
       role.value = m.role || 'driver';
+      const crewSel = h('select', { 'aria-label': `${m.display_name}: drives or helps`, onchange: (e) => act(async () => { const { error } = await sb.from('members').update({ crew: e.target.value }).eq('email', m.email); if (error) throw error; }, `${m.display_name}: ${e.target.value === 'helper' ? 'helper' : 'driver'}.`) },
+        h('option', { value: 'driver' }, 'Driver'), h('option', { value: 'helper' }, 'Helper'));
+      crewSel.value = m.crew || 'driver';
       return h('tr', { class: m.active === false ? 'muted' : '' },
         h('td', null, h('b', null, m.display_name)),
         h('td', null, m.email),
         h('td', null, role),
+        h('td', null, crewSel),
         h('td', null, m.active === false ? 'Off' : 'On'),
         h('td', null,
           h('button', { class: 'link small', onclick: () => {
@@ -1321,12 +1400,12 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const pw = h('input', { type: 'text', placeholder: 'Temporary password (8+)', autocomplete: 'off' });
     return h('section', { class: 'dz-main' },
       h('table', { class: 'dz-table' },
-        h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Email'), h('th', null, 'Access'), h('th', null, 'Active'), h('th', null, ''))),
+        h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Email'), h('th', null, 'Access'), h('th', null, 'On the run'), h('th', null, 'Active'), h('th', null, ''))),
         h('tbody', null, rows)),
       h('h3', null, 'Add a person'),
       h('div', { class: 'dz-polgrid' }, name, email, role, pw,
         h('button', { class: 'btn primary', onclick: () => act(() => adminCall({ action: 'add', name: name.value, email: email.value, role: role.value, password: pw.value }), `${name.value} added. Give them the password in person.`) }, 'Add')),
-      h('p', { class: 'small muted' }, 'App only: runs, ticks and photos. App + Dispatch: also this dashboard. There must always be at least one dispatcher. Everyone can change their own password from the Runs page.'));
+      h('p', { class: 'small muted' }, 'App only: runs, ticks and photos. App + Dispatch: also this dashboard. Driver or Helper (On the run): drivers take runs; helpers ride with a driver, folding and bagging and taking the passenger-side letterboxes. Stan’s day plan uses it. There must always be at least one dispatcher. Everyone can change their own password from the Runs page.'));
   }
 
   render();

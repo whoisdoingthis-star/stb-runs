@@ -165,7 +165,8 @@ class Base {
 
 const HOLD_MS = 10000;
 export const IDEA_COLUMNS = ['id', 'user_name', 'text', 'topic', 'screen', 'app_version', 'device_time'];
-export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m'];
+const nzDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m', 'helpers'];
 export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device', 'outcome', 'reason', 'qty_delivered', 'method'];
 
 // ---------------------------------------------------------------------------
@@ -239,6 +240,13 @@ export class LocalStore extends Base {
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
+  // Stan's day plan (decision 0040). Demo mode keeps plans and the drivers/helpers list on this phone.
+  async loadDayPlans() { const today = nzDay(); return LS.get('stb.dayplans', []).filter((p) => p.delivery_date >= today).sort((a, b) => (a.delivery_date < b.delivery_date ? -1 : 1)); }
+  async saveDayPlan(date, plan, note) {
+    const row = { delivery_date: date, plan, note: note || null, updated_by: this.me?.name || 'Me', updated_at: new Date().toISOString() };
+    LS.set('stb.dayplans', [...LS.get('stb.dayplans', []).filter((p) => p.delivery_date !== date), row]); return row;
+  }
+  async crewList() { return LS.get('stb.crew', []); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
   /** Rows for Stan's "Did you know" cards (decision 0036): the runs and ticks on this phone. */
   async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: runs.flatMap((r) => this.cachedEvents(r.id)), complaints: [] }; }
@@ -647,6 +655,29 @@ export class SupabaseStore extends Base {
     if (error) throw error;
     const sent = new Set(batch.map((e) => e.id));
     LS.set('stb.dutypending', this.pendingDuty().filter((e) => !sent.has(e.id)));
+  }
+  /** Day plans from today on (decision 0040); the last ones fetched when there's no signal. */
+  async loadDayPlans() {
+    try {
+      const { data, error } = await this.sb.from('day_plans').select('delivery_date, plan, note, updated_by, updated_at').gte('delivery_date', nzDay()).order('delivery_date').limit(3);
+      if (error) throw error;
+      LS.set('stb.dayplans', data); return data;
+    } catch { return super.loadDayPlans(); }
+  }
+  async saveDayPlan(date, plan, note) {
+    const row = { delivery_date: date, plan, note: note || null, updated_by: this.me?.name || null, updated_at: new Date().toISOString() };
+    const { error } = await this.sb.from('day_plans').upsert(row);
+    if (error) throw error;
+    return row;
+  }
+  /** Who drives and who helps: [{ name, crew: 'driver' | 'helper' }], people whose access is on. */
+  async crewList() {
+    try {
+      const { data, error } = await this.sb.from('members').select('display_name, crew, active');
+      if (error) throw error;
+      const list = data.filter((m) => m.active !== false).map((m) => ({ name: m.display_name, crew: m.crew || 'driver' }));
+      LS.set('stb.crew', list); return list;
+    } catch { return super.crewList(); }
   }
   /** Everyone's duty changes between two times (for Dispatch), or mine today if the table isn't there yet. */
   async loadDuty(from, to) {

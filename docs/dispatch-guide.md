@@ -49,6 +49,15 @@ Everything the family tells Stan (Chat with Stan on the phones): who, when, from
 - People who didn't tap On duty show from first to last tick; a shift with no Off duty says so.
 - **Depot**: *Set the depot…* takes a long Google Maps link (open a short goo.gl link first, then copy the address bar) or **Use my location** while standing there. Phones use it to say "You're at the depot".
 
+## Day plan
+For when you know who is working tomorrow (or today).
+1. Pick the **delivery day**. Its run sheets need to be loaded (they arrive from RouteSmart after 7pm).
+2. Tick each **driver** who is working, and tick the **helper(s)** riding with them.
+3. Press **Work out the plan**. For each driver you get: when to be at the depot, when the first paper should go out, each run with its times, and when they're all done (10 minutes before the deadline). Underneath is what Stan assumed.
+4. Add a note if you like, then **Send to the phones**. Everyone in the plan sees it from Stan the next time they open the app. **Copy as a message** gives the same plan as text for a group chat.
+
+Change who's working and send again, and the new plan replaces the old one and pops up again. A card goes **red** if it is already too late to make the deadline, and says by how much.
+
 ## Complaints
 - The **Overview** lists the complaints on today's sheet with a one-line summary: what happened and when ("Missed delivery on Sat 7 Nov"), the delivery record (who ticked it and when, with 📷 if there's a photo, or "Before the app"), and the customer's history ("2nd of 2 from this address · previous Fri 2 Oct").
 - The **Complaints** page is the full register: every complaint from every sheet, kept once. Filter by period, run, kind, status, or search an address, driver or note.
@@ -109,3 +118,5 @@ Each can be limited to certain days (none ticked = every day) and to **dates** (
 - There must always be at least one active dispatcher; the database refuses to remove the last one.
 
 Every change on the dashboard is logged (who, when, what) in `dispatch_history`.
+
+**Driver or Helper** (the *On the run* column): drivers take runs; helpers ride with a driver. Stan's day plan and the "Who's with you?" question use it. It doesn't change what anyone can see or do in the app.

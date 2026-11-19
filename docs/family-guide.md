@@ -34,6 +34,17 @@ These are remembered on that phone only.
 - The bar at the top of a run shows **finish about 6:35 am**: about when all the runs you have open will be done, at the pace you're going. If that's later than you'd like, ring someone for a hand. It also shows on the On duty card.
 - At the end, tap **Off duty**. After your last run the app asks if you're finished. **Forgot?** Once all of the day's runs are finished (every stop ticked, or the run closed), the app puts you off duty by itself, from the time the last run finished, and Stan tells you next time you open it.
 
+### Stan's plan for the day
+When Mike or Lisa has made a plan in Dispatch, **Stan pops up once** the next time you open the app and tells you:
+- who you're with (you're driving with a helper, on your own, or you're helping someone);
+- when to be **at the depot**, when the **first paper** should go out, and when you should be **all done**;
+- your runs, in order.
+
+Tap **Got it**. The plan stays on the Runs page in a yellow box; tap it to see it again. On the morning, **My runs** is already filled in in that order, so you just tap **Continue**.
+
+### Who's with you?
+If you're a driver, tapping **On duty** asks who is helping you. Tap their names (anyone in the plan is already ticked), then **Start my shift**. On your own? Just tap **Start my shift**. Helpers aren't asked: one tap and you're on duty.
+
 ## Doing a run
 If you do a run on the **paper sheet**, that's fine: Mike closes it in Dispatch afterwards and it shows on the Runs page as **✓ Closed, done on paper by** you. You can still open it.
 

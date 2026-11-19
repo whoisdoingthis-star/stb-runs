@@ -3,7 +3,8 @@
 <script type="module">
 const uuid = () => crypto.randomUUID();
 const T = {
-  members: [{ email: 'mike@example.com', display_name: 'Mike', role: 'dispatcher', active: true }, { email: 'lisa@example.com', display_name: 'Lisa', role: 'driver', active: true }],
+  members: [{ email: 'mike@example.com', display_name: 'Mike', role: 'dispatcher', active: true }, { email: 'lisa@example.com', display_name: 'Lisa', role: 'driver', active: true }, { email: 'lenny@example.com', display_name: 'Lenny', role: 'driver', crew: 'helper', active: true }],
+  day_plans: [],
   location_groups: [], operating_locations: [], service_locations: [], location_policies: [], dispatch_history: [], photos: [],
   runs: [{ id: 'r6', route: 'HOWICK06', delivery_date: '2026-11-09', summary: { lines: 98, copies: 115, byPub: { NZH: 100, NZHR: 13, WD: 2 }, dockets: 2 }, checks: [{ ok: true, label: 'NZH' }], warnings: [], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 1, items: ['13 Ambrose Lane: NZH ×1 → NZH ×2'] } }, { id: 'r8', route: 'HOWICK08', delivery_date: '2026-11-09', summary: { lines: 66, copies: 70, byPub: { NZH: 70 } }, checks: [{ ok: true }], warnings: ['x'], updated_at: '2026-11-08T06:53:00Z', source: 'auto', last_changes: { count: 0, items: [] } }],
   complaint_register: [{ id: 'c1', address_key: 'K|BROOMFIELDS ROAD|70', route: 'HOWICK13', number: '70', street: 'BROOMFIELDS ROAD', kind: 'MISSED', happened_on: '2026-11-07', publication: 'NZH', service: 'WKLY7', description: 'Missed delivery on Sat 7 Nov (NZH, 7-day subscriber)', reported_on: '2026-11-09', last_seen_on: '2026-11-09', status: 'open', customer_complaints: 2, customer_complaint_no: 2, previous_complaint_on: '2026-10-02', delivered_by: null }, { id: 'c2', address_key: 'K|CLIFTON ROAD|401', route: 'HOWICK13', number: '401', street: 'CLIFTON ROAD', kind: 'MISSED', happened_on: '2026-11-10', publication: 'NZH', description: 'Missed delivery on Tue 10 Nov', reported_on: '2026-11-09', last_seen_on: '2026-11-09', status: 'open', customer_complaints: 1, customer_complaint_no: 1, delivered_by: 'Lisa', delivered: true, delivered_at: '2026-11-09T16:42:00Z', photos_that_day: 1 }],
@@ -58,7 +59,7 @@ function from(t) {
   let op = 'select', row = null, filters = [], single = false;
   const b = {
     select() { return b; }, order() { return b; }, limit() { return b; }, single() { single = true; return b; }, maybeSingle() { single = true; return b; },
-    insert(r) { op = 'insert'; row = r; return b; }, update(r) { op = 'update'; row = r; return b; }, delete() { op = 'delete'; return b; },
+    insert(r) { op = 'insert'; row = r; return b; }, update(r) { op = 'update'; row = r; return b; }, delete() { op = 'delete'; return b; }, upsert(r) { op = 'upsert'; row = r; return b; },
     eq(c, v) { filters.push((x) => x[c] === v); return b; }, ilike(c, v) { filters.push((x) => String(x[c]).toLowerCase() === v.toLowerCase()); return b; },
     in(c, vs) { filters.push((x) => vs.includes(x[c])); return b; }, not(c, _is, v) { filters.push((x) => x[c] != null); return b; },
     then(res, rej) {
@@ -68,6 +69,7 @@ function from(t) {
       if (op === 'select') data = view(t).filter((x) => filters.every((f) => f(x)));
       if (op === 'insert' && Array.isArray(row)) { T[base].push(...row); data = row; } else if (op === 'insert') { const r = { id: uuid(), active: true, ...row }; if (base === 'location_policies' && [r.group_id, r.operating_location_id, r.service_location_id, r.address_key].filter(Boolean).length !== 1) error = { message: 'one target' }; else T[base].push(r); data = [r]; }
       if (op === 'update') { data = T[base].filter((x) => filters.every((f) => f(x))); data.forEach((x) => Object.assign(x, row)); }
+      if (op === 'upsert') { const k = Object.keys(row)[0]; T[base] = [...(T[base] || []).filter((x) => x[k] !== row[k]), row]; data = [row]; }
       if (op === 'delete') { data = T[base].filter((x) => filters.every((f) => f(x))); T[base] = T[base].filter((x) => !data.includes(x)); }
       if (single) data = data?.[0] ?? null;
       return Promise.resolve({ data, error }).then(res, rej);
