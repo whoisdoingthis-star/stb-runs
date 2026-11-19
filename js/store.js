@@ -510,6 +510,7 @@ export class SupabaseStore extends Base {
         if (error) throw error;
         for (const d of data) if (d.lat != null) out[d.address_key] = d;
       }
+      for (const k of keys) if (!(k in out)) delete cached[k]; // no point any more (a learned one can be withdrawn): don't keep the old one for offline
       LS.set('stb.dest', { ...cached, ...out });
       return out;
     } catch { return Object.fromEntries(keys.filter((k) => cached[k]).map((k) => [k, cached[k]])); }

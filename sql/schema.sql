@@ -122,19 +122,40 @@ from public.tap_events
 order by run_id, line_key, device_time desc, server_time desc;
 
 
--- Where each letterbox actually is, from good GPS fixes on completed taps.
--- Groundwork for learned sequencing.
+-- Where each letterbox actually is, learned from the GPS on real delivery ticks (decision 0039).
+-- Stan guides to this point when Dispatch hasn't set a stop; it's also the groundwork for learned sequencing.
+--  - Only ticks made in the app at the time (not paper, photo or corrected records), delivered, with a fix good to 40 m.
+--  - The middle (median) of an address's ticks is found first, then only the ticks within 30 m of it are averaged,
+--    so a tick made from further up the road, or by mistake somewhere else, can't drag the point away.
+--  - At least two ticks must agree, and they must be at least half of all the ticks at that address.
+--    Otherwise there is no learned point and the app falls back to looking the street address up.
 create or replace view public.address_positions with (security_invoker = true) as
+with good as (
+  select address_key, lat, lng, accuracy_m, device_time
+  from public.tap_events
+  where done and lat is not null and accuracy_m <= 40 and method is null and coalesce(outcome, 'delivered') <> 'futile'
+), mid as (
+  select address_key,
+         percentile_cont(0.5) within group (order by lat) as mlat,
+         percentile_cont(0.5) within group (order by lng) as mlng,
+         count(*) as n
+  from good group by address_key
+), agree as (
+  select g.address_key, g.lat, g.lng, g.accuracy_m, g.device_time, m.n
+  from good g join mid m using (address_key)
+  where 111320 * sqrt(power(g.lat - m.mlat, 2) + power((g.lng - m.mlng) * cos(radians(m.mlat)), 2)) <= 30
+)
 select
   address_key,
-  count(*)                          as taps,
+  count(*)                          as taps,          -- the ticks that agree
   avg(lat)                          as lat,
   avg(lng)                          as lng,
   percentile_cont(0.5) within group (order by accuracy_m) as median_accuracy_m,
-  max(device_time)                  as last_tap
-from public.tap_events
-where done and lat is not null and accuracy_m <= 40
-group by address_key;
+  max(device_time)                  as last_tap,
+  max(n)                            as all_taps        -- every good tick at the address, agreeing or not
+from agree
+group by address_key
+having count(*) >= 2 and count(*) * 2 >= max(n);
 
 -- ---------------------------------------------------------------
 -- Your own delivery order for a route, set by holding and dragging tiles.

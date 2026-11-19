@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Stan's aim is better** (Mike, 19 Nov): the spot he guides to for each address is learned from real ticks, and now only from ticks that agree with each other, so one tick made from up the road (or by mistake somewhere else) can't pull it off. 59 addresses moved to a better spot, two of them by more than 500 m. ([decision 0039](docs/decisions/0039-learned-letterbox.md))
 - **Off duty by itself** (Mike, 18 Nov): if you're still on duty when all of the day's runs are finished (every stop ticked, or the run closed), the app puts you off duty from the time the last run finished, and tells you. Dispatch shows it straight away. ([decision 0038](docs/decisions/0038-auto-off-duty.md))
 - The delivery report shows a hand-corrected delivery as **Corrected record**, with the note explaining it (first one: 36 Clifton Road, Run 13, 18 Nov).
 - **An older tick asks before it's unticked** (Mike, 18 Nov): tap a green tile that was ticked more than a minute ago, or by someone else, and the app asks first. **✓ Delivered just now** keeps it ticked with the right time and place; **Untick it** and **Leave it** are the other choices. A slip made a moment ago still unticks with one tap. ([decision 0037](docs/decisions/0037-ask-before-unticking.md))

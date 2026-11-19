@@ -159,6 +159,18 @@ await db.query(`update operating_locations set lat=-36.9, lng=174.9 where id=$1`
 const dest = (await db.query(`select source, lat from address_destinations where address_key='K|A|1'`)).rows[0];
 check('directions go to the stop set in Dispatch when it has GPS', dest?.source === 'stop' && Number(dest.lat) === -36.9);
 
+// ---- the letterbox learned from real ticks (decision 0039) ----
+const lp = async (key, pts, extra = '') => { for (const [la, ln] of pts) await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time,lat,lng,accuracy_m,user_id${extra ? ',method' : ''}) values (gen_random_uuid(),$1,$2,$2,'HOWICK06',true,now(),$3,$4,6,auth.uid()${extra ? `,'${extra}'` : ''})`, [id, key, la, ln]); };
+const learned = async (key) => (await db.query(`select taps, all_taps, lat, lng from address_positions where address_key=$1`, [key])).rows[0];
+await lp('K|L|1', [[-36.9100, 174.9100]]);
+check('one tick alone is not enough to learn where a letterbox is', !(await learned('K|L|1')));
+await lp('K|L|2', [[-36.92000, 174.92000], [-36.92003, 174.92002], [-36.92001, 174.91998], [-36.93500, 174.94000]]);
+{ const p = await learned('K|L|2'); check('a tick made somewhere else can’t drag the learned point away', p && Number(p.taps) === 3 && Number(p.all_taps) === 4 && Math.abs(Number(p.lat) + 36.92001) < 0.00003 && Math.abs(Number(p.lng) - 174.92) < 0.00003, JSON.stringify(p)); }
+await lp('K|L|3', [[-36.9300, 174.9300], [-36.9340, 174.9340], [-36.9380, 174.9380], [-36.9420, 174.9420]]);
+check('ticks that don’t agree teach nothing', !(await learned('K|L|3')));
+await lp('K|L|4', [[-36.9500, 174.9500], [-36.9500, 174.9500]], 'correction');
+check('corrected and photo records don’t teach positions', !(await learned('K|L|4')));
+
 // ---- each person's own order ----
 await as('lisa@example.com');
 await db.query(`insert into person_sequences(route, user_id, address_keys, updated_by) values ('HOWICK06', auth.uid(), '["K|B|2","K|A|1"]', 'Lisa')`);

@@ -121,7 +121,7 @@ When a sheet replaces an earlier one for the same run and day, these are compare
 ## Directions
 (Mike, 10 Nov 2026.) **Google Maps, one stop at a time, only when asked.** The arrow in the bottom bar opens Google Maps driving directions to the next stop. Waze isn't used. The destination is, in order:
 1. the stop (operating location) set in Dispatch, if it has GPS: where the vehicle parks, so the Bruce McLaren buildings go to their car parks, not each letterbox (navigation goes stop to stop: 8 Nov 2026);
-2. otherwise the letterbox position learned from good GPS ticks (`address_positions`);
+2. otherwise the letterbox position learned from good GPS ticks (`address_positions`): only where at least two real ticks agree, so a tick made elsewhere can't move it (Mike, 19 Nov 2026; [decision 0039](decisions/0039-learned-letterbox.md));
 3. otherwise the street address ("18 Moore Street, Howick, Auckland").
 
 A Navigate for several stops at once (Google Maps waypoints) and our own floating mini-map remain on the [roadmap](roadmap.md). — `js/app.js` `directions`, view `address_destinations`

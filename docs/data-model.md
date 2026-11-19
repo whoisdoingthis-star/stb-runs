@@ -35,7 +35,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 
 ## Views
 - `line_status`: latest tick state per tile, with its outcome, reason, quantity delivered and method.
-- `address_positions`: average of good GPS fixes per letterbox, for working out delivery order.
+- `address_positions`: where each letterbox is, learned from real delivery ticks: the average of the ticks that agree (within 30 m of the middle of them), only when at least two agree and they are at least half of the ticks there. Stan guides to it when Dispatch has set no stop ([decision 0039](decisions/0039-learned-letterbox.md)).
 - `complaint_register`: complaints with who ticked that delivery (time, GPS accuracy, outcome and reason), photos that day, and the address's complaint count, order and previous date.
 - `policy_clashes`: pairs of active policies that disagree (can appear after an address moves to a different stop).
 - `run_times`: per run, the first and last app tick and how many (paper ticks left out). How long a route usually takes, and whether it made its deadline.
