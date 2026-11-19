@@ -1,4 +1,4 @@
-import { EVENT_COLUMNS, DUTY_COLUMNS } from '../js/store.js';
+import { EVENT_COLUMNS, DUTY_COLUMNS, SupabaseStore } from '../js/store.js';
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'fs';
 const db = new PGlite();
@@ -247,4 +247,14 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   const rt = (await db.query(`select count(*)::int n, bool_and(first_tick <= last_tick) ok from run_times`)).rows[0];
   check('run_times gives the first and last app tick of each run', rt.n >= 1 && rt.ok);
   check('paper ticks don’t count towards a run’s time', (await db.query(`select count(*)::int n from run_times t where not exists (select 1 from tap_events e where e.run_id = t.run_id and e.done and e.method is distinct from 'paper')`)).rows[0].n === 0);
+}
+// ---- The shared store's fallbacks exist (20 Nov 2026: Got it was silently lost because super.markNoticesSeen wasn't there) ----
+{
+  const src = fs.readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
+  const shared = src.slice(src.indexOf('export class SupabaseStore'));
+  const parent = Object.getPrototypeOf(SupabaseStore.prototype);
+  const missing = [...new Set([...shared.matchAll(/super\.(\w+)\(/g)].map((m) => m[1]))].filter((m) => typeof parent[m] !== 'function');
+  const own = [...new Set([...shared.matchAll(/this\.(my\w+)\(/g)].map((m) => m[1]))].filter((m) => typeof SupabaseStore.prototype[m] !== 'function');
+  check('every fallback the shared store calls on its parent exists', missing.length === 0 && own.length === 0);
+  if (missing.length || own.length) console.log('  missing:', [...missing, ...own].join(', '));
 }

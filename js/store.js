@@ -161,6 +161,27 @@ class Base {
       return out;
     });
   }
+  // Stan's day plan (decision 0040). Kept on this phone: all there is in demo mode, and what the shared store falls back to with no signal.
+  async loadDayPlans() { const today = nzDay(); return LS.get('stb.dayplans', []).filter((p) => p.delivery_date >= today).sort((a, b) => (a.delivery_date < b.delivery_date ? -1 : 1)); }
+  async saveDayPlan(date, plan, note) {
+    const row = { delivery_date: date, plan, note: note || null, updated_by: this.me?.name || 'Me', updated_at: new Date().toISOString() };
+    LS.set('stb.dayplans', [...LS.get('stb.dayplans', []).filter((p) => p.delivery_date !== date), row]); return row;
+  }
+  async crewList() { return LS.get('stb.crew', []); }
+  /** A helper with no login ("Other…" on Who's with you?): kept so they're a button next time. */
+  async addHelperName(name) { const list = LS.get('stb.crew', []); if (!list.some((c) => c.name.toLowerCase() === name.toLowerCase())) LS.set('stb.crew', [...list, { name, crew: 'helper', extra: true }]); }
+  // The notice board (decision 0041). Demo mode keeps notes on this phone.
+  async loadNotices() { return { notices: LS.get('stb.notices', []), seen: LS.get('stb.noticeseen', []) }; }
+  async addNotice({ body, to_names, expires_at }) {
+    const n = { id: uuid(), from_name: this.me?.name || 'Me', body, to_names: to_names?.length ? to_names : null, created_at: new Date().toISOString(), expires_at: expires_at || null };
+    LS.set('stb.notices', [...LS.get('stb.notices', []), n]); return n;
+  }
+  async markNoticesSeen(ids) { const me = this.me?.name || 'Me'; const have = LS.get('stb.noticeseen', []); LS.set('stb.noticeseen', [...have, ...ids.filter((id) => !have.some((s) => s.notice_id === id && s.user_name === me)).map((id) => ({ notice_id: id, user_name: me, seen_at: new Date().toISOString() }))]); }
+  async removeNotice(id) { LS.set('stb.notices', LS.get('stb.notices', []).map((n) => (n.id === id ? { ...n, removed_at: new Date().toISOString(), removed_by: this.me?.name || 'Me' } : n))); }
+  // Stan's Paper Run (decision 0034): my own games are kept on the phone; the shared store adds the family's.
+  myScores() { return LS.get('stb.scores', []); }
+  async saveScore(row) { const r = { user_name: this.me?.name || 'Me', ...row, device_time: new Date().toISOString() }; LS.set('stb.scores', [...this.myScores(), r].sort((a, b) => b.score - a.score).slice(0, 20)); return r; }
+  async loadScores() { return this.myScores(); }
 }
 
 const HOLD_MS = 10000;
@@ -232,31 +253,10 @@ export class LocalStore extends Base {
   onPing() { return () => {}; }
   async answerPing() {}
   async loadAvatars() { return LS.get('stb.avatars', {}); }
-  // Stan's Paper Run (decision 0034): my own games are kept on the phone; the shared store adds the family's.
-  myScores() { return LS.get('stb.scores', []); }
-  async saveScore(row) { const r = { user_name: this.me?.name || 'Me', ...row, device_time: new Date().toISOString() }; LS.set('stb.scores', [...this.myScores(), r].sort((a, b) => b.score - a.score).slice(0, 20)); return r; }
-  async loadScores() { return this.myScores(); }
   async setAvatar(kind, value) { const m = { ...LS.get('stb.avatars', {}), [this.me?.name || 'Me']: { kind, value } }; LS.set('stb.avatars', m); return m; }
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
-  // Stan's day plan (decision 0040). Demo mode keeps plans and the drivers/helpers list on this phone.
-  async loadDayPlans() { const today = nzDay(); return LS.get('stb.dayplans', []).filter((p) => p.delivery_date >= today).sort((a, b) => (a.delivery_date < b.delivery_date ? -1 : 1)); }
-  async saveDayPlan(date, plan, note) {
-    const row = { delivery_date: date, plan, note: note || null, updated_by: this.me?.name || 'Me', updated_at: new Date().toISOString() };
-    LS.set('stb.dayplans', [...LS.get('stb.dayplans', []).filter((p) => p.delivery_date !== date), row]); return row;
-  }
-  async crewList() { return LS.get('stb.crew', []); }
-  /** A helper with no login ("Other…" on Who's with you?): kept so they're a button next time. */
-  async addHelperName(name) { const list = LS.get('stb.crew', []); if (!list.some((c) => c.name.toLowerCase() === name.toLowerCase())) LS.set('stb.crew', [...list, { name, crew: 'helper', extra: true }]); }
-  // The notice board (decision 0041). Demo mode keeps notes on this phone.
-  async loadNotices() { return { notices: LS.get('stb.notices', []), seen: LS.get('stb.noticeseen', []) }; }
-  async addNotice({ body, to_names, expires_at }) {
-    const n = { id: uuid(), from_name: this.me?.name || 'Me', body, to_names: to_names?.length ? to_names : null, created_at: new Date().toISOString(), expires_at: expires_at || null };
-    LS.set('stb.notices', [...LS.get('stb.notices', []), n]); return n;
-  }
-  async markNoticesSeen(ids) { const me = this.me?.name || 'Me'; const have = LS.get('stb.noticeseen', []); LS.set('stb.noticeseen', [...have, ...ids.filter((id) => !have.some((s) => s.notice_id === id && s.user_name === me)).map((id) => ({ notice_id: id, user_name: me, seen_at: new Date().toISOString() }))]); }
-  async removeNotice(id) { LS.set('stb.notices', LS.get('stb.notices', []).map((n) => (n.id === id ? { ...n, removed_at: new Date().toISOString(), removed_by: this.me?.name || 'Me' } : n))); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
   /** Rows for Stan's "Did you know" cards (decision 0036): the runs and ticks on this phone. */
   async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: runs.flatMap((r) => this.cachedEvents(r.id)), complaints: [] }; }
