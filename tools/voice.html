@@ -38,7 +38,7 @@
   </div>
 </main>
 <script type="module">
-import { STAN_VOICE, playStanClip } from '../js/stanvoice.js';
+import { STAN_VOICE, playStanClip } from '../js/stanfx.js';
 const $ = (id) => document.getElementById(id); const keys = ['reverb', 'room', 'robot', 'speed'];
 let ctx = null; let buffer = null; let playing = null;
 const now = () => Object.fromEntries(keys.map((k) => [k, +$(k).value]));
