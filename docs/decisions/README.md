@@ -52,6 +52,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0046 | [The route as delivered, traced on the map](0046-route-as-delivered.md) | 2026-11-21 | Accepted (steps 1 and 2). Step 3, pricing a different order, is not built. |
 | 0047 | [Stan talks: his recorded voice in the app](0047-stan-talks.md) | 2026-11-21 | Accepted |
 | 0048 | [Dispatch on a phone: sections along the bottom, pages as pills, tables as cards](0048-dispatch-on-a-phone.md) | 2026-11-21 | Accepted |
+| 0049 | [The Runs page follows the morning](0049-runs-page-follows-the-morning.md) | 2026-11-21 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 

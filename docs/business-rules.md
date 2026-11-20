@@ -222,3 +222,6 @@ Rules attached to exactly one group, operating location, service location or add
 - Enforced by the database, not just the screens: only dispatchers can change locations, policies, assignments or people.
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.
+
+## Run 8 and Run 10 (Mike, 21 Nov 2026)
+Run 8 (the village) is normally dropped off part-way through Run 10, by the same crew. On rare mornings someone does Run 8 on its own. The app shows them together when the plan has them together, and never forces it: whoever has Run 8 without Run 10 in My runs sees it as a run of its own.

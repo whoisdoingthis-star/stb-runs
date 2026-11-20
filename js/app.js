@@ -787,7 +787,7 @@ function planSlot(redrawDuty) {
   const loaded = (async () => {
     try {
       const [mod, plans, crew] = await Promise.all([import('./dayplan.js'), app.store.loadDayPlans(), app.store.crewList().catch(() => [])]);
-      app.crew = crew; app.planClock = mod.clockTime;
+      app.crew = crew; app.planClock = mod.clockTime; app.planPace = mod.paceAgainstPlan;
       const row = plans.find((p) => mod.myPart(p.plan, app.me.name));
       return row ? { row, part: mod.myPart(row.plan, app.me.name) } : null;
     } catch { return null; }
@@ -833,7 +833,9 @@ function dutyCard(todayRuns, rerender) {
     const hint = h('p', { class: 'muted duty-hint' }, firstTime ? 'Hi, I’m Stan! Tap On duty when you get to the depot, and I’ll count your time from there, sorting and loading too.' : 'Tap when you get to the depot. It counts sorting and loading too.');
     card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), firstTime ? h('div', { class: 'duty-hello' }, stan({ pose: 'wave', size: 44 }), hint) : hint,
       h('button', { class: 'btn primary big duty-btn', onclick: () => startShift(rerender, todayRuns) }, 'On duty'),
-      mineRow, pickBtn].filter(Boolean));
+      // Before the shift the tiles below start a run, so the order only needs a small Change beside it; Continue shows once something is ticked.
+      ...(mine.length && !mine.some((r) => r.done) ? [h('div', { class: 'my-runs' }, h('span', null, `My runs: ${mine.map((r) => shortRoute(r.route)).join(' → ')}`),
+        h('button', { class: 'btn small', 'aria-label': 'Change my runs', onclick: () => openMyRuns(todayRuns, rerender) }, 'Change'))] : [mineRow, pickBtn])].filter(Boolean));
     // At the depot already? Say so (only if GPS is already allowed, and the depot is set in Dispatch).
     app.store.getSetting('depot').then(async (dep) => {
       if (!dep?.lat) return;
@@ -844,13 +846,30 @@ function dutyCard(todayRuns, rerender) {
   }
   const start = shiftStart(app.store.myDuty());
   const where = st.run_id ? todayRuns.find((r) => r.id === st.run_id) : null;
+  // On the run: the top of the page is the run you're on, how far through it you are, and one button to carry on (decision 0049).
+  const todo = mine.filter((r) => !runComplete(r));
+  const now = st.state === 'on_run' ? (where && !runComplete(where) ? where : todo[0]) : null;
+  let hero = null;
+  if (now) {
+    const stops = now.summary?.lines || 0; const done = Math.min(now.done || 0, stops);
+    const planRun = app.plan?.today ? app.plan.part.runs.find((x) => x.route === now.route) : null;
+    const pace = planRun && app.planPace ? app.planPace(planRun, done, stops, Date.now()) : null;
+    const rest = mine.includes(now) ? todo.slice(todo.indexOf(now)).concat(todo.slice(0, Math.max(0, todo.indexOf(now)))) : [now];
+    hero = h('div', { class: 'hero-now' },
+      h('div', { class: 'hero-top' }, h('span', { class: 'hero-k' }, mine.includes(now) ? `Now · run ${mine.indexOf(now) + 1} of ${mine.length}` : 'Now'),
+        pace ? h('span', { class: `hero-pace ${pace.late ? 'late' : ''}` }, pace.text) : null),
+      h('div', { class: 'hero-run' }, h('b', null, shortRoute(now.route)), h('span', null, `${done} of ${stops}`)),
+      h('div', { class: 'bar hero-bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })),
+      h('button', { class: 'btn primary big hero-go', onclick: () => { location.hash = `#/r/${rest.map((r) => r.id).join('+')}`; } }, `${done ? 'Continue' : 'Start'} ${shortRoute(now.route)}`));
+  }
+  const trail = hero && mine.length ? h('div', { class: 'my-runs' }, h('span', null, `My runs: ${mine.map((r) => `${runComplete(r) ? '✓ ' : ''}${shortRoute(r.route)}`).join(' → ')}`)) : mineRow;
   const timer = h('span', { class: 'duty-timer' }, clock(Date.now() - start));
   card.append(...[
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
     st.state === 'on_duty' && (app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')
       ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); rerender(); askSpares('start', todayRuns); } }, 'Leaving the depot now') : null,
-    mineRow, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
+    hero, trail, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
   card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
   return card;
 }
@@ -921,8 +940,7 @@ async function viewHome() {
     dutySlot,
     planEl,
     stanCardSlot(),
-    stanChatButton('home'),
-    noticeEl,
+    h('div', { class: 'home-mini' }, noticeEl, stanChatButton('home')),
     summaryEl,
     list));
 
@@ -935,7 +953,7 @@ async function viewHome() {
     app.todayRuns = runs.filter((r) => r.delivery_date === nzToday());
     drawDuty(runs);
     const todays = runs.filter((r) => r.delivery_date === nzToday()); lastRuns = todays; summaryEl._update(todays);
-    planEl._update(runs).finally(() => { if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } if (!summaryAsked) { summaryAsked = true; setTimeout(async () => { if (await showSummary(todays, { settled: true })) summaryEl._update(todays); }, 1500); } });
+    planEl._update(runs).finally(() => { if (app.plan?.today && list.isConnected) { drawDuty(runs); paint(); } if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } if (!summaryAsked) { summaryAsked = true; setTimeout(async () => { if (await showSummary(todays, { settled: true })) summaryEl._update(todays); }, 1500); } });
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
         boredStan(stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' })),
@@ -943,6 +961,8 @@ async function viewHome() {
         h('button', { class: `btn big ${app.store.mode === 'shared' ? '' : 'primary'}`, style: 'margin-top:8px', onclick: () => fileInput.click() }, 'Upload a run sheet (PDF)')));
       return;
     }
+    paint();
+    function paint() {
     const byDate = {};
     for (const r of runs) (byDate[r.delivery_date] ||= []).push(r);
     // After Get Runs: once every run for that day has been replaced, say what changed.
@@ -964,13 +984,31 @@ async function viewHome() {
     const pick = (fn) => { const o = {}; for (const r of runs) if (fn(r)) (o[r.delivery_date] ||= []).push(r); return o; };
     const cur = pick(isCurrent); const past = pick((r) => !isCurrent(r));
     const daySection = (date, group) => {
-      const rs = [...group[date]].sort((a, b) => a.route.localeCompare(b.route));
+      let rs = [...group[date]].sort((a, b) => a.route.localeCompare(b.route));
+      // Today's tiles follow the morning (decision 0049): my runs first, in my order; a run dropped off inside another sits with it.
+      const live = date === today && group === cur; const dst = live ? duty() : null;
+      const onRun = !!dst?.onDuty && dst.state === 'on_run'; const atDepot = !!dst?.onDuty && !onRun;
+      const planRuns = live && app.plan?.today ? app.plan.part.runs : [];
+      const nest = {};
+      if (live) {
+        const mineIds = myRuns(); const pos = (r) => { const i = mineIds.indexOf(r.id); return i < 0 ? 1e6 : i; };
+        rs.sort((a, b) => pos(a) - pos(b) || a.route.localeCompare(b.route));
+        for (const pr of planRuns) { if (!pr.during) continue;
+          const rider = rs.find((r) => r.route === pr.route); const host = rs.find((r) => r.route === pr.during);
+          if (!rider || !host || (mineIds.length && mineIds.includes(rider.id) !== mineIds.includes(host.id))) continue;   // someone doing it on its own keeps it on its own
+          rs = rs.filter((r) => r !== rider); rs.splice(rs.indexOf(host) + 1, 0, rider); nest[host.id] = rider; }
+      }
+      const riderOf = new Map(Object.entries(nest).map(([hostId, rider]) => [rider.id, rs.find((r) => String(r.id) === hostId)]));
+      const byTime = (r) => { const pr = planRuns.find((x) => x.route === r.route); return pr?.finishAt && app.planClock ? ` · by ${app.planClock(pr.finishAt)}` : ''; };
+      const papers = () => h('details', { class: 'papers', open: atDepot ? '' : null }, h('summary', null, `${atDepot ? 'To load' : 'To collect'}: ${rs.reduce((t, r) => t + (r.summary?.copies || 0), 0)} items`,
+        rs.some((r) => r.summary?.dockets) ? `, ${rs.reduce((t, r) => t + (r.summary?.dockets || 0), 0)} dockets` : ''), paperSummary(rs, live));
       const changed = rs.filter((r) => r.last_changes?.count);
       const latest = rs.reduce((m, r) => { const t = r.updated_at || r.created_at; return t > m ? t : m; }, '');
       const auto = rs.every((r) => r.source === 'auto');
       return h('section', { class: 'date-group' },
         h('div', { class: 'date-head' }, h('h2', null, dayName(date)),
           rs.length > 1 ? h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${rs.map((r) => r.id).join('+')}`; } }, 'Open all') : null),
+        live && !onRun ? papers() : null,
         latest ? h('div', { class: `updated ${changed.length ? 'some' : ''}` },
           `Updated ${fmtStamp(latest)} ${auto ? 'from RouteSmart' : 'by upload'}`,
           changed.length ? ` · ${changed.map((r) => changeSummary(r.route, r.last_changes)).join(' · ')}` : rs.some((r) => r.last_changes) ? ' · no changes' : '') : null,
@@ -978,12 +1016,15 @@ async function viewHome() {
           const stops = r.summary?.lines || 0;
           const done = r.done || 0;
           const dockets = r.summary?.dockets || 0;
-          return h('div', { class: 'run-tile-wrap' },
+          const host = riderOf.get(r.id);
+          return h('div', { class: `run-tile-wrap ${nest[r.id] ? 'nest-host' : ''} ${host ? 'nest-rider' : ''}`.trim() },
+            host ? h('div', { class: 'nest-note' }, `Dropped off part-way through ${shortRoute(host.route)}`,
+              h('button', { class: 'btn small', onclick: () => { location.hash = `#/r/${host.id}+${r.id}`; } }, 'Open both')) : null,
             h('button', { class: `run-tile ${(done && done >= stops) || r.closed_at ? 'finished' : ''}`, onclick: () => { location.hash = `#/r/${r.id}`; } },
               h('div', { class: 'rt-main' },
                 h('div', { class: 'rt-name' }, shortRoute(r.route)),
-                h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} items${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}`),
-                pickList(r).length ? h('div', { class: 'rt-pick' }, h('span', { class: 'rt-pick-label' }, 'Pick'),
+                h('div', { class: 'rt-sub' }, `${stops} stops · ${r.summary?.copies ?? '?'} items${dockets ? ` · ${dockets} docket${dockets === 1 ? '' : 's'}` : ''}${byTime(r)}`),
+                pickList(r).length && !onRun && !atDepot ? h('div', { class: 'rt-pick' }, h('span', { class: 'rt-pick-label' }, 'Pick'),
                   pickList(r).map((x) => pickItem(x))) : null,
                 done ? h('div', { class: 'bar' }, h('i', { style: `width:${stops ? Math.round((100 * done) / stops) : 0}%` })) : null,
                 r.closed_at ? h('div', { class: 'rt-closed' }, `✓ Closed${r.close_method === 'paper' ? ', done on paper' : ''}${r.driver ? ` by ${r.driver}` : ''}`)
@@ -992,8 +1033,7 @@ async function viewHome() {
             r.last_changes?.count ? h('details', { class: 'change-list' }, h('summary', null, `What changed on ${shortRoute(r.route)}`),
               h('ul', null, r.last_changes.items.map((x) => h('li', null, x)))) : null);
         }),
-        h('details', { class: 'papers' }, h('summary', null, `To collect: ${rs.reduce((t, r) => t + (r.summary?.copies || 0), 0)} items`,
-          rs.some((r) => r.summary?.dockets) ? `, ${rs.reduce((t, r) => t + (r.summary?.dockets || 0), 0)} dockets` : ''), paperSummary(rs)));
+        live && !onRun ? null : papers());
     };
     const nPast = Object.values(past).reduce((n, rs) => n + rs.length, 0);
     const tabs = h('div', { class: 'seg home-tabs', role: 'group', 'aria-label': 'Which runs' },
@@ -1005,6 +1045,7 @@ async function viewHome() {
       ? (curDates.length ? curDates.map((d) => daySection(d, cur)) : [h('div', { class: 'empty' }, Object.keys(byDate).some((d) => d >= today)
         ? boredStan(stanSays('All done! Finished runs are under History.', { pose: 'hop' })) : boredStan(stanSays('No runs for today or tomorrow yet. They load themselves after 7pm.')))])
       : (pastDates.length ? pastDates.map((d) => daySection(d, past)) : [h('div', { class: 'empty' }, stanSays('Finished runs will show here.'))])));
+    }
   }
   await renderList();
 
@@ -1134,8 +1175,8 @@ const fmtStamp = (iso) => new Date(iso).toLocaleString('en-NZ', { weekday: 'shor
 // Papers to collect for a day: each run's copies by paper, plus totals.
 // Retail codes (NZHR…) are the same paper, so they count in its column;
 // the Dockets column is how many delivery dockets to bring (one per retail drop).
-function paperSummary(rs) {
-  const runs = [...rs].sort((a, b) => a.route.localeCompare(b.route));
+function paperSummary(rs, keepOrder = false) {
+  const runs = keepOrder ? [...rs] : [...rs].sort((a, b) => a.route.localeCompare(b.route));
   const papers = (r) => {
     const out = {};
     for (const [p, q] of Object.entries(r.summary?.byPub || {})) out[basePub(p)] = (out[basePub(p)] || 0) + q;

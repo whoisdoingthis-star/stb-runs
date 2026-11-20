@@ -17,8 +17,15 @@ iPhone: links opened from Messages open in Safari, which keeps its own sign-in, 
 These are remembered on that phone only.
 
 ## The Runs page
+**The page changes as your morning goes**, so the top always shows what to do next:
+
+- **Before you start:** the big **On duty** button, Stan's plan, then **To collect** and today's runs **in the order you'll do them**. Each run says when the plan has it done by.
+- **At the depot** (after On duty): **To load** opens by itself, with every run's papers in your order. Tap **Leaving the depot now** when you drive off.
+- **On the run:** the top card shows the run you're on (say **Run 11**, **14 of 26**), a bar filling up, and one big **Continue** button. Once you've ticked a stop it also says **On plan**, **6 min ahead** or **8 min behind**. That's just where Stan's plan thought you'd be: it isn't a score.
+- **Run 8 inside Run 10:** when Run 8 is being dropped off on the way through Run 10, it sits just under Run 10. Tap **Open both** to work them together. If you're doing Run 8 by itself, it shows on its own.
+
 - Each run is a big card: **Run 6**, how many stops, items (papers and magazines) and dockets. Tap it to **Start** (or **Continue**).
-- **Pick** on each card is what to collect at the depot, from the report: e.g. **NZH** 1 bundle of 140 + 5 loose (includes 15 for retail), **WD** 2 loose. Shop copies are counted in with the NZH; the note says how many are for shops.
+- **Pick** on each card (before you go on duty) is what to collect at the depot, from the report: e.g. **NZH** 1 bundle of 140 + 5 loose (includes 15 for retail), **WD** 2 loose. Shop copies are counted in with the NZH; the note says how many are for shops.
 - **Open all** opens every run for that day together.
 - The line under the date says when the sheets were last updated, and whether anything changed since the previous sheet ("Run 13: 2 details changed"). Tap **What changed on Run 13** to see the list.
 - **To collect** (tap to open): how many of each paper or magazine every run needs, how many **delivery dockets** to bring (one for each shop), and the **depot pick** for every run in one list, with an **All runs** line at the bottom: the day's total for each paper or magazine as whole bundles plus loose, worked out from that day's bundle size ("NZH 3 bundles of 80 + 79 loose = 319"). The bundle size comes from the day's sheets, as it changes from day to day.

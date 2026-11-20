@@ -1010,3 +1010,23 @@ html.big .sum-say { font-size: 22px; } html.big .sum-outcome { font-size: 23px; 
   .dz input[type=checkbox] { width: 22px; height: 22px; }
   .dz-runmap { height: 56vh; }
 }
+
+/* ===== The Runs page follows the morning (decision 0049) ===== */
+.hero-now { display: grid; gap: 6px; background: var(--card); border-radius: 14px; padding: 12px 14px; }
+.hero-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.hero-k { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.hero-pace { font-size: 14px; font-weight: 800; padding: 3px 10px; border-radius: 99px; background: var(--done-bg); color: var(--ink); border: 1px solid var(--done-line); }
+.hero-pace.late { background: transparent; border-color: var(--edge); }
+.hero-run { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.hero-run b { font-size: 30px; line-height: 1.1; } .hero-run span { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hero-bar { height: 12px; margin: 2px 0 4px; }
+.duty-card .hero-now + .my-runs { font-weight: 400; font-size: 14px; color: var(--muted); }
+.home-mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.home-mini > * { margin: 0; min-width: 0; } .home-mini .notice-slot:empty { display: none; }
+.home-mini .btn { min-height: 48px; height: 100%; padding-left: 8px; padding-right: 8px; }
+html.big .home-mini { grid-template-columns: 1fr; }
+.page.home:has(.duty-card.on) .plan-card { padding-top: 6px; padding-bottom: 6px; }
+.page.home:has(.duty-card.on) .plan-card .stan, .page.home:has(.duty-card.on) .plan-card-sub { display: none; }
+.run-tile-wrap.nest-rider { margin-left: 14px; padding-left: 10px; border-left: 3px solid var(--edge); }
+.nest-note { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin: -4px 0 6px; }
+.date-group > details.papers[open] { margin-bottom: 12px; }

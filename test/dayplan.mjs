@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { runStats, hopMinutes, bestOrder, buildPlan, planText, myPart, clockTime, PREP_S_PER_PAPER, BUFFER_MIN, LOAD_MIN } from '../js/dayplan.js';
+import { runStats, hopMinutes, bestOrder, buildPlan, planText, myPart, clockTime, paceAgainstPlan, PREP_S_PER_PAPER, BUFFER_MIN, LOAD_MIN } from '../js/dayplan.js';
 import { runMornings } from '../js/insights.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
@@ -50,4 +50,8 @@ t('a run that is always dropped off inside another rides along and adds no time'
   assert.ok(p.assumptions.some((a) => /Run 8 is dropped off part-way through Run 10/.test(a))); assert.match(planText(p, { date: '2026-11-20', deadline }), /Run 8 on the way through Run 10/);
 });
 t('nobody driving, no plan', () => assert.deepEqual(buildPlan({ runs: today, crews: [], stats: S, deadline }).crews, []));
+const T0 = Date.parse('2026-11-23T02:30:00+13:00'); const PR = { startAt: T0, finishAt: T0 + 60 * 60e3 };   // an hour planned for the run
+t('against the plan: half the stops done at the half-hour is on plan, and so is three minutes either way', () => { assert.equal(paceAgainstPlan(PR, 50, 100, T0 + 30 * 60e3).text, 'On plan'); assert.equal(paceAgainstPlan(PR, 50, 100, T0 + 33 * 60e3).text, 'On plan'); assert.equal(paceAgainstPlan(PR, 50, 100, T0 + 27 * 60e3).late, false); });
+t('against the plan: it says the minutes ahead or behind, and only behind counts as late', () => { const a = paceAgainstPlan(PR, 50, 100, T0 + 20 * 60e3); assert.equal(a.text, '10 min ahead'); assert.equal(a.late, false); const b = paceAgainstPlan(PR, 50, 100, T0 + 42 * 60e3); assert.equal(b.text, '12 min behind'); assert.equal(b.late, true); });
+t('against the plan: nothing to say before the first tick, or for a run with no planned times', () => { assert.equal(paceAgainstPlan(PR, 0, 100, T0 + 5e5), null); assert.equal(paceAgainstPlan({ route: 'HOWICK08', during: 'HOWICK10' }, 5, 66, 5e5), null); assert.equal(paceAgainstPlan(null, 5, 66, 5e5), null); });
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

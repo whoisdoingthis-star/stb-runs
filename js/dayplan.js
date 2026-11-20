@@ -139,3 +139,14 @@ export function myPart(saved, name) {
   const c = (saved?.crews || []).find((x) => x.driver === name || (x.helpers || []).includes(name));
   return c ? { ...c, role: c.driver === name ? 'driver' : 'helper' } : null;
 }
+
+/** How a run is going against its plan (decision 0049): where the plan says you'd be for the stops done so far.
+ * Returns null when there is nothing to compare (no planned times, or nothing ticked yet). Within 3 minutes is "On plan". */
+export const PACE_SAME_MIN = 3;
+export function paceAgainstPlan(planRun, done, stops, now) {
+  if (!planRun?.startAt || !planRun?.finishAt || !stops || !done) return null;
+  const planned = planRun.startAt + (Math.min(done, stops) / stops) * (planRun.finishAt - planRun.startAt);
+  const min = Math.round((now - planned) / 60000);
+  if (Math.abs(min) <= PACE_SAME_MIN) return { min, late: false, text: 'On plan' };
+  return { min, late: min > 0, text: `${Math.abs(min)} min ${min > 0 ? 'behind' : 'ahead'}` };
+}
