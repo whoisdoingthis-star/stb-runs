@@ -495,8 +495,8 @@ async function shiftDistance(sum, ticks) {
   const have = new Map((await app.store.loadRunKm(sum.runIds)).map((r) => [r.run_id, r]));
   for (const id of sum.runIds) {
     if (have.get(id)?.road_km != null) continue;
-    const path = k.tickPath(ticks.filter((t) => t.run_id === id)); if (path.length < 2) continue;
-    const row = { run_id: id, line_km: k.lineKm(path), road_km: await k.routeKm(path, (pts) => app.store.routeThrough(pts)).catch(() => null), points: path.length };
+    const d = await k.runDistance(ticks.filter((t) => t.run_id === id), (pts) => app.store.routeThrough(pts)); if (!d) continue;
+    const row = { run_id: id, ...d };
     have.set(id, row); app.store.saveRunKm(row).catch(() => {});
   }
   const odo = sp.odometerDay(await app.store.loadSpares().catch(() => []), sum.date, sum.driver);

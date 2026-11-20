@@ -43,6 +43,7 @@ import { buildInsights, EARLY_DAYS, duration, runMornings } from './insights.js'
 import { runStats, buildPlan, planText, clockTime } from './dayplan.js';
 import { STAN_LINES, linesToRecord } from './stanlines.js';
 import { playStanClip } from './stanfx.js';
+import { runDistance, ROAD_FACTOR } from './runkm.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt, shiftCrews } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -647,7 +648,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   // ================= Insights (decision 0035) =================
   // What the collected data says, with a suggestion each. The sums are in js/insights.js (tested);
   // this loads the rows for the dates and lays the findings out.
-  const INS = { from: null, to: null, data: null, loading: false, error: null };
+  const INS = { from: null, to: null, data: null, loading: false, error: null, rows: null, km: null, kmBusy: null, kmStop: false, kmError: null };
   async function loadInsights(from, to) {
     if (app.store.loadInsights) return app.store.loadInsights(from, to, D.register); // (test page)
     const runs = must(await sb.from('runs').select('id, route, delivery_date').gte('delivery_date', from).lte('delivery_date', to).order('delivery_date').limit(2000));
@@ -806,9 +807,50 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const run = async () => {
       if (!from.value || !to.value || from.value > to.value) return toast('Pick a From date on or before the To date.');
       INS.from = from.value; INS.to = to.value; INS.loading = true; INS.error = null; paint();
-      try { const rows = await loadInsights(INS.from, INS.to); INS.data = buildInsights({ ...rows, deadlines: D.deadlines || DEFAULT_DEADLINES, from: INS.from, to: INS.to }); }
+      try { const rows = await loadInsights(INS.from, INS.to); INS.rows = rows; INS.km = null; loadKm(); INS.data = buildInsights({ ...rows, deadlines: D.deadlines || DEFAULT_DEADLINES, from: INS.from, to: INS.to }); }
       catch (e) { INS.error = e.message; }
       INS.loading = false; paint();
+    };
+    // ---- Kilometres per run (decision 0045): from where the ticks were made, in the order delivered ----
+    const loadKm = async () => {
+      try { const ids = INS.rows.runs.map((r) => r.id); const all = [];
+        for (let i = 0; i < ids.length; i += 100) { const { data, error } = await sb.from('run_km').select('run_id, line_km, road_km, points').in('run_id', ids.slice(i, i + 100)); if (error) throw error; all.push(...(data || [])); }
+        INS.km = new Map(all.map((r) => [r.run_id, r])); } catch { INS.km = new Map(); }
+      paint();
+    };
+    const kmTodo = () => { const withTicks = new Set(INS.rows.ticks.filter((t) => t.done && t.lat != null).map((t) => t.run_id)); return INS.rows.runs.filter((r) => withTicks.has(r.id) && INS.km.get(r.id)?.road_km == null); };
+    const workOutKm = async () => {
+      INS.kmStop = false; INS.kmError = null; const todo = kmTodo(); let n = 0; let last = 0;
+      const through = async (pts) => { const wait = 1700 - (Date.now() - last); if (wait > 0) await new Promise((ok) => setTimeout(ok, wait)); last = Date.now();   // the mapping service allows 40 requests a minute
+        const { data, error } = await sb.functions.invoke('route', { body: { through: pts.map((p) => [p.lng, p.lat]) } }); return error || typeof data?.metres !== 'number' ? null : data.metres; };
+      for (const r of todo) {
+        if (INS.kmStop) break;
+        INS.kmBusy = `${++n} of ${todo.length}`; paint();
+        try {
+          const d = await runDistance(INS.rows.ticks.filter((t) => t.run_id === r.id), through); if (!d) continue;
+          const row = { run_id: r.id, ...d, computed_by: app.me.name, computed_at: new Date().toISOString() };
+          const { error } = await sb.from('run_km').upsert(row); if (error) throw error;
+          INS.km.set(r.id, row);
+        } catch (e) { INS.kmError = `Stopped: ${e.message}`; break; }
+      }
+      INS.kmBusy = null; paint();
+    };
+    const kmBlock = () => {
+      if (!INS.rows || !INS.km) return null;
+      const med = (xs) => { const v = [...xs].sort((a, b) => a - b); const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+      const by = new Map(); for (const r of INS.rows.runs) { const k = INS.km.get(r.id); if (!k) continue; if (!by.has(r.route)) by.set(r.route, []); by.get(r.route).push(k); }
+      const todo = kmTodo(); const f = (x) => (Math.round(x * 10) / 10).toFixed(1);
+      const rows = [...by.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([route, ks]) => { const road = ks.filter((k) => k.road_km != null).map((k) => Number(k.road_km)); const use = road.length ? road : ks.map((k) => Number(k.line_km) * ROAD_FACTOR);
+        return h('tr', null, h('td', null, h('b', null, `Run ${+(/(\d+)$/.exec(route)?.[1] || 0) || route}`)), h('td', null, `${road.length ? '' : '~'}${f(med(use))} km`), h('td', null, `${f(Math.min(...use))} to ${f(Math.max(...use))} km`), h('td', null, `${road.length} of ${ks.length} along the roads`)); });
+      return h('div', { class: 'dz-card' }, h('h3', { style: 'margin:0 0 4px' }, 'Kilometres per run'),
+        h('p', { class: 'small muted', style: 'margin:0 0 8px;max-width:760px' }, 'Worked out from where each tick was made, in the order the stops were actually delivered. The middle morning is the one to watch: if a change of order really is shorter, it comes down. A figure with ~ in front is a rough one (straight lines, stretched), until it has been worked out along the roads.'),
+        rows.length ? h('table', { class: 'dz-table dz-fit' }, h('thead', null, h('tr', null, ['Run', 'Middle morning', 'Shortest to longest', 'Worked out'].map((c) => h('th', null, c)))), h('tbody', null, rows)) : h('p', { class: 'muted' }, 'No kilometres worked out for these dates yet.'),
+        INS.kmError ? h('p', { class: 'bad' }, INS.kmError) : null,
+        h('div', { class: 'dz-polgrid', style: 'margin-top:8px' },
+          todo.length && !INS.kmBusy ? h('button', { class: 'btn primary', onclick: workOutKm }, `Work out ${todo.length} run${todo.length === 1 ? '' : 's'} along the roads`) : null,
+          INS.kmBusy ? h('button', { class: 'btn', onclick: () => { INS.kmStop = true; } }, 'Stop after this one') : null,
+          INS.kmBusy ? h('span', { class: 'small muted' }, `Working out run ${INS.kmBusy}. It asks the map a few times a run, so a month takes several minutes. Keep this page open.`) : null,
+          !todo.length && rows.length ? h('span', { class: 'small muted' }, 'Every run in these dates has been worked out along the roads.') : null));
     };
     const LEVEL = { act: ['Do something', 'act'], watch: ['Keep an eye on', 'watch'], good: ['Working well', 'good'], info: ['For interest', 'info'] };
     const asText = (I) => [`Send The Boy insights, ${I.from} to ${I.to} (${I.days} delivery days, ${I.delivered} deliveries)${I.early ? ' - early findings' : ''}`,
@@ -851,6 +893,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
             I ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(asText(I)); toast('Copied. Paste it into a message.'); } catch { toast('Couldn’t copy on this device.'); } } }, 'Copy as text') : null)),
         INS.error ? h('p', { class: 'bad' }, `Couldn’t work it out: ${INS.error}`) : null,
         !I ? null : banner(I),
+        !I ? null : kmBlock(),
         !I ? null : h('div', { class: 'ins-sum' }, h('div', null, h('b', null, I.days), ` delivery day${I.days === 1 ? '' : 's'}`), h('div', null, h('b', null, I.delivered.toLocaleString('en-NZ')), ' deliveries'),
           h('div', { class: 'act' }, h('b', null, I.counts.act), ' to do something about'), h('div', { class: 'watch' }, h('b', null, I.counts.watch), ' to keep an eye on'), h('div', { class: 'good' }, h('b', null, I.counts.good), ' working well')),
         I?.early ? h('p', { class: 'ins-early' }, h('b', null, 'Early findings. '), `There are ${I.days} delivery days in these dates. Patterns firm up after about ${EARLY_DAYS}; until then treat these as pointers, not verdicts.`) : null,

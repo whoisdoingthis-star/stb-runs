@@ -49,6 +49,9 @@ Everything the family tells Stan (Chat with Stan on the phones): who, when, from
 - People who didn't tap On duty show from first to last tick; a shift with no Off duty says so.
 - **Depot**: *Set the depot…* takes a long Google Maps link (open a short goo.gl link first, then copy the address bar) or **Use my location** while standing there. Phones use it to say "You're at the depot".
 
+### Kilometres per run (on Insights)
+Under the headline numbers. For the dates chosen it shows each run's kilometres: the middle morning, and the shortest and longest. A **~** means a rough figure. Press **Work out … along the roads** to have the map measure the runs that haven't been done yet; it takes several minutes for a month, so leave the page open. Watch the middle morning when the order of a run is changed: if the new order really is shorter, it comes down.
+
 ## Day plan
 For when you know who is working tomorrow (or today).
 1. Pick the **delivery day**. Its run sheets need to be loaded (they arrive from RouteSmart after 7pm).
