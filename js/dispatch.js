@@ -203,12 +203,29 @@ export async function viewDispatch(ctx, tab = 'overview') {
   // ---- layout
   const tabs = [['overview', 'Overview'], ['insights', 'Insights'], ['plan', 'Day plan'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['voice', 'Stan’s voice'], ['history', 'Change log']];
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
+  // Four sections, each with its pages (decision 0048). On a laptop they are headings down the side; on a phone the
+  // sections are a bar along the bottom and the section's pages are a row of pills under the header.
+  const SECTIONS = [
+    { key: 'today', label: 'Today', icon: '☀', pages: [['overview', 'Now'], ['plan', 'Plan'], ['runs', 'Runs']] },
+    { key: 'proof', label: 'Proof', icon: '✓', pages: [['complaints', 'Complaints']] },
+    { key: 'insights', label: 'Insights', icon: '↗', pages: [['insights', 'Insights']] },
+    { key: 'setup', label: 'Set-up', icon: '⚙', pages: [['users', 'People'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['voice', 'Stan’s voice'], ['history', 'Change log']] },
+  ];
+  const sectionOf = (k) => SECTIONS.find((sec) => sec.pages.some(([p]) => p === k)) || SECTIONS[0];
+  const lastIn = (sec) => { let k = null; try { k = localStorage.getItem(`stb.dz.last.${sec.key}`); } catch { /* private mode */ } return sec.pages.some(([p]) => p === k) ? k : sec.pages[0][0]; };
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
   const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
+  const subnav = h('nav', { class: 'dz-subnav', 'aria-label': 'Pages in this section' });
+  const bottom = h('nav', { class: 'dz-bottom', 'aria-label': 'Dispatch sections' });
+  // On a phone a wide table can't be read: each row becomes a card, and each cell needs its column's name beside it.
+  const labelTables = () => { for (const t of body.querySelectorAll('table.dz-table')) { const heads = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim()); if (!heads.length) { t.classList.add('dz-nohead'); continue; }
+    for (const tr of t.querySelectorAll('tbody tr')) [...tr.children].forEach((td, i) => { if (heads[i] && td.dataset.label !== heads[i]) td.dataset.label = heads[i]; }); } };
+  new MutationObserver(() => labelTables()).observe(body, { childList: true, subtree: true });
   // Switch pages without leaving (keeps what's selected); the address bar follows along.
   const go = async (k, focus) => {
     const needHistory = k === 'history' && tab !== 'history';
     tab = k; if (focus !== undefined) current = focus;
+    try { localStorage.setItem(`stb.dz.last.${sectionOf(k).key}`, k); } catch { /* private mode */ }
     history.replaceState(null, '', `#/dispatch/${k}`);
     if (needHistory) await refresh(); else render();
   };
@@ -219,13 +236,22 @@ export async function viewDispatch(ctx, tab = 'overview') {
       h('div', { class: 'dz-side-foot' },
         h('a', { href: '#/', class: 'dz-applink' }, '‹ Driver app'),
         h('div', { class: 'small muted' }, app.me.name))),
-    h('main', { class: 'dz-content' }, body)));
+    h('main', { class: 'dz-content' }, subnav, body),
+    bottom));
   try { await load(); } catch (e) { body.replaceChildren(h('div', { class: 'banner bad' }, `Could not load: ${e.message}. Has the dispatch part of sql/schema.sql been run?`)); return; }
   const render = () => {
     maps.splice(0).forEach((m) => m.remove());
-    nav.replaceChildren(...tabs.map(([k, label]) => h('a', { href: `#/dispatch/${k}`, class: k === tab ? 'on' : '', onclick: (e) => { e.preventDefault(); go(k, null); } }, label,
-      k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null,
-      k === 'complaints' && D.register.some((c) => c.status === 'open') ? h('span', { class: 'dz-count bad' }, D.register.filter((c) => c.status === 'open').length) : null)));
+    const full = Object.fromEntries(tabs);
+    const unplaced = D.addresses.filter((a) => !a.operating_location_id).length; const open = D.register.filter((c) => c.status === 'open').length;
+    const badge = (k) => (k === 'addresses' && unplaced ? h('span', { class: 'dz-count' }, unplaced) : k === 'complaints' && open ? h('span', { class: 'dz-count bad' }, open) : null);
+    const link = (k, label, cls = '') => h('a', { href: `#/dispatch/${k}`, class: `${cls} ${k === tab ? 'on' : ''}`.trim(), 'aria-current': k === tab ? 'page' : null, onclick: (e) => { e.preventDefault(); go(k, null); } }, label, badge(k));
+    const here = sectionOf(tab);
+    nav.replaceChildren(...SECTIONS.flatMap((sec) => [h('div', { class: 'dz-nav-h' }, sec.label), ...sec.pages.map(([k]) => link(k, full[k]))]));
+    subnav.replaceChildren(...(here.pages.length > 1 ? here.pages.map(([k, short]) => link(k, short, 'dz-pill')) : []));
+    subnav.hidden = here.pages.length < 2;
+    bottom.replaceChildren(...SECTIONS.map((sec) => { const n = sec.key === 'proof' ? open : sec.key === 'setup' ? unplaced : 0;
+      return h('a', { href: `#/dispatch/${lastIn(sec)}`, class: sec === here ? 'on' : '', 'aria-current': sec === here ? 'true' : null, onclick: (e) => { e.preventDefault(); go(sec === here ? sec.pages[0][0] : lastIn(sec), null); } },
+        h('span', { class: 'dz-bottom-i', 'aria-hidden': 'true' }, sec.icon), h('span', null, sec.label), n ? h('span', { class: `dz-dot ${sec.key === 'proof' ? 'bad' : ''}`, 'aria-label': `${n} to look at` }, n) : null); }));
     body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
       ({ overview: renderOverview, insights: renderInsights, plan: renderPlan, voice: renderVoice, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };

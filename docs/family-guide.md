@@ -129,6 +129,9 @@ Keep going. Ticks are saved on the phone and sent when there is signal ("3 to se
 ## New customers get a photo
 A tile marked **New** (a new customer's first paper) shows **📷 Take photo**. Please take one: it proves the first delivery was made.
 
+## Closing a pop-up
+Every pop-up has a **✕** at its top right. It stays there even when you scroll down a long one, so you never have to hunt for it. Tapping the dark area above the pop-up closes it too.
+
 ## If Dispatch pings you
 While you're **on duty**, Mike can tap **Ping** in Dispatch to see where you are right now (handy if you need a hand or a run is running late). Your phone answers once, and you'll always see a message: "Mike checked where you are." It only works while the app is open, and never when you're off duty.
 

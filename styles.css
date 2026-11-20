@@ -966,3 +966,47 @@ html.big .sum-say { font-size: 22px; } html.big .sum-outcome { font-size: 23px; 
 /* The route as delivered, on the run map (decision 0046) */
 .dz-asdriven { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 4px 0 8px; } .dz-asdriven:empty { display: none; }
 .trace-key { display: inline-block; width: 18px; height: 5px; border-radius: 3px; background: #f59e0b; margin-right: 6px; vertical-align: middle; } .trace-key.back { background: #dc2626; height: 7px; }
+
+/* ===== Dispatch on a phone (decision 0048): sections along the bottom, a section's pages as pills, tables as cards ===== */
+.dz-nav-h { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 10px 12px 2px; }
+.dz-subnav, .dz-bottom { display: none; }
+@media screen and (max-width: 900px) {
+  .dz.dz-shell { grid-template-columns: minmax(0, 1fr); padding-bottom: calc(64px + var(--safe-bottom)); }
+  .dz-sidebar { flex-wrap: nowrap; justify-content: space-between; padding: calc(6px + var(--safe-top)) 12px 6px; }
+  .dz-sidebar .dz-nav { display: none; }
+  .dz-logo { flex-direction: row; gap: 6px; align-items: baseline; } .dz-logo b { font-size: 15px; }
+  .dz-content { padding: 0 12px 24px; overflow-x: clip; }
+  .dz-subnav:not([hidden]) { display: flex; gap: 6px; overflow-x: auto; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0; margin: 0 0 4px; scrollbar-width: none; }
+  .dz-subnav a { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-weight: 700; white-space: nowrap; }
+  .dz-subnav a.on { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+  .dz-bottom { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--card); border-top: 1px solid var(--line); padding-bottom: var(--safe-bottom); }
+  .dz-bottom a { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 58px; color: var(--muted); text-decoration: none; font-size: 12.5px; font-weight: 700; }
+  .dz-bottom a.on { color: var(--ink); box-shadow: inset 0 3px 0 var(--brand); } .dz-bottom-i { font-size: 19px; line-height: 1; }
+  .dz-dot { position: absolute; top: 6px; left: calc(50% + 10px); background: var(--warn); color: #1c1300; border-radius: 99px; font-size: 11px; font-weight: 800; padding: 0 6px; min-width: 18px; text-align: center; } .dz-dot.bad { background: var(--bad); color: #fff; }
+  .dz-title { margin: 8px 0 10px; }
+  .dz-grid, .dz-split, .dz-split:has(.dz-narrow), .dp-plan, .ins-runs, .ins-kpis { grid-template-columns: minmax(0, 1fr); }
+  .dz-card, .dz-col, .dz-body, .dz-body > * { min-width: 0; max-width: 100%; }
+  .dz-card { padding: 12px; overflow-wrap: anywhere; }
+  .dz-tablewrap, .dz-scroll { max-height: none; overflow: visible; border: 0; }
+  /* tables as cards */
+  table.dz-table, table.dz-table tbody { display: block; width: 100%; }
+  table.dz-table thead { display: none; }
+  table.dz-table tr { display: block; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; margin: 0 0 8px; background: var(--card); }
+  table.dz-table td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; border: 0; border-bottom: 1px solid var(--line); text-align: right; white-space: normal; }
+  table.dz-table td:last-child { border-bottom: 0; } table.dz-table td:empty { display: none; }
+  table.dz-table td[data-label]::before { content: attr(data-label); flex: none; max-width: 45%; text-align: left; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  table.dz-table td:first-child { font-size: 16px; font-weight: 700; } table.dz-table td.num { font-weight: 800; }
+  table.dz-table.dz-nohead td { display: block; text-align: left; }
+  /* Stan's voice: the line, then who recorded it and the buttons on one row */
+  .sv-group table.dz-table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+  .sv-group table.dz-table.dz-nohead td { border: 0; padding: 2px 0; } .sv-group table.dz-table td:first-child { flex: 1 1 100%; min-width: 0; font-size: 16px; white-space: normal; overflow-wrap: anywhere; } .sv-group, .sv-group table.dz-table tr { max-width: 100%; box-sizing: border-box; } .sv-group table.dz-table td:last-child { margin-left: auto; white-space: nowrap; }
+  /* pop-ups: full width from the bottom, the title and ✕ stay in view while the rest scrolls */
+  .sheet { max-width: none; max-height: 92vh; padding-top: 0; }
+  .sheet-head { position: sticky; top: 0; z-index: 2; background: var(--card); padding: 12px 0 8px; margin-bottom: 4px; }
+  .sheet > :first-child:not(.sheet-head) { margin-top: 18px; }
+  /* thumbs */
+  .dz .btn.small { min-height: 44px; padding: 8px 14px; } .dz .link { min-height: 40px; padding: 8px 10px; }
+  .dz select, .dz input[type=date], .dz input[type=text], .dz textarea { max-width: 100%; min-height: 44px; font-size: 16px; }
+  .dz input[type=checkbox] { width: 22px; height: 22px; }
+  .dz-runmap { height: 56vh; }
+}

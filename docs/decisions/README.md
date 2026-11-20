@@ -23,6 +23,35 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0017 | [Opening: a soft note and a twinkle for each stop](0017-opening-notes-per-stop.md) | 2026-11-10 | Accepted |
 | 0018 | [Opening plays every time the app is opened, except on a run](0018-opening-every-open.md) | 2026-11-10 | Accepted |
 | 0019 | [Driver Assistant: our own voice guidance, routed by OpenRouteService](0019-driver-assistant.md) | 2026-11-12 | Accepted |
+| 0020 | [On Duty, My runs and a shift timeline with no gaps](0020-on-duty-and-shifts.md) | 2026-11-12 | Accepted |
+| 0021 | [Stan in the app: the face of help and good news, used sparingly](0021-stan.md) | 2026-11-12 | Accepted |
+| 0022 | [Stan on empty screens and in Dispatch](0022-stan-empty-screens.md) | 2026-11-12 | Accepted |
+| 0023 | [Stan's own voice, made on the phone](0023-stan-voice.md) | 2026-11-12 | Accepted |
+| 0024 | [Chat with Stan: an ideas register the family fills by talking to him](0024-chat-with-stan.md) | 2026-11-12 | Accepted |
+| 0025 | [People's icons: pick a robot or upload a photo](0025-avatars.md) | 2026-11-13 | Accepted |
+| 0026 | [A run on the map in Dispatch, and Ping](0026-run-map-and-ping.md) | 2026-11-13 | Accepted |
+| 0027 | [A delivery report for any dates, to send as a PDF](0027-delivery-report.md) | 2026-11-13 | Accepted |
+| 0028 | [Morning watch, proof on demand and first-day photos: what a run owner needs to see](0028-morning-watch.md) | 2026-11-13 | Accepted |
+| 0029 | [The delivery report keeps the complaint and our record apart](0029-clearer-delivery-report.md) | 2026-11-14 | Accepted (changes the layout in [0027](0027-delivery-report.md)) |
+| 0030 | [A photo's own time can stand as the delivery record](0030-photo-time-is-proof.md) | 2026-11-14 | Accepted |
+| 0031 | [A dispatcher can keep their own order too](0031-own-order-for-dispatchers.md) | 2026-11-14 | Accepted (extends the own-order rule of 11 Nov 2026) |
+| 0032 | [Stan's new look](0032-stan-new-look.md) | 2026-11-14 | Superseded the same day by [0033](0033-brand.md) (rounder head, one drawing for icon, opening and logo). Replaced the drawing in [0021](0021-stan.md); what Stan does is unchanged) |
+| 0033 | [Stan is the face of Send The Boy: icon, opening and logo](0033-brand.md) | 2026-11-14 | Accepted (replaces the drawing in [0032](0032-stan-new-look.md), the opening in [0016](0016-opening-animation.md) and the yellow "STB Together" badge) |
+| 0034 | [Stan gets bored, and Stan's Paper Run](0034-stans-paper-run.md) | 2026-11-14 | Accepted |
+| 0035 | [Insights: what the collected data says](0035-insights.md) | 2026-11-17 | Accepted (first part: the Dispatch page. Stan's "Did you know" cards for drivers follow.) |
+| 0036 | [Stan's "Did you know…" cards for drivers](0036-stan-did-you-know.md) | 2026-11-17 | Accepted (the second part of [0035](0035-insights.md)) |
+| 0037 | [An older tick asks before it's unticked](0037-ask-before-unticking.md) | 2026-11-18 | Accepted |
+| 0038 | [Off duty automatically once all the day's runs are finished](0038-auto-off-duty.md) | 2026-11-18 | Accepted (adds to On Duty, [0020](0020-on-duty-and-shifts.md)) |
+| 0039 | [The learned letterbox: only where real ticks agree](0039-learned-letterbox.md) | 2026-11-19 | Accepted (tightens the learned position used since [0019](0019-driver-assistant.md)) |
+| 0040 | [Stan's day plan, and drivers and helpers](0040-day-plan.md) | 2026-11-19 | Accepted (stage 1). Stage 2, mixing parts of runs together, is not built. |
+| 0041 | [The crew check when going on duty, and the notice board](0041-crew-check-and-notice-board.md) | 2026-11-19 | Accepted. Changes the "Who's with you?" step of [0040](0040-day-plan.md), released the same evening. |
+| 0042 | [Spare papers, pinned rules, and the morning on the notice board](0042-spares-and-pinned-rules.md) | 2026-11-20 | Accepted |
+| 0043 | [Stan's recorded voice](0043-stan-recorded-voice.md) | 2026-11-21 | Accepted for recording. Playing the lines on the phones is the next step and not done yet. |
+| 0044 | [Your morning: Stan's end-of-shift summary](0044-end-of-shift-summary.md) | 2026-11-21 | Accepted |
+| 0045 | [Kilometres: from the ticks, and from the odometer](0045-kilometres.md) | 2026-11-21 | Accepted |
+| 0046 | [The route as delivered, traced on the map](0046-route-as-delivered.md) | 2026-11-21 | Accepted (steps 1 and 2). Step 3, pricing a different order, is not built. |
+| 0047 | [Stan talks: his recorded voice in the app](0047-stan-talks.md) | 2026-11-21 | Accepted |
+| 0048 | [Dispatch on a phone: sections along the bottom, pages as pills, tables as cards](0048-dispatch-on-a-phone.md) | 2026-11-21 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 

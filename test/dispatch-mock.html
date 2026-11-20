@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css"></head><body><div id="app"></div><div id="toast" hidden></div>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../styles.css"></head><body><div id="app"></div><div id="toast" hidden></div>
 <!-- Dispatch dashboard with a stand-in database, for checking screens without Supabase. Serve the repo root (python3 -m http.server) and open /test/dispatch-mock.html#locations. Maps need internet. -->
 <script type="module">
 const uuid = () => crypto.randomUUID();
@@ -53,7 +53,7 @@ T.ideas = [
   { id: 'i1', user_name: 'Lisa', text: 'Colour the tiles when it\u2019s raining so we know to bag the papers', screen: 'run', device_time: nz('05:48'), status: 'new' },
   { id: 'i2', user_name: 'Zaph', text: 'Stan should say how many stops are left when I finish a street', screen: 'run', device_time: nz('05:31'), status: 'planned', note: 'With the next voice update' },
   { id: 'i3', user_name: 'Moana', text: 'Bigger Next button please', screen: 'home', device_time: nz('05:02'), status: 'done' }];
-const view = (t) => t === 'address_register' ? T.addresses.map((a) => ({ ...a, operating_name: T.operating_locations.find((o) => o.id === a.operating_location_id)?.name, service_name: T.service_locations.find((s) => s.id === a.service_location_id)?.name })) : T[t];
+const view = (t) => t === 'address_register' ? T.addresses.map((a) => ({ routes: a.route ? [a.route] : [], gps_taps: 0, ...a, operating_name: T.operating_locations.find((o) => o.id === a.operating_location_id)?.name, service_name: T.service_locations.find((s) => s.id === a.service_location_id)?.name })) : T[t];
 window.calls = [];
 function from(t) {
   let op = 'select', row = null, filters = [], single = false;
@@ -82,7 +82,7 @@ const h = (tag, props, ...kids) => { const el = document.createElement(tag); for
 const mount = (...n) => document.getElementById('app').replaceChildren(...n);
 const toast = (m, a) => { window.lastToast = m; window.lastAction = a; console.log('TOAST', m); };
 const titleCase = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
-const shortRoute = (r) => r.replace(/^[A-Z]+0?/, 'Run ');
+const shortRoute = (r0) => { const r = String(r0 || ''); return r.replace(/^[A-Z]+0?/, 'Run '); };
 const { viewDispatch } = await import('../js/dispatch.js');
 window.T = T;
 const paperSummary = (rs) => h('div', { class: 'paper-sum' }, `papers for ${rs.length} runs`);
@@ -90,7 +90,7 @@ const fmtStamp = (iso) => new Date(iso).toLocaleString('en-NZ');
 const fmtDate = (iso) => iso;
 const changeSummary = (r, ch) => `${shortRoute(r)}: ${ch.count} changed`;
 window.confirm = () => true;
-const openSheet = (title, ...content) => { const close = () => panel.remove(); const panel = h('div', { class: 'sheet-backdrop' }, h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-head' }, h('h2', null, title)), ...content.map((c) => (typeof c === 'function' ? c(close) : c)))); document.body.append(panel); return close; };
+const openSheet = (title, ...content) => { const close = () => panel.remove(); const panel = h('div', { class: 'sheet-backdrop' }, h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-head' }, h('h2', null, title), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: () => close() }, '✕')), ...content.map((c) => (typeof c === 'function' ? c(close) : c)))); document.body.append(panel); return close; };
 // Insights: eight mornings. Run 6 on time, Run 13 always late, Run 8 delivered in one drop, Lenny's phone with no GPS, a street ticked from the car.
 { const runs = [], ticks = []; const tz = (d, hh, mm, ss = 0) => new Date(Date.parse(`${d}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}+13:00`)).toISOString();
   const days = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-09', '2026-11-10'];

@@ -2,6 +2,20 @@
 
 The dispatch dashboard is where routes are planned: the register of every address we deliver to, the places the vehicle stops, where the work is done on foot, and the rules that apply there. It is for people with **App + Dispatch** access, and is its own site: **whoisdoingthis-star.github.io/stb-runs/dispatch/**. On a laptop a dispatcher lands there when opening the app; on a phone, use **Dispatch dashboard ›** on the Runs page or ⚙ Settings. **‹ Driver app** (bottom of the sidebar) goes back.
 
+## Finding your way around
+The pages are in four sections:
+
+| Section | Pages |
+|---|---|
+| **Today** | Overview, Day plan, Runs & sheets |
+| **Proof** | Complaints (with Find a delivery and the Delivery report) |
+| **Insights** | Insights |
+| **Set-up** | People, Addresses, Locations, Policies, Stan's voice, Change log |
+
+**On a laptop** they are listed down the left side under those headings.
+
+**On a phone** the four sections are buttons along the bottom of the screen. Tap one and its pages show as a row of buttons at the top (Overview is called **Now** there, to save room). A section opens on the page you last used in it. The little numbers on **Proof** and **Set-up** are open complaints and addresses not yet tied to a location. Tables show as cards, one per row, so you only ever scroll up and down. Pop-ups open from the bottom, and the **✕** to close them stays at the top.
+
 ## Overview (the landing page)
 
 On a laptop the Overview has two columns: the day's work on the left (**Sheets**, **Progress**, **Items to collect**, **Delivery score**) and what needs a look on the right (**Needs attention**, **Complaints on this sheet**, **Recent photos**). On a narrow screen the right-hand column comes first.
