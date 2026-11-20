@@ -17,7 +17,11 @@ Discussed and agreed the same day:
 - Or the next time the app is opened while off duty, once a day, if every run that has been started is finished. So someone logged off automatically still gets it, and nobody gets it while a crew is still out.
 - A **📈 Your morning** button on the Runs page brings it back that day. Never while on duty.
 
-**Whose morning** The crew's: the person, plus the helpers they named going on duty (or the driver a helper named). A run counts as theirs if the crew made at least a third of its ticks.
+**Whose morning** (corrected by Mike the same day) The numbers belong to the **driver**.
+- A driver's card covers the runs their crew did: the driver plus the helpers they named going on duty. A run counts as theirs if that crew made at least a third of its ticks.
+- A **helper inherits the stats of the driver they were with that day**, and the card says whose numbers they are. Their pace is against that driver's usual.
+- A helper's **history** is each day's driver: if they help Lisa on Monday and Mike on Tuesday, their graph shows Lisa's Monday and Mike's Tuesday. A driver's history is all their own mornings, whoever helped.
+- Who was with whom comes from the on-duty answers ([0041](0041-crew-check-and-notice-board.md)); the driver's answer is the boss. These only exist from 20 Nov 2026, so a helper's history starts there, and a helper who was with nobody that day has no card.
 
 **What it shows** (`js/shiftsummary.js`, tested)
 1. **The outcome first:** when the last paper went out, and how many minutes before or after the deadline.

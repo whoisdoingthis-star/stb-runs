@@ -1,5 +1,6 @@
 // The end-of-shift summary (decision 0044): what Stan shows a driver or helper when their morning is done.
-// Pure: history in, one card out. The person only ever sees their own crew's numbers, measured against their own usual.
+// Pure: history in, one card out. The numbers belong to the DRIVER: a helper inherits the stats of the driver they were
+// with that day, and their history is each day's driver's stats (Mike, 21 Nov 2026).
 
 import { runMornings, metres } from './insights.js';
 
@@ -14,15 +15,44 @@ const names = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[x
 /** A crew's share of a morning: did they do this run? (They made at least a third of its ticks.) */
 const crewDid = (m, crew) => m.ticks > 0 && m.list.filter((t) => crew.includes(t.user_name)).length * 3 >= m.ticks;
 
+const nzDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(iso));
 /**
- * name: who is looking · crew: everyone in their car, them included · date: the delivery day
- * runs, ticks: the last few weeks, today included (store.loadCardRows) · todayRuns: today's runs with summary, done, notDelivered
- * duty: this person's duty events · deadlines: the settings
- * Returns null if the crew did no run today, else the card.
+ * Who was in whose car, day by day, from everyone's "on duty" answers. The driver's list is the boss; a helper's answer
+ * counts when the driver gave none. Returns Map(date → [{ driver, helpers }]).
  */
-export function buildShiftSummary({ name, crew = [name], date, runs = [], ticks = [], todayRuns = [], duty = [], deadlines } = {}) {
+export function crewsByDay(events = []) {
+  const days = new Map();
+  for (const e of [...events].sort((a, b) => Date.parse(a.device_time) - Date.parse(b.device_time))) {
+    if (!Array.isArray(e.helpers) && !e.driver) continue;
+    const d = nzDay(e.device_time); if (!days.has(d)) days.set(d, { said: new Map(), claims: new Map() });
+    if (Array.isArray(e.helpers)) days.get(d).said.set(e.user_name, e.helpers); else days.get(d).claims.set(e.user_name, e.driver);
+  }
+  const out = new Map();
+  for (const [d, { said, claims }] of days) {
+    const crews = [...said.entries()].map(([driver, helpers]) => ({ driver, helpers: [...helpers] }));
+    for (const [helper, driver] of claims) { if (said.has(driver)) continue; let c = crews.find((x) => x.driver === driver); if (!c) { c = { driver, helpers: [] }; crews.push(c); } if (!c.helpers.includes(helper)) c.helpers.push(helper); }
+    out.set(d, crews);
+  }
+  return out;
+}
+
+/**
+ * name: who is looking · helper: true if they are a helper (they then see their driver's card)
+ * crewEvents: everyone's on-duty events for the period (who was with whom) · date: the delivery day
+ * runs, ticks: the last few weeks, today included (store.loadCardRows) · todayRuns: today's runs with summary, done, notDelivered
+ * duty: the driver's own duty events, when the driver is the one looking (for depot time) · deadlines: the settings
+ * Returns null if there is nothing to show (a helper with no driver today, or a driver whose crew did no run), else the card.
+ */
+export function buildShiftSummary({ name, helper = false, crewEvents = [], date, runs = [], ticks = [], todayRuns = [], duty = [], deadlines } = {}) {
+  const byDay = crewsByDay(crewEvents);
+  const drivenBy = (who, d) => (byDay.get(d) || []).find((c) => c.helpers.includes(who))?.driver || null;
+  const driver = helper ? drivenBy(name, date) : name;
+  if (!driver) return null;
+  const crewOn = (who, d) => [who, ...((byDay.get(d) || []).find((c) => c.driver === who)?.helpers || [])];
+  const crew = crewOn(driver, date);
   const mornings = runMornings(runs, ticks, deadlines).filter((m) => m.ticks > 0);
-  const today = mornings.filter((m) => m.date === date && crewDid(m, crew)).sort((a, b) => a.first - b.first);
+  const did = (who, m) => crewDid(m, crewOn(who, m.date));   // that driver's crew, as it was on that day
+  const today = mornings.filter((m) => m.date === date && did(driver, m)).sort((a, b) => a.first - b.first);
   if (!today.length) return null;
   const info = new Map(todayRuns.map((r) => [r.id, r]));
 
@@ -36,23 +66,26 @@ export function buildShiftSummary({ name, crew = [name], date, runs = [], ticks 
   const outcome = { finishedAt: last, deadline, marginMin, onTime: marginMin >= 0, allTicked, runs: today.map((m) => runName(m.route)) };
 
   // ---- the shift: depot, on the run, stops, papers ----
-  const onDuty = [...duty].filter((e) => e.state === 'on_duty' && Date.parse(e.device_time) <= first && Date.parse(e.device_time) >= first - 6 * 3600e3).sort((a, b) => Date.parse(b.device_time) - Date.parse(a.device_time))[0];
-  const left = onDuty ? [...duty].filter((e) => e.state === 'on_run' && Date.parse(e.device_time) > Date.parse(onDuty.device_time)).map((e) => Date.parse(e.device_time)).sort((a, b) => a - b)[0] : null;
+  const dutyOfDriver = helper ? [] : duty;
+  const onDuty = [...dutyOfDriver].filter((e) => e.state === 'on_duty' && Date.parse(e.device_time) <= first && Date.parse(e.device_time) >= first - 6 * 3600e3).sort((a, b) => Date.parse(b.device_time) - Date.parse(a.device_time))[0];
+  const left = onDuty ? [...dutyOfDriver].filter((e) => e.state === 'on_run' && Date.parse(e.device_time) > Date.parse(onDuty.device_time)).map((e) => Date.parse(e.device_time)).sort((a, b) => a - b)[0] : null;
   const depotMin = onDuty ? Math.max(0, Math.round((Math.min(left ?? first, first) - Date.parse(onDuty.device_time)) / 60e3)) : null;
   const shift = { depotMin, runMin: Math.round((last - first) / 60e3), stops: done, papers: today.reduce((n, m) => n + (info.get(m.run_id)?.summary?.copies || 0), 0) || null };
 
-  // ---- pace: today against this crew's own usual for the same runs ----
-  const mine = mornings.filter((m) => crewDid(m, crew) && !m.bulk && m.ticks >= 5);
-  const byRoute = new Map(); for (const m of mine) { if (!byRoute.has(m.route)) byRoute.set(m.route, []); byRoute.get(m.route).push(m); }
-  const usual = new Map(); for (const [route, ms] of byRoute) { const past = ms.filter((m) => m.date < date); if (past.length >= USUAL_MIN) usual.set(route, median(past.map((m) => m.durationMs / 60e3))); }
-  const paceOf = (day) => { const ms = day.filter((m) => usual.has(m.route) && !m.bulk && m.ticks >= 5); if (!ms.length) return null;
-    const u = ms.reduce((n, m) => n + usual.get(m.route), 0); const a = ms.reduce((n, m) => n + m.durationMs / 60e3, 0);
+  // ---- pace: today against the driver's own usual for the same runs ----
+  const timed = (m) => !m.bulk && m.ticks >= 5;
+  const usualOf = (who) => { const by = new Map(); for (const m of mornings) if (m.date < date && timed(m) && did(who, m)) { if (!by.has(m.route)) by.set(m.route, []); by.get(m.route).push(m.durationMs / 60e3); }
+    return new Map([...by.entries()].filter(([, v]) => v.length >= USUAL_MIN).map(([route, v]) => [route, median(v)])); };
+  const usuals = new Map(); const usual = (who) => { if (!usuals.has(who)) usuals.set(who, usualOf(who)); return usuals.get(who); };
+  const paceOf = (who, d) => { const u0 = usual(who); const ms = mornings.filter((m) => m.date === d && timed(m) && did(who, m) && u0.has(m.route)); if (!ms.length) return null;
+    const u = ms.reduce((n, m) => n + u0.get(m.route), 0); const a = ms.reduce((n, m) => n + m.durationMs / 60e3, 0);
     return { usualMin: Math.round(u), actualMin: Math.round(a), diffMin: Math.round(u - a), pct: Math.round(((u - a) / u) * 100), runs: ms.map((m) => runName(m.route)) }; };
-  const p = paceOf(today);
+  const p = paceOf(driver, date);
   const unmeasured = today.filter((m) => m.bulk).map((m) => runName(m.route));
   const pace = p ? { ...p, word: Math.abs(p.pct) <= SAME_PCT ? 'same' : p.pct > 0 ? 'quicker' : 'slower', unmeasured } : { word: 'none', unmeasured, why: today.every((m) => m.bulk) ? 'bulk' : 'new' };
-  const days = [...new Set(mine.map((m) => m.date))].sort();
-  const trend = days.map((d) => ({ date: d, p: paceOf(mine.filter((m) => m.date === d)) })).filter((x) => x.p).map((x) => ({ date: x.date, pct: x.p.pct })).slice(-TREND_DAYS);
+  // The trend. A driver's is their own mornings. A helper's is each day's driver: whoever they were with that day.
+  const days = [...new Set(mornings.map((m) => m.date))].filter((d) => d <= date).sort();
+  const trend = days.map((d) => { const who = helper ? drivenBy(name, d) : driver; const x = who ? paceOf(who, d) : null; return x ? { date: d, pct: x.pct, driver: who } : null; }).filter(Boolean).slice(-TREND_DAYS);
 
   // ---- quality: ticks made at the letterbox ----
   const pts = new Map(); for (const m of mornings) if (m.date < date && !m.bulk) for (const t of m.list) if (t.lat != null && (t.accuracy_m ?? 0) <= 50) { if (!pts.has(t.address_key)) pts.set(t.address_key, []); pts.get(t.address_key).push(t); }
@@ -73,14 +106,14 @@ export function buildShiftSummary({ name, crew = [name], date, runs = [], ticks 
   if (noGps >= 5 && noGps * 10 >= ticksMade) say.push('sum.nogps'); else if (quality.atPct != null && quality.atPct >= 90) say.push('sum.ticks.good'); else if (quality.atPct != null && quality.atPct < 70) say.push('sum.ticks.low');
 
   const others = crew.filter((n) => n !== name);
-  return { name, date, crew, with: others.length ? names(others) : null, outcome, shift, pace, trend, quality, say };
+  return { name, date, driver, inherited: helper, crew, with: others.length ? names(others) : null, outcome, shift, pace, trend, quality, say };
 }
 
 /** The pace line in words. */
-export function paceText(pace) {
+export function paceText(pace, whose = 'your') {
   if (pace.word === 'none') return pace.why === 'bulk' ? 'Couldn’t measure the pace today: the stops were ticked together.' : `No usual to compare with yet. I need ${USUAL_MIN} mornings on a run first.`;
   const on = `for ${names(pace.runs)}`;
-  const base = pace.word === 'same' ? `Right on your usual ${on} (${pace.actualMin} min).` : `${Math.abs(pace.diffMin)} min ${pace.word} than your usual ${on}: ${pace.actualMin} min against ${pace.usualMin}.`;
+  const base = pace.word === 'same' ? `Right on ${whose} usual ${on} (${pace.actualMin} min).` : `${Math.abs(pace.diffMin)} min ${pace.word} than ${whose} usual ${on}: ${pace.actualMin} min against ${pace.usualMin}.`;
   return pace.unmeasured.length ? `${base} ${names(pace.unmeasured)} not counted (ticked together).` : base;
 }
 /** The headline: when the last paper went out against the deadline. clock(ms) → '5:48 am'. */

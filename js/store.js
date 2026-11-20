@@ -262,6 +262,8 @@ export class LocalStore extends Base {
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
+  /** Who was with whom: the on-duty events that carry helpers or a driver. Demo mode only has this phone's. */
+  async loadCrewEvents() { return this.myDuty().filter((e) => Array.isArray(e.helpers) || e.driver).map((e) => ({ ...e, user_name: e.user_name || this.me?.name || 'Me' })); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
   /** Rows for Stan's "Did you know" cards (decision 0036): the runs and ticks on this phone. */
   async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: runs.flatMap((r) => this.cachedEvents(r.id)), complaints: [] }; }
@@ -759,6 +761,17 @@ export class SupabaseStore extends Base {
     if (error) throw error;
   }
   /** Everyone's duty changes between two times (for Dispatch), or mine today if the table isn't there yet. */
+  /** Everyone's on-duty answers for the last few weeks (who drove, who helped), for the end-of-shift summary. */
+  async loadCrewEvents(days = 28) {
+    const mine = this.myDuty().filter((e) => Array.isArray(e.helpers) || e.driver).map((e) => ({ ...e, user_name: e.user_name || this.me?.name }));
+    try {
+      const from = new Date(Date.now() - days * 864e5).toISOString();
+      const { data, error } = await this.sb.from('duty_events').select('id, user_name, state, device_time, helpers, driver').eq('state', 'on_duty').gte('device_time', from).order('device_time').limit(1000);
+      if (error) throw error;
+      const ids = new Set(data.map((e) => e.id));
+      return [...data.filter((e) => Array.isArray(e.helpers) || e.driver), ...mine.filter((e) => !ids.has(e.id))];   // with anything of mine not sent yet
+    } catch { return mine; }
+  }
   async loadDuty(from, to) {
     try {
       let q = this.sb.from('duty_events').select('*').order('device_time');

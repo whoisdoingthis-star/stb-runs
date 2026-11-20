@@ -483,11 +483,9 @@ function goOffDuty(after) {
 const noSheet = (ms = 120000) => new Promise((ok) => { const t0 = Date.now(); const tick = () => (!document.querySelector('.sheet-backdrop') || Date.now() - t0 > ms ? ok() : setTimeout(tick, 400)); tick(); });
 /** Works out my crew's morning from the last four weeks. Returns the card, or null if we did no run today. */
 async function loadSummary(todayRuns) {
-  const [{ buildShiftSummary }, rows, deadlines] = await Promise.all([import('./shiftsummary.js'), app.store.loadCardRows(28), app.store.getSetting('deadlines').catch(() => null)]);
-  const mine = app.store.myDuty(); const today = nzToday();
-  const start = [...mine].reverse().find((e) => e.state === 'on_duty' && nzDayOf(e.device_time) === today);
-  const crew = [...new Set([app.me.name, ...(start?.helpers || []), ...(start?.driver ? [start.driver] : [])])];
-  return buildShiftSummary({ name: app.me.name, crew, date: today, runs: rows.runs, ticks: rows.ticks, todayRuns, duty: mine, deadlines: deadlines || undefined });
+  const [{ buildShiftSummary }, rows, deadlines, crewEvents, crew] = await Promise.all([import('./shiftsummary.js'), app.store.loadCardRows(28), app.store.getSetting('deadlines').catch(() => null), app.store.loadCrewEvents(28).catch(() => []), app.crew ? app.crew : app.store.crewList().catch(() => [])]);
+  const helper = (crew || []).some((c) => c.name === app.me.name && c.crew === 'helper');
+  return buildShiftSummary({ name: app.me.name, helper, crewEvents, date: nzToday(), runs: rows.runs, ticks: rows.ticks, todayRuns, duty: app.store.myDuty(), deadlines: deadlines || undefined });
 }
 const nzDayOf = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(iso));
 async function openSummary(sum) {
@@ -498,19 +496,19 @@ async function openSummary(sum) {
     svgEl(`<svg viewBox="0 0 280 70" role="img" aria-label="Your pace over your last ${g.pts.length} mornings. Above the line is quicker than your usual.">
       <line x1="0" y1="${g.y0}" x2="280" y2="${g.y0}" class="sum-zero"/><polyline points="${g.pts.map((p) => `${p.x},${p.y}`).join(' ')}" class="sum-line"/>
       ${g.pts.map((p, i) => `<circle cx="${p.x}" cy="${p.y}" r="${i === g.pts.length - 1 ? 5 : 2.5}" class="${i === g.pts.length - 1 ? 'sum-now' : 'sum-dot'}"/>`).join('')}</svg>`),
-    h('div', { class: 'small muted' }, `Your last ${g.pts.length} mornings. Above the line is quicker than your usual; the big dot is today.`)) : null;
+    h('div', { class: 'small muted' }, sum.inherited ? `The last ${g.pts.length} mornings you helped: each dot is the driver you were with that day, against their usual. The big dot is today.` : `Your last ${g.pts.length} mornings. Above the line is quicker than your usual; the big dot is today.`)) : null;
   const good = (text) => h('li', { class: 'sq-ok' }, text); const flag = (text) => h('li', { class: 'sq-flag' }, text);
   const close = openSheet('Your morning',
     h('div', { class: 'plan-hello' }, stan({ pose: sum.outcome.onTime ? 'hop' : 'wave', size: 72 }), h('div', { class: 'sum-say' }, sum.say.map((k) => h('div', null, STAN_LINES[k]?.say || '')))),
     h('div', { class: `sum-outcome ${sum.outcome.onTime ? 'on' : 'late'}` }, outcomeText(sum.outcome, t)),
-    sum.with ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, `You and ${sum.with}.`) : null,
+    sum.inherited ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, `You were helping ${sum.driver} today, so these are ${sum.driver}’s numbers for the morning.`) : sum.with ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, `You and ${sum.with}.`) : null,
     h('div', { class: 'sum-grid' },
       sum.shift.depotMin != null ? h('div', null, h('span', null, 'At the depot'), h('b', null, `${sum.shift.depotMin} min`)) : null,
       h('div', null, h('span', null, 'On the run'), h('b', null, clock(sum.shift.runMin * 60000))),
       h('div', null, h('span', null, 'Stops'), h('b', null, String(sum.shift.stops))),
       sum.shift.papers ? h('div', null, h('span', null, 'Papers'), h('b', null, String(sum.shift.papers))) : null),
     h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Pace'),
-    h('p', { class: `sum-pace ${sum.pace.word}` }, paceText(sum.pace)),
+    h('p', { class: `sum-pace ${sum.pace.word}` }, paceText(sum.pace, sum.inherited ? `${sum.driver}’s` : 'your')),
     graph,
     h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Quality'),
     h('ul', { class: 'sum-quality' },
@@ -530,7 +528,7 @@ async function showSummary(todayRuns, { force = false, settled = false } = {}) {
     if (!todayRuns.some((r) => (r.done || 0) > 0)) return false;
     if (settled && todayRuns.some((r) => (r.done || 0) > 0 && !runComplete(r))) return false;   // someone is still out on a run
     const sum = await loadSummary(todayRuns);
-    if (!sum) { if (force) toast('Nothing to show yet: I can’t see any of your ticks from this morning.'); return false; }
+    if (!sum) { if (force) toast('Nothing to show yet: I can’t see a morning for you today.'); return false; }
     await noSheet();
     if (onDuty()) return false;
     try { localStorage.setItem(key, today); } catch { /* private mode */ }

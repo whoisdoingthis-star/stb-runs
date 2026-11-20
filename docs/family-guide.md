@@ -63,6 +63,8 @@ When you go off duty, Stan shows you how the morning went (if you forget, he sho
 - **Pace:** how many minutes quicker or slower you were than **your own usual** for the same runs, and a little graph of your last mornings. Above the dotted line is quicker; the big yellow dot is today. You're only ever compared with yourself.
 - **Quality:** every stop ticked; how many ticks were made at the address (tick as you drop the paper, not a few houses on); and any ticks with no location, which means location needs switching on for the app.
 
+**Helpers:** you see the numbers of the driver you were with that day, and your graph follows whoever you helped each day.
+
 Tap **Done**. The **📈 Your morning** button on the Runs page shows it again that day.
 
 ### The notice board

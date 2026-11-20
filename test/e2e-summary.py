@@ -63,6 +63,21 @@ with sync_playwright() as p:
     check('the button opens it again', 'Your morning' in sheet())
     page.locator('.sheet button', has_text='Done').click()
 
+    # ---- a helper sees the numbers of the driver they were with ----
+    page.evaluate(SEED, [80, 0])
+    page.evaluate("""() => { const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+      localStorage.setItem('stb.crew', JSON.stringify([{ name: 'Me', crew: 'helper' }, { name: 'Lisa', crew: 'driver' }]));
+      localStorage.setItem('stb.duty', JSON.stringify([{ id: 'd1', user_name: 'Me', state: 'on_duty', device_time: day + 'T03:30:00+13:00', driver: 'Lisa' }, { id: 'd2', user_name: 'Me', state: 'off_duty', device_time: day + 'T06:30:00+13:00' }])); }""")
+    home()
+    s = sheet()
+    check('a helper’s morning is their driver’s: Stan says whose numbers they are', 'Your morning' in s and 'You were helping Lisa today, so these are Lisa’s numbers for the morning.' in s and 'in by 5:20 am' in s and 'At the depot' not in s, s[:400])
+    if SHOTS: page.screenshot(path=f'{SHOTS}/summary-helper.png')
+    page.locator('.sheet button', has_text='Done').click(); page.wait_for_timeout(300)
+    page.evaluate("localStorage.setItem('stb.duty', '[]')"); home(1200)
+    page.locator('.summary-slot button').click(); page.wait_for_timeout(1500)
+    check('a helper who was with nobody today has no morning to show', page.locator('.sheet').count() == 0)
+    page.evaluate("localStorage.removeItem('stb.crew')")
+
     # ---- a slower morning with two stops unticked: not shown by itself while a run is unfinished, shown on going off duty ----
     page.evaluate(SEED, [125, 2])
     home()
