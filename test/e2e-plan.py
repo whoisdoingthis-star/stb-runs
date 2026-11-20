@@ -89,12 +89,14 @@ with sync_playwright() as p:
     spares = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.spares') || '[]')")
     sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
     check('then Stan asks how many spares are on board: the Herald only on a weekday sheet, and it can be skipped', 'Spares on board?' in sheet and page.locator('.step-row').count() == 1 and 'Herald' in sheet and 'Skip' in sheet and 'go to someone' not in sheet, sheet)
+    check('the same sheet asks for the odometer, and it can be left blank', page.locator('.odo-input').count() == 1 and 'What’s on the odometer?' in sheet.replace('WHAT’S ON THE ODOMETER?', 'What’s on the odometer?'))
+    page.fill('.odo-input', '84,512')
     for _ in range(3): page.locator('.step-btn', has_text='+').click()
     page.locator('.step-btn', has_text='−').click()
     if SHOTS: page.screenshot(path=f'{SHOTS}/spares-start.png')
     page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(500)
     sp = spares()
-    check('the start count is saved for today under my name', len(sp) == 1 and sp[0]['moment'] == 'start' and sp[0]['counts'] == {'NZH': 2} and sp[0]['given'] == [] and sp[0]['user_name'] == 'Me', json.dumps(sp))
+    check('the start count is saved for today under my name', len(sp) == 1 and sp[0]['moment'] == 'start' and sp[0]['counts'] == {'NZH': 2} and sp[0]['given'] == [] and sp[0]['odometer_km'] == 84512 and sp[0]['user_name'] == 'Me', json.dumps(sp))
     page.locator('.duty-card button', has_text='Off duty').click(); page.wait_for_timeout(300)
     page.locator('.sheet button', has_text='Off duty').click(); page.wait_for_timeout(800)
     sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
@@ -105,7 +107,7 @@ with sync_playwright() as p:
     if SHOTS: page.screenshot(path=f'{SHOTS}/spares-end.png')
     page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(500)
     sp = spares()
-    check('the end count is saved with who the spares went to, and a new name is remembered', len(sp) == 2 and sp[1]['moment'] == 'end' and sp[1]['counts'] == {'NZH': 1} and sp[1]['given'] == [{'to': 'Aunty Pat', 'n': 1}, {'to': 'Mr Lee', 'n': 1}] and 'Mr Lee' in page.evaluate("JSON.parse(localStorage.getItem('stb.sparepeople'))"), json.dumps(sp))
+    check('the end count is saved with who the spares went to, and a new name is remembered', len(sp) == 2 and sp[1]['moment'] == 'end' and sp[1]['odometer_km'] is None and sp[1]['counts'] == {'NZH': 1} and sp[1]['given'] == [{'to': 'Aunty Pat', 'n': 1}, {'to': 'Mr Lee', 'n': 1}] and 'Mr Lee' in page.evaluate("JSON.parse(localStorage.getItem('stb.sparepeople'))"), json.dumps(sp))
     check('the typed name is kept as a helper for next time', any(c['name'] == 'seira' and c['crew'] == 'helper' for c in page.evaluate("JSON.parse(localStorage.getItem('stb.crew'))")))
 
     # ---- on their own ----

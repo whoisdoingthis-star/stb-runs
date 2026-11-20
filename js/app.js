@@ -485,7 +485,22 @@ const noSheet = (ms = 120000) => new Promise((ok) => { const t0 = Date.now(); co
 async function loadSummary(todayRuns) {
   const [{ buildShiftSummary }, rows, deadlines, crewEvents, crew] = await Promise.all([import('./shiftsummary.js'), app.store.loadCardRows(28), app.store.getSetting('deadlines').catch(() => null), app.store.loadCrewEvents(28).catch(() => []), app.crew ? app.crew : app.store.crewList().catch(() => [])]);
   const helper = (crew || []).some((c) => c.name === app.me.name && c.crew === 'helper');
-  return buildShiftSummary({ name: app.me.name, helper, crewEvents, date: nzToday(), runs: rows.runs, ticks: rows.ticks, todayRuns, duty: app.store.myDuty(), deadlines: deadlines || undefined });
+  const sum = buildShiftSummary({ name: app.me.name, helper, crewEvents, date: nzToday(), runs: rows.runs, ticks: rows.ticks, todayRuns, duty: app.store.myDuty(), deadlines: deadlines || undefined });
+  if (sum) { try { sum.distance = await Promise.race([shiftDistance(sum, rows.ticks), new Promise((ok) => setTimeout(() => ok(null), 9000))]); } catch { sum.distance = null; } }
+  return sum;
+}
+/** Kilometres for the morning (decision 0045): on the runs, from the ticks; on the clock, from the driver's odometer readings. */
+async function shiftDistance(sum, ticks) {
+  const [k, sp] = await Promise.all([import('./runkm.js'), import('./spares.js')]);
+  const have = new Map((await app.store.loadRunKm(sum.runIds)).map((r) => [r.run_id, r]));
+  for (const id of sum.runIds) {
+    if (have.get(id)?.road_km != null) continue;
+    const path = k.tickPath(ticks.filter((t) => t.run_id === id)); if (path.length < 2) continue;
+    const row = { run_id: id, line_km: k.lineKm(path), road_km: await k.routeKm(path, (pts) => app.store.routeThrough(pts)).catch(() => null), points: path.length };
+    have.set(id, row); app.store.saveRunKm(row).catch(() => {});
+  }
+  const odo = sp.odometerDay(await app.store.loadSpares().catch(() => []), sum.date, sum.driver);
+  return { runs: k.bestKm(sum.runIds.map((id) => have.get(id)).filter(Boolean)), clock: k.clockKm(odo.start, odo.end) };
 }
 const nzDayOf = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(iso));
 async function openSummary(sum) {
@@ -506,7 +521,10 @@ async function openSummary(sum) {
       sum.shift.depotMin != null ? h('div', null, h('span', null, 'At the depot'), h('b', null, `${sum.shift.depotMin} min`)) : null,
       h('div', null, h('span', null, 'On the run'), h('b', null, clock(sum.shift.runMin * 60000))),
       h('div', null, h('span', null, 'Stops'), h('b', null, String(sum.shift.stops))),
-      sum.shift.papers ? h('div', null, h('span', null, 'Papers'), h('b', null, String(sum.shift.papers))) : null),
+      sum.shift.papers ? h('div', null, h('span', null, 'Papers'), h('b', null, String(sum.shift.papers))) : null,
+      sum.distance?.runs ? h('div', null, h('span', null, sum.distance.runs.routed ? 'Km on the runs' : 'Km on the runs (roughly)'), h('b', null, `${sum.distance.runs.routed ? '' : '~'}${sum.distance.runs.km}`)) : null,
+      sum.distance?.clock ? h('div', null, h('span', null, 'Km on the clock'), h('b', null, String(sum.distance.clock))) : null),
+    sum.distance?.runs || sum.distance?.clock ? h('p', { class: 'small muted', style: 'margin:6px 0 0' }, [sum.distance.runs ? `On the runs is worked out from where the ticks were made${sum.distance.runs.routed ? ', along the roads' : ' (the map wasn’t reachable, so it’s a rough figure)'}.` : null, sum.distance.clock ? 'On the clock is your odometer, from leaving the depot to going off duty.' : null].filter(Boolean).join(' ')) : null,
     h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Pace'),
     h('p', { class: `sum-pace ${sum.pace.word}` }, paceText(sum.pace, sum.inherited ? `${sum.driver}’s` : 'your')),
     graph,
@@ -564,12 +582,16 @@ async function askSpares(moment, todayRuns = []) {
         e.currentTarget.replaceWith(h('div', { class: 'who-add' }, input, h('button', { class: 'btn primary', onclick: add }, 'Add'))); input.focus();
       } }, 'Someone else…'));
     if (moment === 'end') drawPeople();
+    const odo = h('input', { type: 'text', inputmode: 'numeric', maxlength: 9, class: 'odo-input', placeholder: 'e.g. 84512', 'aria-label': 'Odometer reading in kilometres' });
     const close = openSheet(moment === 'start' ? 'Spares on board?' : 'Spares left?',
       h('p', { class: 'muted' }, moment === 'start' ? 'How many more papers do you have than the sheets need? A rough count is fine.' : 'How many spare papers are left over?'),
       ...papers.map((p) => stepper(() => counts[p], (v) => { counts[p] = v; }, PAPERS[p])),
       moment === 'end' ? h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Did any spares go to someone?') : null,
       moment === 'end' ? peopleBox : null,
-      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
+      h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, moment === 'start' ? 'What’s on the odometer?' : 'And the odometer now?'),
+      h('p', { class: 'small muted', style: 'margin:2px 0 6px' }, 'The big kilometres number on the dash. Leave it blank if you’d rather not.'),
+      odo,
+      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, odometer: odo.value, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
       h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Skip'));
   } catch { /* never in the way of going on or off duty */ }
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { papersNeeded, papersToday, spareRow, spareDay, spareText, morningLines } from '../js/spares.js';
+import { papersNeeded, papersToday, spareRow, spareDay, spareText, morningLines, odometerDay } from '../js/spares.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 const weekday = [{ summary: { byPub: { NZH: 100, NZHR: 20, LIS: 16, 'NZH+LIS': 9 } } }, { summary: { byPub: { NZH: 50 } } }];
@@ -8,7 +8,7 @@ t('papers needed adds the retail copies to their paper and leaves magazines out'
 t('the Herald is always asked about; the Sunday Star-Times only when it is on the sheets', () => { assert.deepEqual(papersToday(weekday), ['NZH']); assert.deepEqual(papersToday(sunday), ['NZH', 'SST']); assert.deepEqual(papersToday([]), ['NZH']); });
 t('a spare count is tidied before it is saved', () => {
   const r = spareRow({ date: '2026-11-20', moment: 'end', counts: { NZH: '3', SST: -2, XX: 9 }, given: [{ to: ' A friend ', n: 1 }, { to: '', n: 2 }, { to: 'Nobody', n: 0 }], now: Date.parse('2026-11-19T17:31:00Z') });
-  assert.deepEqual(r, { delivery_date: '2026-11-20', moment: 'end', counts: { NZH: 3, SST: 0 }, given: [{ to: 'A friend', n: 1 }], device_time: '2026-11-19T17:31:00.000Z' });
+  assert.deepEqual(r, { delivery_date: '2026-11-20', moment: 'end', counts: { NZH: 3, SST: 0 }, given: [{ to: 'A friend', n: 1 }], odometer_km: null, device_time: '2026-11-19T17:31:00.000Z' });
   assert.deepEqual(spareRow({ date: '2026-11-20', moment: 'start', counts: { NZH: 4 }, given: [{ to: 'A friend', n: 1 }] }).given, []);
 });
 const rows = [
@@ -18,6 +18,8 @@ const rows = [
   { delivery_date: '2026-11-20', user_name: 'Mike', moment: 'end', counts: { NZH: 1 }, given: [], device_time: '2026-11-19T17:10:00Z' },
   { delivery_date: '2026-11-19', user_name: 'Lisa', moment: 'end', counts: { NZH: 9 }, given: [], device_time: '2026-11-18T17:10:00Z' }];
 t('a day’s spares take each driver’s latest answer and add the drivers together', () => assert.deepEqual(spareDay(rows, '2026-11-20'), { start: { NZH: 4 }, end: { NZH: 4 }, given: [{ to: 'A friend', n: 1 }], by: ['Lisa', 'Mike'] }));
+t('an odometer reading is kept as whole kilometres, and nonsense is left out', () => { assert.equal(spareRow({ date: 'd', moment: 'start', counts: {}, odometer: '84,512' }).odometer_km, 84512); assert.equal(spareRow({ date: 'd', moment: 'start', counts: {}, odometer: '' }).odometer_km, null); assert.equal(spareRow({ date: 'd', moment: 'start', counts: {}, odometer: 'abc' }).odometer_km, null); assert.equal(spareRow({ date: 'd', moment: 'end', counts: {}, odometer: 84547.6 }).odometer_km, 84548); });
+t('a driver’s odometer for the day is their latest reading at the start and at the end', () => assert.deepEqual(odometerDay([{ delivery_date: 'd', user_name: 'Lisa', moment: 'start', odometer_km: 100, device_time: '2026-11-19T13:00:00Z' }, { delivery_date: 'd', user_name: 'Lisa', moment: 'start', odometer_km: 84512, device_time: '2026-11-19T13:05:00Z' }, { delivery_date: 'd', user_name: 'Lisa', moment: 'end', odometer_km: 84547, device_time: '2026-11-19T17:00:00Z' }, { delivery_date: 'd', user_name: 'Mike', moment: 'end', odometer_km: 5, device_time: '2026-11-19T17:00:00Z' }], 'd', 'Lisa'), { start: 84512, end: 84547 }));
 t('no answers, no spares line', () => { assert.equal(spareDay(rows, '2026-11-21'), null); assert.equal(spareText(null), null); });
 t('the day’s spares read as a sentence', () => { assert.equal(spareText(spareDay(rows, '2026-11-20')), 'Herald: 4 at the start, 4 left · 1 to A friend'); assert.equal(spareText({ start: null, end: { NZH: 2, SST: 14 }, given: [], by: ['Lisa'] }), 'Herald: 2 left · Sunday Star-Times: 14 left'); });
 t('the morning lists each run’s finish against the deadline', () => {

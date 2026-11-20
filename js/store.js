@@ -182,6 +182,10 @@ class Base {
   myScores() { return LS.get('stb.scores', []); }
   async saveScore(row) { const r = { user_name: this.me?.name || 'Me', ...row, device_time: new Date().toISOString() }; LS.set('stb.scores', [...this.myScores(), r].sort((a, b) => b.score - a.score).slice(0, 20)); return r; }
   async loadScores() { return this.myScores(); }
+  // Kilometres on a run (decision 0045). Demo mode has no mapping service; tests can hand one in.
+  async routeThrough(points) { return globalThis.__stbFakeThrough ? globalThis.__stbFakeThrough(points) : null; }
+  async loadRunKm(ids) { const all = LS.get('stb.runkm', {}); return ids.map((id) => all[id]).filter(Boolean); }
+  async saveRunKm(row) { LS.set('stb.runkm', { ...LS.get('stb.runkm', {}), [row.run_id]: row }); }
   // Spare papers (decision 0042). Kept on this phone; the shared store sends them on.
   async saveSpares(row) { const r = { id: uuid(), user_name: this.me?.name || 'Me', ...row }; LS.set('stb.spares', [...LS.get('stb.spares', []), r].slice(-60)); return r; }
   async loadSpares() { return LS.get('stb.spares', []); }
@@ -727,6 +731,19 @@ export class SupabaseStore extends Base {
     try { const { error } = await this.sb.from('notice_seen').upsert(ids.map((id) => ({ notice_id: id, user_name: this.me.name })), { onConflict: 'notice_id,user_name', ignoreDuplicates: true }); if (error) throw error; }
     catch { LS.set('stb.noticeseenpending', [...new Set([...LS.get('stb.noticeseenpending', []), ...ids])]); }
   }
+  /** Driving metres through a list of points, from the mapping service. Its failures never touch the co-driver's routing. */
+  async routeThrough(points) {
+    const { data, error } = await this.sb.functions.invoke('route', { body: { through: points.map((p) => [p.lng, p.lat]) } });
+    return error || typeof data?.metres !== 'number' ? null : data.metres;
+  }
+  async loadRunKm(ids) {
+    try { if (!ids.length) return []; const { data, error } = await this.sb.from('run_km').select('run_id, line_km, road_km, points').in('run_id', ids); if (error) throw error; return data; }
+    catch { return super.loadRunKm(ids); }
+  }
+  async saveRunKm(row) {
+    await super.saveRunKm(row);
+    try { await this.sb.from('run_km').upsert({ ...row, computed_by: this.me?.name || null, computed_at: new Date().toISOString() }); } catch { /* it's on this phone; someone will work it out again */ }
+  }
   /** Spare counts are kept on the phone first, then sent; anything not sent yet goes with the next one. */
   async saveSpares(row) {
     const r = await super.saveSpares(row);
@@ -743,7 +760,7 @@ export class SupabaseStore extends Base {
     try {
       await this.flushSpares();
       const from = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(Date.now() - 14 * 864e5));
-      const { data, error } = await this.sb.from('spare_counts').select('id, delivery_date, user_name, moment, counts, given, device_time').gte('delivery_date', from).order('device_time').limit(500);
+      const { data, error } = await this.sb.from('spare_counts').select('id, delivery_date, user_name, moment, counts, given, odometer_km, device_time').gte('delivery_date', from).order('device_time').limit(500);
       if (error) throw error;
       return data;
     } catch { return super.loadSpares(); }

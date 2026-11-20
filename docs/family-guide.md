@@ -55,11 +55,12 @@ Drivers only. Both questions have a **Skip** button, so they never hold you up.
 - **When you leave the depot,** Stan asks **Spares on board?** Tap **+** for each spare paper you have (a rough count is fine), then **Save**.
 - **When you go off duty,** Stan asks **Spares left?** and whether any went to someone. Tap **+** next to their name, or **Someone else…** to add a name. Then **Save**.
 - On Sundays there's a second row for the Sunday Star-Times.
+- **The odometer:** the same two sheets ask for the big kilometres number on the dash. Type it in if you can; leave it blank if you can't. It's how we know how far the morning really was.
 
 ### Your morning
 When you go off duty, Stan shows you how the morning went (if you forget, he shows you the next time you open the app):
 - **The big line at the top:** when your last paper went out, and how long before the deadline (or after it).
-- **The boxes:** time at the depot, time on the run, stops and papers.
+- **The boxes:** time at the depot, time on the run, stops and papers, **km on the runs** (worked out from where you ticked) and **km on the clock** (from your odometer readings).
 - **Pace:** how many minutes quicker or slower you were than **your own usual** for the same runs, and a little graph of your last mornings. Above the dotted line is quicker; the big yellow dot is today. You're only ever compared with yourself.
 - **Quality:** every stop ticked; how many ticks were made at the address (tick as you drop the paper, not a few houses on); and any ticks with no location, which means location needs switching on for the app.
 

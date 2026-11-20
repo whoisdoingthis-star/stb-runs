@@ -36,6 +36,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `spare_counts` | Spare papers ([decision 0042](decisions/0042-spares-and-pinned-rules.md)) | One row per answer: `delivery_date`, `user_name`, `moment` (`start` or `end`), `counts` (JSON by paper, e.g. NZH, SST), `given` (JSON list of who got a spare and how many), `device_time`. Added, never changed; each driver's latest answer for a moment is the one used. Members read; each driver adds their own. |
 | `spare_people` | People who regularly get a spare, shown as buttons | `name`, `added_by`, `added_at`. Members read and add; dispatchers remove. |
 | `stan_lines` | Which of Stan's lines have been recorded ([decision 0043](decisions/0043-stan-recorded-voice.md)) | `key` (also the clip's file name), `text` (the words as recorded), `voice_id`, `model`, `bytes`, `recorded_by`, `recorded_at`. Members read; only the `stan-voice` function writes. The clips themselves are in the public `stan-voice` storage bucket. |
+| `run_km` | How far a run was ([decision 0045](decisions/0045-kilometres.md)) | One row per run: `line_km` (straight lines between the places it was ticked, in order), `road_km` (the same path along the roads; empty if the map didn't answer), `points`, `computed_by`, `computed_at`. Members read and write; worked out once, the first time someone opens that morning's summary. |
 | `game_scores` | Scores from Stan's Paper Run ([decision 0034](decisions/0034-stans-paper-run.md)) | One row per finished game: `user_name`, `score`, `streets`, `delivered`, `best_streak`, `ended` (complaints, battery, quit). Everyone on the list reads; you can only add a score under your own name. Nothing to do with runs or ticks. |
 
 | `pings` | Dispatch asking where an on-duty driver is: `target_name`, `asked_by`, `asked_at`, then the phone's answer (`state` answered / off_duty / no_gps, position, `answered_at`). Dispatchers add; only the pinged person's phone answers; kept as a record. ([decision 0026](decisions/0026-run-map-and-ping.md)) |
@@ -70,3 +71,5 @@ Write the change into `sql/schema.sql` in re-runnable form, run it in the Supaba
 **Who's driving (19 Nov 2026):** `duty_events.driver` is the driver a helper named when going on duty. Read crews with `shiftCrews` in `js/shifts.js`: the driver's `helpers` wins over a helper's `driver`.
 
 **Pinned rules (20 Nov 2026):** `notices.pinned` marks a standing rule: no end date, listed first on the board.
+
+**Odometer (21 Nov 2026):** `spare_counts.odometer_km` is the driver's odometer reading given with the spare count: `start` when leaving the depot, `end` when going off duty. Optional.

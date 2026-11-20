@@ -18,10 +18,11 @@ export function papersToday(runs) {
   return ['NZH', ...Object.keys(PAPERS).filter((p) => p !== 'NZH' && need[p] > 0)];
 }
 /** A tidy row to save. counts: { NZH: 3 } · given: [{ to: 'A friend', n: 1 }]. */
-export function spareRow({ date, moment, counts, given = [], now = Date.now() }) {
+export function spareRow({ date, moment, counts, given = [], odometer = null, now = Date.now() }) {
   const c = {}; for (const [k, v] of Object.entries(counts || {})) if (PAPERS[k]) c[k] = Math.max(0, Math.min(999, Math.round(Number(v) || 0)));
   const g = (given || []).map((x) => ({ to: String(x.to || '').trim().slice(0, 30), n: Math.max(0, Math.min(99, Math.round(Number(x.n) || 0))) })).filter((x) => x.to && x.n > 0);
-  return { delivery_date: date, moment: moment === 'start' ? 'start' : 'end', counts: c, given: moment === 'start' ? [] : g, device_time: new Date(now).toISOString() };
+  const odo = Math.round(Number(String(odometer ?? '').replace(/[^0-9.]/g, '')));
+  return { delivery_date: date, moment: moment === 'start' ? 'start' : 'end', counts: c, given: moment === 'start' ? [] : g, odometer_km: odometer != null && odometer !== '' && odo > 0 && odo < 2000000 ? odo : null, device_time: new Date(now).toISOString() };
 }
 /**
  * One day's spares across every driver: each driver's latest start and latest end count, added up.
@@ -51,4 +52,11 @@ export function morningLines(runs, deadlineAt, clock) {
     const late = deadlineAt ? Math.round((r.finishedAt - deadlineAt) / 60e3) : 0;
     return { name, text: `done ${clock(r.finishedAt)}${late > 0 ? ` (${late} min after the deadline)` : ''}`, late: late > 0, done: true };
   });
+}
+
+/** One driver's odometer readings for a day: their latest at the start and at the end. */
+export function odometerDay(rows, date, driver) {
+  const mine = (rows || []).filter((r) => r.delivery_date === date && r.user_name === driver && r.odometer_km != null).sort((a, b) => Date.parse(a.device_time) - Date.parse(b.device_time));
+  const last = (moment) => mine.filter((r) => r.moment === moment).pop()?.odometer_km ?? null;
+  return { start: last('start'), end: last('end') };
 }

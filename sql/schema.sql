@@ -1151,3 +1151,28 @@ begin
     insert into storage.buckets (id, name, public) values ('stan-voice', 'stan-voice', true) on conflict (id) do nothing;
   end if;
 end $$;
+
+-- ---- Kilometres on a run, and the odometer (Mike, 21 Nov 2026; docs/decisions/0045-kilometres.md) ----
+-- The odometer reading rides with the spare count: one answer when leaving the depot, one when going off duty.
+alter table public.spare_counts add column if not exists odometer_km integer;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'spare_counts_odometer_km_check') then
+    alter table public.spare_counts add constraint spare_counts_odometer_km_check check (odometer_km is null or (odometer_km >= 0 and odometer_km < 2000000));
+  end if;
+end $$;
+-- How far a run was, from where its ticks were made: straight lines (line_km) and along the roads (road_km, when the map answered).
+create table if not exists public.run_km (
+  run_id      text primary key,
+  line_km     numeric(7,2) not null,
+  road_km     numeric(7,2),
+  points      integer not null,
+  computed_by text,
+  computed_at timestamptz not null default now()
+);
+alter table public.run_km enable row level security;
+drop policy if exists run_km_read on public.run_km;
+create policy run_km_read on public.run_km for select to authenticated using (public.is_member());
+drop policy if exists run_km_add on public.run_km;
+create policy run_km_add on public.run_km for insert to authenticated with check (public.is_member());
+drop policy if exists run_km_change on public.run_km;
+create policy run_km_change on public.run_km for update to authenticated using (public.is_member()) with check (public.is_member());

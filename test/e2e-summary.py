@@ -30,6 +30,8 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     ctx = b.new_context(**p.devices['Pixel 7'])
     page = ctx.new_page()
+    # a stand-in for the mapping service: the straight line through the points, a quarter longer
+    page.add_init_script("""globalThis.__stbFakeThrough = (pts) => { window.__throughCalls = (window.__throughCalls || 0) + 1; if (window.__noMap) return null; let m = 0; for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i]; m += Math.hypot((b.lat - a.lat) * 111320, (b.lng - a.lng) * 111320 * Math.cos(a.lat * Math.PI / 180)); } return m * 1.25; };""")
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto('http://localhost:8765/')
@@ -44,8 +46,13 @@ with sync_playwright() as p:
 
     # ---- a clean morning, quicker than usual, seen the next time the app is opened ----
     n = page.evaluate(SEED, [80, 0])
+    page.evaluate("""() => { const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date()); localStorage.removeItem('stb.runkm');
+      localStorage.setItem('stb.spares', JSON.stringify([{ id: 'o1', delivery_date: day, user_name: 'Me', moment: 'start', counts: { NZH: 3 }, given: [], odometer_km: 84512, device_time: day + 'T03:55:00+13:00' }, { id: 'o2', delivery_date: day, user_name: 'Me', moment: 'end', counts: { NZH: 2 }, given: [], odometer_km: 84547, device_time: day + 'T05:30:00+13:00' }])); }""")
     home()
     s = sheet()
+    km = page.evaluate("Object.values(JSON.parse(localStorage.getItem('stb.runkm') || '{}'))")
+    check('kilometres on the runs are worked out from the ticks along the roads, and kept', len(km) == 1 and km[0]['road_km'] is not None and abs(km[0]['road_km'] - km[0]['line_km'] * 1.25) < 0.05 and 'Km on the runs' in s and 'roughly' not in s and str(round(km[0]['road_km'], 1)).rstrip('0').rstrip('.') in s, json.dumps(km) + s[:500])
+    check('kilometres on the clock come from the two odometer readings', 'Km on the clock' in s and '35' in s and 'from leaving the depot to going off duty' in s, s)
     check('Stan shows the morning the next time the app is opened, once the runs are done', 'Your morning' in s, s[:200])
     check('it leads with the outcome against the deadline', 'in by 5:20 am' in s and 'min before the deadline' in s, s[:300])
     check('Stan says his lines for a clean, quicker morning', 'Every stop ticked. Goo-doo!' in s and 'Quicker than your usual. I noticed.' in s, s[:300])
@@ -59,9 +66,20 @@ with sync_playwright() as p:
     check('after that there is a Your morning button on the Runs page', page.locator('.summary-slot button').count() == 1)
     home()
     check('it pops up once a day only', page.locator('.sheet').count() == 0 and page.locator('.summary-slot button').count() == 1)
+    calls = page.evaluate("window.__throughCalls || 0")
     page.locator('.summary-slot button').click(); page.wait_for_timeout(1200)
     check('the button opens it again', 'Your morning' in sheet())
+    check('a run’s kilometres are worked out once, not every time', page.evaluate("window.__throughCalls || 0") == calls)
     page.locator('.sheet button', has_text='Done').click()
+
+    # ---- no map: a rough figure, marked as rough ----
+    page.evaluate(SEED, [80, 0]); page.evaluate("localStorage.removeItem('stb.runkm'); localStorage.removeItem('stb.spares'); window.__noMap = true")
+    page.add_init_script("window.__noMap = true")
+    home()
+    s = sheet()
+    check('when the map can’t be reached the kilometres are a rough figure and say so, with no clock figure when there are no readings', 'Km on the runs (roughly)' in s and '~' in s and 'Km on the clock' not in s, s[:600])
+    page.locator('.sheet button', has_text='Done').click(); page.wait_for_timeout(300)
+    page.add_init_script("window.__noMap = false")
 
     # ---- a helper sees the numbers of the driver they were with ----
     page.evaluate(SEED, [80, 0])

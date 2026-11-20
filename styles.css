@@ -959,3 +959,6 @@ html.big .step-label { font-size: 22px; } html.big .nb-morning ul { font-size: 2
 .sum-quality { list-style: none; margin: 4px 0 8px; padding: 0; font-size: 16.5px; line-height: 1.4; } .sum-quality li { padding: 4px 0 4px 28px; position: relative; }
 .sum-quality li::before { content: '•'; position: absolute; left: 8px; } .sum-quality li.sq-ok::before { content: '✓'; color: #4ade80; left: 4px; font-weight: 800; } .sum-quality li.sq-flag::before { content: '!'; color: #f59e0b; left: 9px; font-weight: 800; }
 html.big .sum-say { font-size: 22px; } html.big .sum-outcome { font-size: 23px; } html.big .sum-pace, html.big .sum-quality { font-size: 20px; } html.big .sum-grid b { font-size: 25px; } html.big .sum-grid span { font-size: 15px; }
+
+/* Odometer (decision 0045) */
+.odo-input { width: 100%; box-sizing: border-box; font-size: 22px; font-weight: 700; letter-spacing: .04em; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: inherit; }

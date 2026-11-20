@@ -106,7 +106,7 @@ export function buildShiftSummary({ name, helper = false, crewEvents = [], date,
   if (noGps >= 5 && noGps * 10 >= ticksMade) say.push('sum.nogps'); else if (quality.atPct != null && quality.atPct >= 90) say.push('sum.ticks.good'); else if (quality.atPct != null && quality.atPct < 70) say.push('sum.ticks.low');
 
   const others = crew.filter((n) => n !== name);
-  return { name, date, driver, inherited: helper, crew, with: others.length ? names(others) : null, outcome, shift, pace, trend, quality, say };
+  return { name, date, driver, inherited: helper, runIds: today.map((m) => m.run_id), crew, with: others.length ? names(others) : null, outcome, shift, pace, trend, quality, say };
 }
 
 /** The pace line in words. */
