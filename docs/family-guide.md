@@ -50,11 +50,19 @@ Tap **Got it**. The plan stays on the Runs page in a yellow box; tap it to see i
 
 **Helpers:** tap **On duty**, then tap **who's driving**. That's it.
 
+### Spare papers
+Drivers only. Both questions have a **Skip** button, so they never hold you up.
+- **When you leave the depot,** Stan asks **Spares on board?** Tap **+** for each spare paper you have (a rough count is fine), then **Save**.
+- **When you go off duty,** Stan asks **Spares left?** and whether any went to someone. Tap **+** next to their name, or **Someone else…** to add a name. Then **Save**.
+- On Sundays there's a second row for the Sunday Star-Times.
+
 ### The notice board
 The **📌 Notice board** button on the Runs page is for telling the family something: "papers will be late", "the gate code has changed".
 - **To leave a note:** Notice board → **Leave a note**. Type it, choose **Everyone** or the people it's for, choose **For 3 days** or **Until I remove it**, then **Post it**.
 - **When someone has left you a note,** Stan pops up with it when you next open the app. Tap **Got it** so they know you've seen it.
 - The board shows who has seen each note and who hasn't yet. You can take down your own notes.
+- **A rule everyone should keep following?** Choose **📌 Pin as a rule** when you post it. It stays at the top of the board under **How we do things**.
+- The board also shows **This morning**: when each run finished and the spares. The app works that out, so you don't need to write it.
 - It only shows when the app is opened, so **ring or text for anything urgent**.
 
 ## Doing a run

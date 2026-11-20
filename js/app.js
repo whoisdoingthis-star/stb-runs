@@ -13,7 +13,7 @@ import { stanReply, STAN_HELLO } from './stanchat.js';
 import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
 import { readExif, photoProof } from './exif.js';
 import { cleanNotice, expiryFor, unreadFor, boardFor, seenBy, NOTICE_DAYS } from './notices.js';
-import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt } from './shifts.js';
+import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt, runFinishedAt } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -476,8 +476,36 @@ function goOffDuty(after) {
   const start = shiftStart(app.store.myDuty());
   const close = openSheet('Go off duty?',
     h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
-    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); } }, 'Off duty'),
+    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); askSpares('end', app.todayRuns || []); } }, 'Off duty'),
     h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
+}
+// ---- Spare papers (decision 0042) ----
+/** Asks a driver how many spares are on board (start) or left (end), and at the end who any went to. Never blocks: Skip is always there. */
+async function askSpares(moment, todayRuns = []) {
+  try {
+    if (!(app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')) return;
+    const { papersToday, spareRow, PAPERS } = await import('./spares.js');
+    const papers = papersToday(todayRuns); const counts = Object.fromEntries(papers.map((p) => [p, 0])); const given = new Map();
+    const people = moment === 'end' ? [...(await app.store.sparePeople().catch(() => []))] : [];
+    const stepper = (get, set, label) => { const n = h('b', { class: 'step-n' }, String(get())); const bump = (d) => { set(Math.max(0, get() + d)); n.textContent = String(get()); };
+      return h('div', { class: 'step-row' }, h('span', { class: 'step-label' }, label), h('button', { class: 'btn step-btn', 'aria-label': `One fewer ${label}`, onclick: () => bump(-1) }, '−'), n, h('button', { class: 'btn step-btn', 'aria-label': `One more ${label}`, onclick: () => bump(1) }, '+')); };
+    const peopleBox = h('div');
+    const drawPeople = () => peopleBox.replaceChildren(...people.map((name) => stepper(() => given.get(name) || 0, (v) => given.set(name, v), name)),
+      h('button', { class: 'btn who-btn who-other', onclick: (e) => {
+        const input = h('input', { type: 'text', maxlength: 30, placeholder: 'Their name', 'aria-label': 'Who got a spare', autocapitalize: 'words' });
+        const add = () => { const n = input.value.replace(/\s+/g, ' ').trim().slice(0, 30); if (!n) return; const same = people.find((x) => x.toLowerCase() === n.toLowerCase()); if (!same) { people.push(n); app.store.addSparePerson(n).catch(() => {}); } given.set(same || n, (given.get(same || n) || 0) + 1); drawPeople(); };
+        input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') add(); });
+        e.currentTarget.replaceWith(h('div', { class: 'who-add' }, input, h('button', { class: 'btn primary', onclick: add }, 'Add'))); input.focus();
+      } }, 'Someone else…'));
+    if (moment === 'end') drawPeople();
+    const close = openSheet(moment === 'start' ? 'Spares on board?' : 'Spares left?',
+      h('p', { class: 'muted' }, moment === 'start' ? 'How many more papers do you have than the sheets need? A rough count is fine.' : 'How many spare papers are left over?'),
+      ...papers.map((p) => stepper(() => counts[p], (v) => { counts[p] = v; }, PAPERS[p])),
+      moment === 'end' ? h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Did any spares go to someone?') : null,
+      moment === 'end' ? peopleBox : null,
+      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
+      h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Skip'));
+  } catch { /* never in the way of going on or off duty */ }
 }
 // ---- The notice board (decision 0041) ----
 const noticeWhen = (iso) => new Date(iso).toLocaleString('en-NZ', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
@@ -489,7 +517,7 @@ function writeNotice(after) {
   const draw = () => {
     toRow.replaceChildren(h('button', { class: `btn who-btn ${to.size ? '' : 'on'}`, 'aria-pressed': String(!to.size), onclick: () => { to.clear(); draw(); } }, `${to.size ? '' : '✓ '}Everyone`),
       ...others.map((n) => h('button', { class: `btn who-btn ${to.has(n) ? 'on' : ''}`, 'aria-pressed': String(to.has(n)), onclick: () => { if (to.has(n)) to.delete(n); else to.add(n); draw(); } }, `${to.has(n) ? '✓ ' : ''}${n}`)));
-    keepRow.replaceChildren(...[['days', `For ${NOTICE_DAYS} days`], ['forever', 'Until I remove it']].map(([k, label]) => h('button', { class: `btn who-btn ${keep === k ? 'on' : ''}`, 'aria-pressed': String(keep === k), onclick: () => { keep = k; draw(); } }, `${keep === k ? '✓ ' : ''}${label}`)));
+    keepRow.replaceChildren(...[['days', `For ${NOTICE_DAYS} days`], ['forever', 'Until I remove it'], ['pin', '📌 Pin as a rule']].map(([k, label]) => h('button', { class: `btn who-btn ${keep === k ? 'on' : ''}`, 'aria-pressed': String(keep === k), onclick: () => { keep = k; draw(); } }, `${keep === k ? '✓ ' : ''}${label}`)));
   };
   draw();
   const close = openSheet('Leave a note', text,
@@ -498,26 +526,45 @@ function writeNotice(after) {
     h('button', { class: 'btn primary big', onclick: async (e) => {
       const body = cleanNotice(text.value); if (!body) { msg.textContent = 'Write the note first.'; msg.className = 'small bad'; return; }
       e.currentTarget.disabled = true;
-      try { await app.store.addNotice({ body, to_names: [...to], expires_at: expiryFor(keep) }); close(); toast(`Posted. ${to.size ? listNames([...to]) : 'Everyone'} will see it when they next open the app.`, null, { stan: 'wave' }); after?.(); }
+      try { await app.store.addNotice({ body, to_names: [...to], expires_at: expiryFor(keep === 'pin' ? 'forever' : keep), pinned: keep === 'pin' }); close(); toast(`Posted. ${to.size ? listNames([...to]) : 'Everyone'} will see it when they next open the app.`, null, { stan: 'wave' }); after?.(); }
       catch (err) { msg.textContent = `Couldn’t post it: ${err.message}. Check the signal and try again.`; msg.className = 'small bad'; e.currentTarget.disabled = false; }
     } }, 'Post it'));
 }
-function openBoard(data, refresh) {
+function openBoard(data, refresh, todayRuns = []) {
   const mine = boardFor(data.notices, app.me.name); const people = memberNames();
+  const card = (n) => { const s = seenBy(n, data.seen, people); const own = n.from_name === app.me.name;
+    return h('div', { class: `nb-note ${n.pinned ? 'nb-pinned' : ''}` }, h('div', { class: 'nb-from' }, `${own ? 'You' : n.from_name} · ${noticeWhen(n.created_at)}${n.to_names?.length ? ` · for ${listNames(n.to_names)}` : ''}`), h('p', null, n.body),
+      h('div', { class: 'small muted' }, [s.seen.length ? `Seen by ${listNames(s.seen)}` : null, s.waiting.length ? `not yet ${listNames(s.waiting)}` : null].filter(Boolean).join('; ') || 'Nobody to show it to yet', n.pinned || n.expires_at ? '' : ' · stays until removed'),
+      own || app.me.role === 'dispatcher' ? h('button', { class: 'link small danger', onclick: async () => { try { await app.store.removeNotice(n.id); close(); toast('Note taken down.'); refresh(); } catch (e) { toast(`Couldn’t take it down: ${e.message}`); } } }, 'Take it down') : null); };
+  const rules = mine.filter((n) => n.pinned); const notes = mine.filter((n) => !n.pinned);
+  const morning = h('div');
   const close = openSheet('Notice board',
-    mine.length ? h('div', { class: 'nb-list' }, mine.map((n) => { const s = seenBy(n, data.seen, people); const own = n.from_name === app.me.name;
-      return h('div', { class: 'nb-note' }, h('div', { class: 'nb-from' }, `${own ? 'You' : n.from_name} · ${noticeWhen(n.created_at)}${n.to_names?.length ? ` · for ${listNames(n.to_names)}` : ''}`), h('p', null, n.body),
-        h('div', { class: 'small muted' }, [s.seen.length ? `Seen by ${listNames(s.seen)}` : null, s.waiting.length ? `not yet ${listNames(s.waiting)}` : null].filter(Boolean).join('; ') || 'Nobody to show it to yet', n.expires_at ? '' : ' · stays until removed'),
-        own || app.me.role === 'dispatcher' ? h('button', { class: 'link small danger', onclick: async () => { try { await app.store.removeNotice(n.id); close(); toast('Note taken down.'); refresh(); } catch (e) { toast(`Couldn’t take it down: ${e.message}`); } } }, 'Take it down') : null); }))
-      : h('p', { class: 'muted' }, 'No notes at the moment.'),
+    rules.length ? h('div', { class: 'stan-card-h' }, 'How we do things') : null,
+    rules.length ? h('div', { class: 'nb-list' }, rules.map(card)) : null,
+    morning,
+    rules.length || notes.length ? h('div', { class: 'stan-card-h' }, 'Notes') : null,
+    notes.length ? h('div', { class: 'nb-list' }, notes.map(card)) : h('p', { class: 'muted' }, 'No notes at the moment.'),
     h('button', { class: 'btn primary big', style: 'margin-top:12px', onclick: () => { close(); writeNotice(refresh); } }, 'Leave a note'));
+  // This morning, worked out from the ticks and the spare counts: nobody has to type it.
+  (async () => {
+    try {
+      const today = nzToday(); const runs = todayRuns.filter((r) => r.delivery_date === today && ((r.done || 0) > 0 || r.closed_at));
+      if (!runs.length) return;
+      const [sp, w, rows, dl] = await Promise.all([import('./spares.js'), import('./watch.js'), app.store.loadSpares().catch(() => []), app.store.getSetting('deadlines').catch(() => null)]);
+      const lines = sp.morningLines(runs.map((r) => ({ route: r.route, finishedAt: runFinishedAt(r) })), w.deadlineFor(today, dl || undefined).at, (t) => new Date(t).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }));
+      const spares = sp.spareText(sp.spareDay(rows, today));
+      morning.replaceChildren(h('div', { class: 'stan-card-h' }, 'This morning'), h('div', { class: 'nb-note nb-morning' },
+        h('ul', null, lines.map((l) => h('li', { class: l.late ? 'late' : '' }, h('b', null, l.name), ` ${l.text}`))),
+        h('div', { class: 'small muted' }, spares ? `Spares: ${spares}` : 'Spares: not counted yet')));
+    } catch { /* the notes are what matter */ }
+  })();
 }
 /** The Notice board button on the Runs page; Stan pops up with any notes this person hasn't acknowledged. */
 function noticeSlot() {
   const slot = h('div', { class: 'notice-slot' });
   if (!app.me?.name) { slot._update = () => {}; return slot; }
   let data = { notices: [], seen: [] }; let showing = false;
-  const draw = () => { const n = boardFor(data.notices, app.me.name).length; slot.replaceChildren(h('button', { class: 'btn notice-btn', onclick: () => openBoard(data, load) }, '📌 Notice board', n ? h('span', { class: 'notice-count' }, String(n)) : null)); };
+  const draw = () => { const n = boardFor(data.notices, app.me.name).length; slot.replaceChildren(h('button', { class: 'btn notice-btn', onclick: () => openBoard(data, load, app.todayRuns || []) }, '📌 Notice board', n ? h('span', { class: 'notice-count' }, String(n)) : null)); };
   const pop = (tries = 0) => {
     const unread = unreadFor(data.notices, data.seen, app.me.name);
     if (!unread.length || showing || !slot.isConnected) return;
@@ -565,6 +612,7 @@ function startShift(rerender, todayRuns = []) {
     noteDuty('on_duty', { helpers, device_time: new Date(t).toISOString() }, f);
     if (prepped) { const first = myRuns().map((id) => todayRuns.find((r) => r.id === id)).find((r) => r && !runComplete(r)); noteDuty('on_run', { run_id: first?.id, device_time: new Date(t + 1).toISOString() }, f); toast('On the run. Drive safe!', null, { stan: 'wave' }); }
     rerender();
+    if (prepped) askSpares('start', todayRuns);
   };
   const draw = () => {
     const ok = alone || picked.size > 0;
@@ -680,7 +728,7 @@ function dutyCard(todayRuns, rerender) {
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
     st.state === 'on_duty' && (app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')
-      ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast('On the run. Drive safe!', null, { stan: 'wave' }); rerender(); } }, 'Leaving the depot now') : null,
+      ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast('On the run. Drive safe!', null, { stan: 'wave' }); rerender(); askSpares('start', todayRuns); } }, 'Leaving the depot now') : null,
     mineRow, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
   card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
   return card;
@@ -759,6 +807,7 @@ async function viewHome() {
       list.replaceChildren(h('div', { class: 'banner bad' }, `Could not load runs: ${e.message}`));
       return;
     }
+    app.todayRuns = runs.filter((r) => r.delivery_date === nzToday());
     drawDuty(runs);
     planEl._update(runs).finally(() => { if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } });
     if (!runs.length) {

@@ -1093,3 +1093,39 @@ drop policy if exists notice_seen_read on public.notice_seen;
 create policy notice_seen_read on public.notice_seen for select to authenticated using (public.is_member());
 drop policy if exists notice_seen_add on public.notice_seen;
 create policy notice_seen_add on public.notice_seen for insert to authenticated with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());
+
+-- ---- Spare papers and pinned rules (Mike, 20 Nov 2026; docs/decisions/0042-spares-and-pinned-rules.md) ----
+-- A pinned notice is a standing rule ("How we do things"): it has no end date and sits at the top of the board.
+alter table public.notices add column if not exists pinned boolean not null default false;
+-- A driver's count of spare papers at the start of the run and at the end, and who any spares went to.
+-- counts: { "NZH": 3, "SST": 12 }   given: [{ "to": "name", "n": 1 }]   Added, never changed: the latest answer counts.
+create table if not exists public.spare_counts (
+  id            uuid primary key,
+  delivery_date date not null,
+  user_id       uuid not null default auth.uid(),
+  user_name     text not null,
+  moment        text not null check (moment in ('start', 'end')),
+  counts        jsonb not null default '{}'::jsonb,
+  given         jsonb not null default '[]'::jsonb,
+  device_time   timestamptz not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists spare_counts_day on public.spare_counts (delivery_date);
+alter table public.spare_counts enable row level security;
+drop policy if exists spare_counts_read on public.spare_counts;
+create policy spare_counts_read on public.spare_counts for select to authenticated using (public.is_member());
+drop policy if exists spare_counts_add on public.spare_counts;
+create policy spare_counts_add on public.spare_counts for insert to authenticated with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());
+-- People who regularly get a spare, so they are a button. Names are added in the app, never in this file.
+create table if not exists public.spare_people (
+  name     text primary key check (char_length(name) between 1 and 30),
+  added_by text,
+  added_at timestamptz not null default now()
+);
+alter table public.spare_people enable row level security;
+drop policy if exists spare_people_read on public.spare_people;
+create policy spare_people_read on public.spare_people for select to authenticated using (public.is_member());
+drop policy if exists spare_people_add on public.spare_people;
+create policy spare_people_add on public.spare_people for insert to authenticated with check (public.is_member());
+drop policy if exists spare_people_remove on public.spare_people;
+create policy spare_people_remove on public.spare_people for delete to authenticated using (public.is_dispatcher());

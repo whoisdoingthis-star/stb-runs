@@ -1,4 +1,5 @@
-# Stan's day plan on the phone (decision 0040), the crew check when going on duty and the notice board (decision 0041), in demo mode.
+# Stan's day plan on the phone (decision 0040), the crew check when going on duty and the notice board (decision 0041),
+# and spare papers and pinned rules (decision 0042), in demo mode.
 #   python3 -m http.server 8765 &   then   python3 test/e2e-plan.py /path/to/Report.pdf [screenshot-folder]
 import json, sys, time
 from playwright.sync_api import sync_playwright
@@ -22,7 +23,7 @@ SEED = """([me, helpers, dayOffset, driver]) => {
   const plan = { date: day(dayOffset), deadline: t + 5 * m, crews: [{ driver, helpers, runs: list, prepMin: 5, roadMin: 30 * list.length, travelMin: 5 * list.length, depotAt: now + 14 * m, leaveDepotAt: now + 19 * m, firstPaperAt: now + 20 * m, finishAt: t - 5 * m, shiftMin: 35 * list.length + 5 }], assumptions: [], news: ['New: I now know who drives and who helps.'] };
   localStorage.setItem('stb.dayplans', JSON.stringify([{ delivery_date: day(dayOffset), plan, note: 'Papers are due at 2:15.', updated_by: 'Mike', updated_at: '2026-11-19T07:00:00Z' }]));
   localStorage.setItem('stb.crew', JSON.stringify([{ name: 'Me', crew: me }, { name: 'Lenny', crew: 'helper' }, { name: 'Zaph', crew: 'helper' }, { name: 'Lisa', crew: 'driver' }]));
-  localStorage.removeItem('stb.plan.seen.Me'); localStorage.removeItem('stb.notices'); localStorage.removeItem('stb.noticeseen'); localStorage.removeItem('stb.myruns'); localStorage.removeItem('stb.duty'); localStorage.removeItem('stb.dutypending');
+  localStorage.removeItem('stb.plan.seen.Me'); localStorage.removeItem('stb.spares'); localStorage.setItem('stb.sparepeople', JSON.stringify(['Aunty Pat'])); localStorage.removeItem('stb.notices'); localStorage.removeItem('stb.noticeseen'); localStorage.removeItem('stb.myruns'); localStorage.removeItem('stb.duty'); localStorage.removeItem('stb.dutypending');
   return routes;
 }"""
 
@@ -82,9 +83,29 @@ with sync_playwright() as p:
     check('Prepping at the depot: on duty, with the helpers on the record', len(d) == 1 and d[0]['state'] == 'on_duty' and sorted(d[0].get('helpers')) == ['Lenny', 'seira'], json.dumps(d))
     check('the duty card then offers Leaving the depot now', page.locator('.duty-card.on .leave-btn').count() == 1 and 'On duty' in page.inner_text('.duty-card'))
     if SHOTS: page.screenshot(path=f'{SHOTS}/leaving-depot.png')
-    page.locator('.leave-btn').click(); page.wait_for_timeout(600)
+    page.locator('.leave-btn').click(); page.wait_for_timeout(800)
     d = duty()
     check('Leaving the depot now starts the run', len(d) == 2 and d[1]['state'] == 'on_run' and 'On the run' in page.inner_text('.duty-card') and page.locator('.leave-btn').count() == 0, json.dumps(d))
+    spares = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.spares') || '[]')")
+    sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
+    check('then Stan asks how many spares are on board: the Herald only on a weekday sheet, and it can be skipped', 'Spares on board?' in sheet and page.locator('.step-row').count() == 1 and 'Herald' in sheet and 'Skip' in sheet and 'go to someone' not in sheet, sheet)
+    for _ in range(3): page.locator('.step-btn', has_text='+').click()
+    page.locator('.step-btn', has_text='−').click()
+    if SHOTS: page.screenshot(path=f'{SHOTS}/spares-start.png')
+    page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(500)
+    sp = spares()
+    check('the start count is saved for today under my name', len(sp) == 1 and sp[0]['moment'] == 'start' and sp[0]['counts'] == {'NZH': 2} and sp[0]['given'] == [] and sp[0]['user_name'] == 'Me', json.dumps(sp))
+    page.locator('.duty-card button', has_text='Off duty').click(); page.wait_for_timeout(300)
+    page.locator('.sheet button', has_text='Off duty').click(); page.wait_for_timeout(800)
+    sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
+    check('going off duty asks how many are left and who any went to, with the regulars as buttons', duty()[-1]['state'] == 'off_duty' and 'Spares left?' in sheet and 'Did any spares go to someone?' in sheet.replace('DID ANY SPARES GO TO SOMEONE?', 'Did any spares go to someone?') and 'Aunty Pat' in sheet and 'Someone else…' in sheet, sheet)
+    page.locator('.step-row', has_text='Herald').locator('.step-btn', has_text='+').click()
+    page.locator('.step-row', has_text='Aunty Pat').locator('.step-btn', has_text='+').click()
+    page.locator('.who-other').click(); page.fill('.who-add input', 'Mr Lee'); page.locator('.who-add button').click(); page.wait_for_timeout(200)
+    if SHOTS: page.screenshot(path=f'{SHOTS}/spares-end.png')
+    page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(500)
+    sp = spares()
+    check('the end count is saved with who the spares went to, and a new name is remembered', len(sp) == 2 and sp[1]['moment'] == 'end' and sp[1]['counts'] == {'NZH': 1} and sp[1]['given'] == [{'to': 'Aunty Pat', 'n': 1}, {'to': 'Mr Lee', 'n': 1}] and 'Mr Lee' in page.evaluate("JSON.parse(localStorage.getItem('stb.sparepeople'))"), json.dumps(sp))
     check('the typed name is kept as a helper for next time', any(c['name'] == 'seira' and c['crew'] == 'helper' for c in page.evaluate("JSON.parse(localStorage.getItem('stb.crew'))")))
 
     # ---- on their own ----
@@ -97,6 +118,9 @@ with sync_playwright() as p:
     check('on their own: nobody is ticked and the next step is locked until Just me', page.locator('.who-btn.on').count() == 0 and page.locator('.who-next button[disabled]').count() == 2)
     page.locator('.who-btn', has_text='Just me').click(); page.wait_for_timeout(100)
     page.locator('.sheet button', has_text='Prepped: starting the run').click(); page.wait_for_timeout(600)
+    check('prepped and starting also asks about spares, and Skip saves nothing', 'Spares on board?' in page.inner_text('.sheet'))
+    page.locator('.sheet button', has_text='Skip').click(); page.wait_for_timeout(300)
+    check('skipping leaves no spare count', len(page.evaluate("JSON.parse(localStorage.getItem('stb.spares') || '[]')")) == 0 and page.locator('.sheet').count() == 0)
     d = duty(); check('Just me, already prepped: on duty with no helpers, and straight on the run', len(d) == 2 and d[0]['state'] == 'on_duty' and d[0].get('helpers') == [] and d[1]['state'] == 'on_run' and d[1]['device_time'] > d[0]['device_time'] and 'On the run' in page.inner_text('.duty-card'), json.dumps(d))
 
     # ---- a helper ----
@@ -154,6 +178,7 @@ with sync_playwright() as p:
     page.locator('.sheet button', has_text='Leave a note').click(); page.wait_for_timeout(300)
     page.locator('.sheet button', has_text='Post it').click(); page.wait_for_timeout(200)
     check('an empty note is not posted', 'Write the note first.' in page.inner_text('.sheet'))
+    check('a note can be pinned as a rule', page.locator('.who-btn', has_text='Pin as a rule').count() == 1)
     check('a new note is for Everyone and for three days unless changed', page.locator('.who-btn.on').count() == 2 and 'Everyone' in page.locator('.who-btn.on').first.inner_text() and 'For 3 days' in page.locator('.who-btn.on').nth(1).inner_text())
     page.fill('.sheet textarea', 'Gate code at the village has changed. Ask Mike.')
     page.locator('.who-btn', has_text='Lenny').click(); page.locator('.who-btn', has_text='Until I remove it').click()
@@ -168,6 +193,23 @@ with sync_playwright() as p:
     if SHOTS: page.screenshot(path=f'{SHOTS}/notice-board.png')
     page.locator('.nb-note button', has_text='Take it down').click(); page.wait_for_timeout(500)
     check('taking it down removes it from the board', page.locator('.notice-count').inner_text() == '2' and any(n.get('removed_at') for n in page.evaluate("JSON.parse(localStorage.getItem('stb.notices'))")))
+    # pinned rules and the morning card
+    page.locator('.notice-btn').click(); page.wait_for_timeout(300)
+    page.locator('.sheet button', has_text='Leave a note').click(); page.wait_for_timeout(300)
+    page.fill('.sheet textarea', 'Only give a spare if it is on the way and the count allows.')
+    page.locator('.who-btn', has_text='Pin as a rule').click(); page.locator('.sheet button', has_text='Post it').click(); page.wait_for_timeout(600)
+    pinned = [n for n in page.evaluate("JSON.parse(localStorage.getItem('stb.notices'))") if n.get('pinned')]
+    check('a pinned rule is saved with no end date', len(pinned) == 1 and pinned[0]['expires_at'] is None, json.dumps(pinned))
+    page.evaluate("""() => { const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
+      const runs = JSON.parse(localStorage.getItem('stb.demo.runs')); runs[0].closed_at = new Date().toISOString(); localStorage.setItem('stb.demo.runs', JSON.stringify(runs));
+      localStorage.setItem('stb.spares', JSON.stringify([{ id: 's1', delivery_date: day, user_name: 'Me', moment: 'end', counts: { NZH: 3 }, given: [{ to: 'Aunty Pat', n: 1 }], device_time: new Date().toISOString() }])); }""")
+    home(); page.wait_for_timeout(300)
+    page.locator('.notice-btn').click(); page.wait_for_timeout(900)
+    board = page.inner_text('.sheet')
+    check('the board puts pinned rules first under How we do things', board.lower().index('how we do things') < board.lower().index('notes') and 'Only give a spare' in board and page.locator('.nb-pinned').count() == 1, board)
+    check('the board shows this morning by itself: runs done and the spares', 'this morning' in board.lower() and 'Run 6 done ' in board and 'Spares: Herald: 3 left · 1 to Aunty Pat' in board, board)
+    if SHOTS: page.screenshot(path=f'{SHOTS}/board-morning.png')
+    page.locator('.sheet .icon-btn').click(); page.wait_for_timeout(200)
     # with a plan and a note both waiting: the plan first, then the note
     page.evaluate(SEED, ['driver', ['Lenny'], 0, 'Me'])
     page.evaluate("localStorage.setItem('stb.notices', JSON.stringify([{ id: 'n9', from_name: 'Mike', body: 'One more thing.', to_names: null, created_at: new Date().toISOString(), expires_at: null }]))")

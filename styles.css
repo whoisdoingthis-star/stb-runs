@@ -938,3 +938,9 @@ html.big .plan-card-main { font-size: 21px; } html.big .plan-card-sub { font-siz
 .nb-note p { margin: 4px 0 6px; font-size: var(--t-m, 17px); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; } .nb-from { font-size: 13.5px; font-weight: 700; color: var(--muted); }
 .sheet textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
 html.big .nb-note p { font-size: 21px; } html.big .nb-from { font-size: 16px; }
+
+/* ---- Spare papers, pinned rules and the morning card (decision 0042) ---- */
+.step-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; } .step-label { flex: 1; font-size: 18px; font-weight: 700; } .step-n { min-width: 40px; text-align: center; font-size: 26px; }
+.step-btn { width: 56px; min-height: 52px; font-size: 26px; font-weight: 800; padding: 0; }
+.nb-note.nb-pinned { border-left-color: #ffc400; } .nb-note.nb-morning { border-left-color: #16a34a; } .nb-morning ul { margin: 0 0 6px; padding-left: 18px; font-size: 16px; line-height: 1.5; } .nb-morning li.late { color: #f87171; }
+html.big .step-label { font-size: 22px; } html.big .nb-morning ul { font-size: 20px; }

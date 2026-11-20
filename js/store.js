@@ -172,8 +172,8 @@ class Base {
   async addHelperName(name) { const list = LS.get('stb.crew', []); if (!list.some((c) => c.name.toLowerCase() === name.toLowerCase())) LS.set('stb.crew', [...list, { name, crew: 'helper', extra: true }]); }
   // The notice board (decision 0041). Demo mode keeps notes on this phone.
   async loadNotices() { return { notices: LS.get('stb.notices', []), seen: LS.get('stb.noticeseen', []) }; }
-  async addNotice({ body, to_names, expires_at }) {
-    const n = { id: uuid(), from_name: this.me?.name || 'Me', body, to_names: to_names?.length ? to_names : null, created_at: new Date().toISOString(), expires_at: expires_at || null };
+  async addNotice({ body, to_names, expires_at, pinned }) {
+    const n = { id: uuid(), from_name: this.me?.name || 'Me', body, to_names: to_names?.length ? to_names : null, created_at: new Date().toISOString(), expires_at: pinned ? null : expires_at || null, pinned: !!pinned };
     LS.set('stb.notices', [...LS.get('stb.notices', []), n]); return n;
   }
   async markNoticesSeen(ids) { const me = this.me?.name || 'Me'; const have = LS.get('stb.noticeseen', []); LS.set('stb.noticeseen', [...have, ...ids.filter((id) => !have.some((s) => s.notice_id === id && s.user_name === me)).map((id) => ({ notice_id: id, user_name: me, seen_at: new Date().toISOString() }))]); }
@@ -182,6 +182,11 @@ class Base {
   myScores() { return LS.get('stb.scores', []); }
   async saveScore(row) { const r = { user_name: this.me?.name || 'Me', ...row, device_time: new Date().toISOString() }; LS.set('stb.scores', [...this.myScores(), r].sort((a, b) => b.score - a.score).slice(0, 20)); return r; }
   async loadScores() { return this.myScores(); }
+  // Spare papers (decision 0042). Kept on this phone; the shared store sends them on.
+  async saveSpares(row) { const r = { id: uuid(), user_name: this.me?.name || 'Me', ...row }; LS.set('stb.spares', [...LS.get('stb.spares', []), r].slice(-60)); return r; }
+  async loadSpares() { return LS.get('stb.spares', []); }
+  async sparePeople() { return LS.get('stb.sparepeople', []); }
+  async addSparePerson(name) { const list = LS.get('stb.sparepeople', []); if (!list.some((n) => n.toLowerCase() === name.toLowerCase())) LS.set('stb.sparepeople', [...list, name]); }
 }
 
 const HOLD_MS = 10000;
@@ -699,7 +704,7 @@ export class SupabaseStore extends Base {
     try {
       const waiting = LS.get('stb.noticeseenpending', []);
       if (waiting.length) { const { error } = await this.sb.from('notice_seen').upsert(waiting.map((id) => ({ notice_id: id, user_name: this.me.name })), { onConflict: 'notice_id,user_name', ignoreDuplicates: true }); if (!error) LS.set('stb.noticeseenpending', []); }
-      const a = await this.sb.from('notices').select('id, from_name, body, to_names, created_at, expires_at, removed_at').is('removed_at', null).order('created_at', { ascending: false }).limit(50);
+      const a = await this.sb.from('notices').select('id, from_name, body, to_names, created_at, expires_at, removed_at, pinned').is('removed_at', null).order('created_at', { ascending: false }).limit(50);
       if (a.error) throw a.error;
       const ids = a.data.map((n) => n.id);
       const b = ids.length ? await this.sb.from('notice_seen').select('notice_id, user_name, seen_at').in('notice_id', ids) : { data: [] };
@@ -709,8 +714,8 @@ export class SupabaseStore extends Base {
       return { notices: a.data, seen };
     } catch { return super.loadNotices(); }
   }
-  async addNotice({ body, to_names, expires_at }) {
-    const n = { id: uuid(), from_name: this.me.name, body, to_names: to_names?.length ? to_names : null, expires_at: expires_at || null };
+  async addNotice({ body, to_names, expires_at, pinned }) {
+    const n = { id: uuid(), from_name: this.me.name, body, to_names: to_names?.length ? to_names : null, expires_at: pinned ? null : expires_at || null, pinned: !!pinned };
     const { error } = await this.sb.from('notices').insert(n);
     if (error) throw error;
     return n;
@@ -719,6 +724,35 @@ export class SupabaseStore extends Base {
     await super.markNoticesSeen(ids);   // so it never pops up twice on this phone, signal or not
     try { const { error } = await this.sb.from('notice_seen').upsert(ids.map((id) => ({ notice_id: id, user_name: this.me.name })), { onConflict: 'notice_id,user_name', ignoreDuplicates: true }); if (error) throw error; }
     catch { LS.set('stb.noticeseenpending', [...new Set([...LS.get('stb.noticeseenpending', []), ...ids])]); }
+  }
+  /** Spare counts are kept on the phone first, then sent; anything not sent yet goes with the next one. */
+  async saveSpares(row) {
+    const r = await super.saveSpares(row);
+    LS.set('stb.sparespending', [...LS.get('stb.sparespending', []), r]);
+    await this.flushSpares();
+    return r;
+  }
+  async flushSpares() {
+    const waiting = LS.get('stb.sparespending', []); if (!waiting.length) return;
+    try { const { error } = await this.sb.from('spare_counts').upsert(waiting, { onConflict: 'id', ignoreDuplicates: true }); if (!error) LS.set('stb.sparespending', []); } catch { /* next time */ }
+  }
+  /** Everyone's spare counts for the last fortnight; this phone's own when there's no signal. */
+  async loadSpares() {
+    try {
+      await this.flushSpares();
+      const from = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(Date.now() - 14 * 864e5));
+      const { data, error } = await this.sb.from('spare_counts').select('id, delivery_date, user_name, moment, counts, given, device_time').gte('delivery_date', from).order('device_time').limit(500);
+      if (error) throw error;
+      return data;
+    } catch { return super.loadSpares(); }
+  }
+  async sparePeople() {
+    try { const { data, error } = await this.sb.from('spare_people').select('name').order('name'); if (error) throw error; const list = data.map((r) => r.name); LS.set('stb.sparepeople', list); return list; }
+    catch { return super.sparePeople(); }
+  }
+  async addSparePerson(name) {
+    await super.addSparePerson(name);
+    try { await this.sb.from('spare_people').upsert({ name, added_by: this.me?.name || null }, { onConflict: 'name', ignoreDuplicates: true }); } catch { /* on this phone; the count carries the name anyway */ }
   }
   async removeNotice(id) {
     const { error } = await this.sb.from('notices').update({ removed_at: new Date().toISOString(), removed_by: this.me.name }).eq('id', id);
