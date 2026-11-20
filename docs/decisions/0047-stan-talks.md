@@ -21,6 +21,8 @@ Stan's new voice was designed and all 112 lines recorded on 21 Nov 2026 ([0043](
 5. **A switch.** *Settings → Stan talks*: **Out loud** (the default) or **Quiet**. Quiet keeps his words on screen. Switching Stan off altogether still switches everything off.
 6. **Two voices, for now.** The Driver Assistant's directions and "Chat with Stan" keep his original on-phone voice ([0023](0023-stan-voice.md)), because they say things that can't be recorded in advance.
 
+7. **Sounds default to on** (Mike, 21 Nov 2026: "I'd prefer default option is voice and sounds on, then select off if wanted"). Stan's voice was already on by default; the opening chimes now are too. This reverses the "off unless switched on" part of [0016](0016-opening-animation.md), which was chosen because runs start before dawn. Each is still switched off per phone in Settings, and a phone that had chosen Silent stays silent.
+
 ## What it does not do
 - He doesn't yet say which run finished ("Run six. Done." is recorded but not wired), or speak in the game, or use the route and kilometre lines: those wait for the features they belong to.
 - He doesn't read out numbers or anything that changes.

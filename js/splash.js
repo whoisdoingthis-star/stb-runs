@@ -15,7 +15,7 @@ const get = (k) => { try { return localStorage.getItem(k); } catch { return null
 const set = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
 
-export const soundOn = () => get(SOUND_KEY) === 'on';
+export const soundOn = () => get(SOUND_KEY) !== 'off';   // on unless switched off (Mike, 21 Nov 2026; it was off unless switched on)
 export const setSound = (on) => set(SOUND_KEY, on ? 'on' : 'off');
 /** True once per day per phone. */
 export const splashDue = () => get(DAY_KEY) !== today();

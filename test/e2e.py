@@ -21,7 +21,7 @@ with sync_playwright() as p:
     page.wait_for_selector('#pdf', state='attached')
     check('opening animation plays when the app opens', page.locator('.splash').count() == 1)
     page.wait_for_selector('.splash', state='detached', timeout=4000)
-    check('opening is silent unless switched on', page.evaluate("localStorage.getItem('stb-sound')") != 'on')
+    check('opening sounds are on unless switched off', page.evaluate("localStorage.getItem('stb-sound')") != 'off')
     check('night mode is the default', page.evaluate("document.documentElement.classList.contains('dark')"))
     page.set_input_files('#pdf', PDF)
     page.wait_for_selector('text=Check the sheet', timeout=20000)
