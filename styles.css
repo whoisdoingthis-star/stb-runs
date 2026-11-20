@@ -1030,3 +1030,5 @@ html.big .home-mini { grid-template-columns: 1fr; }
 .run-tile-wrap.nest-rider { margin-left: 14px; padding-left: 10px; border-left: 3px solid var(--edge); }
 .nest-note { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin: -4px 0 6px; }
 .date-group > details.papers[open] { margin-bottom: 12px; }
+/* once the top card says ahead/behind, Stan's plan line has nothing left to add (decision 0050) */
+.page.home:has(.hero-pace) .plan-slot { display: none; }

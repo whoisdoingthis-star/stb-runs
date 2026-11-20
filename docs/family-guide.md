@@ -21,7 +21,7 @@ These are remembered on that phone only.
 
 - **Before you start:** the big **On duty** button, Stan's plan, then **To collect** and today's runs **in the order you'll do them**. Each run says when the plan has it done by.
 - **At the depot** (after On duty): **To load** opens by itself, with every run's papers in your order. Tap **Leaving the depot now** when you drive off.
-- **On the run:** the top card shows the run you're on (say **Run 11**, **14 of 26**), a bar filling up, and one big **Continue** button. Once you've ticked a stop it also says **On plan**, **6 min ahead** or **8 min behind**. That's just where Stan's plan thought you'd be: it isn't a score.
+- **On the run:** the top card shows the run you're on (say **Run 11**, **14 of 26**), a bar filling up, and one big **Continue** button. Once you've ticked a stop it also says **On plan**, **6 min ahead** or **8 min behind**. That's just where Stan's plan thought you'd be: it isn't a score. While it's showing, Stan's plan card tucks away to leave room for your runs; it comes back between runs.
 - **Run 8 inside Run 10:** when Run 8 is being dropped off on the way through Run 10, it sits just under Run 10. Tap **Open both** to work them together. If you're doing Run 8 by itself, it shows on its own.
 
 - Each run is a big card: **Run 6**, how many stops, items (papers and magazines) and dockets. Tap it to **Start** (or **Continue**).

@@ -61,7 +61,7 @@ with sync_playwright() as p:
         if page.locator('.sheet').count(): page.locator('.sheet button', has_text='Skip').first.click(); page.wait_for_timeout(400)
     hero = page.inner_text('.hero-now') if page.locator('.hero-now').count() else ''
     check('on the run, the top card is the run I am on', 'run 1 of ' + str(len(order)) in hero.lower() and order[0] in hero and 'Start ' + order[0] in hero, hero)
-    check('nothing is said about the plan before the first tick', page.locator('.hero-pace').count() == 0)
+    check('nothing is said about the plan before the first tick, so Stan’s plan line is still there', page.locator('.hero-pace').count() == 0 and page.locator('.plan-card').is_visible())
     check('the order is still there as a trail', 'My runs: ' + ' → '.join(order) in page.inner_text('.duty-card'))
     check('pick lists are put away once I have left the depot', page.locator('.run-tile .rt-pick').count() == 0)
     check('what was collected moves below the runs', top('details.papers') > top('.run-tile') and page.locator('details.papers[open]').count() == 0)
@@ -89,6 +89,7 @@ with sync_playwright() as p:
     home()
     pace = page.inner_text('.hero-pace') if page.locator('.hero-pace').count() else ''
     check('after a tick, the card says how far behind the plan the run is, in minutes', 'min behind' in pace and page.locator('.hero-pace.late').count() == 1 and 'Continue ' + order[0] in page.inner_text('.hero-now'), pace + ' | ' + (page.inner_text('.hero-now') if page.locator('.hero-now').count() else 'no hero'))
+    check('once it says ahead or behind, Stan’s plan line steps aside', not page.locator('.plan-card').is_visible())
     if SHOTS: page.screenshot(path=f'{SHOTS}/runs-4-behind.png')
     check('no page errors', not errors, str(errors[:2]))
 print('all passed' if not failed else f'{len(failed)} FAILED'); sys.exit(1 if failed else 0)
