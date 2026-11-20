@@ -947,3 +947,15 @@ html.big .step-label { font-size: 22px; } html.big .nb-morning ul { font-size: 2
 
 /* Dispatch: Stan's voice (decision 0043) */
 .sv-group { max-width: 860px; margin-top: 14px; } .sv-group h3 { margin: 0 0 4px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; } .sv-group td { vertical-align: middle; }
+
+/* ---- The end-of-shift summary (decision 0044) ---- */
+.summary-slot:empty { display: none; } .summary-slot { margin: 0 0 12px; }
+.sum-say { font-size: 18px; font-weight: 700; line-height: 1.35; } .sum-say div + div { margin-top: 4px; font-weight: 500; }
+.sum-outcome { font-size: 19px; font-weight: 800; line-height: 1.3; border-radius: 12px; padding: 10px 12px; border: 2px solid #16a34a; background: rgba(22, 163, 74, .12); } .sum-outcome.late { border-color: #f59e0b; background: rgba(245, 158, 11, .12); }
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 8px; margin-top: 10px; } .sum-grid > div { border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; text-align: center; }
+.sum-grid span { display: block; font-size: 12.5px; color: var(--muted); } .sum-grid b { display: block; font-size: 21px; margin-top: 2px; white-space: nowrap; }
+.sum-pace { font-size: 17px; margin: 4px 0 6px; } .sum-pace.quicker { color: #4ade80; } .sum-trend svg { width: 100%; height: auto; display: block; }
+.sum-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; } .sum-line { fill: none; stroke: #22e6f2; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; } .sum-dot { fill: #22e6f2; } .sum-now { fill: #ffc400; stroke: #111; stroke-width: 1.5; }
+.sum-quality { list-style: none; margin: 4px 0 8px; padding: 0; font-size: 16.5px; line-height: 1.4; } .sum-quality li { padding: 4px 0 4px 28px; position: relative; }
+.sum-quality li::before { content: '•'; position: absolute; left: 8px; } .sum-quality li.sq-ok::before { content: '✓'; color: #4ade80; left: 4px; font-weight: 800; } .sum-quality li.sq-flag::before { content: '!'; color: #f59e0b; left: 9px; font-weight: 800; }
+html.big .sum-say { font-size: 22px; } html.big .sum-outcome { font-size: 23px; } html.big .sum-pace, html.big .sum-quality { font-size: 20px; } html.big .sum-grid b { font-size: 25px; } html.big .sum-grid span { font-size: 15px; }

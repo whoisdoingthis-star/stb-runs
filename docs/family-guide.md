@@ -56,6 +56,15 @@ Drivers only. Both questions have a **Skip** button, so they never hold you up.
 - **When you go off duty,** Stan asks **Spares left?** and whether any went to someone. Tap **+** next to their name, or **Someone else…** to add a name. Then **Save**.
 - On Sundays there's a second row for the Sunday Star-Times.
 
+### Your morning
+When you go off duty, Stan shows you how the morning went (if you forget, he shows you the next time you open the app):
+- **The big line at the top:** when your last paper went out, and how long before the deadline (or after it).
+- **The boxes:** time at the depot, time on the run, stops and papers.
+- **Pace:** how many minutes quicker or slower you were than **your own usual** for the same runs, and a little graph of your last mornings. Above the dotted line is quicker; the big yellow dot is today. You're only ever compared with yourself.
+- **Quality:** every stop ticked; how many ticks were made at the address (tick as you drop the paper, not a few houses on); and any ticks with no location, which means location needs switching on for the app.
+
+Tap **Done**. The **📈 Your morning** button on the Runs page shows it again that day.
+
 ### The notice board
 The **📌 Notice board** button on the Runs page is for telling the family something: "papers will be late", "the gate code has changed".
 - **To leave a note:** Notice board → **Leave a note**. Type it, choose **Everyone** or the people it's for, choose **For 3 days** or **Until I remove it**, then **Post it**.

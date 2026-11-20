@@ -476,8 +476,76 @@ function goOffDuty(after) {
   const start = shiftStart(app.store.myDuty());
   const close = openSheet('Go off duty?',
     h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
-    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); askSpares('end', app.todayRuns || []); } }, 'Off duty'),
+    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); (async () => { await askSpares('end', app.todayRuns || []); await new Promise((ok) => setTimeout(ok, 300)); await showSummary(app.todayRuns || []); document.dispatchEvent(new Event('stb-summary')); })(); } }, 'Off duty'),
     h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
+}
+// ---- The end-of-shift summary (decision 0044) ----
+const noSheet = (ms = 120000) => new Promise((ok) => { const t0 = Date.now(); const tick = () => (!document.querySelector('.sheet-backdrop') || Date.now() - t0 > ms ? ok() : setTimeout(tick, 400)); tick(); });
+/** Works out my crew's morning from the last four weeks. Returns the card, or null if we did no run today. */
+async function loadSummary(todayRuns) {
+  const [{ buildShiftSummary }, rows, deadlines] = await Promise.all([import('./shiftsummary.js'), app.store.loadCardRows(28), app.store.getSetting('deadlines').catch(() => null)]);
+  const mine = app.store.myDuty(); const today = nzToday();
+  const start = [...mine].reverse().find((e) => e.state === 'on_duty' && nzDayOf(e.device_time) === today);
+  const crew = [...new Set([app.me.name, ...(start?.helpers || []), ...(start?.driver ? [start.driver] : [])])];
+  return buildShiftSummary({ name: app.me.name, crew, date: today, runs: rows.runs, ticks: rows.ticks, todayRuns, duty: mine, deadlines: deadlines || undefined });
+}
+const nzDayOf = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(iso));
+async function openSummary(sum) {
+  const [{ paceText, outcomeText, trendPoints }, { STAN_LINES }] = await Promise.all([import('./shiftsummary.js'), import('./stanlines.js')]);
+  const t = (ms) => new Date(ms).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+  const q = sum.quality; const g = trendPoints(sum.trend, 280, 70, 8);
+  const graph = g.pts.length >= 2 ? h('div', { class: 'sum-trend' },
+    svgEl(`<svg viewBox="0 0 280 70" role="img" aria-label="Your pace over your last ${g.pts.length} mornings. Above the line is quicker than your usual.">
+      <line x1="0" y1="${g.y0}" x2="280" y2="${g.y0}" class="sum-zero"/><polyline points="${g.pts.map((p) => `${p.x},${p.y}`).join(' ')}" class="sum-line"/>
+      ${g.pts.map((p, i) => `<circle cx="${p.x}" cy="${p.y}" r="${i === g.pts.length - 1 ? 5 : 2.5}" class="${i === g.pts.length - 1 ? 'sum-now' : 'sum-dot'}"/>`).join('')}</svg>`),
+    h('div', { class: 'small muted' }, `Your last ${g.pts.length} mornings. Above the line is quicker than your usual; the big dot is today.`)) : null;
+  const good = (text) => h('li', { class: 'sq-ok' }, text); const flag = (text) => h('li', { class: 'sq-flag' }, text);
+  const close = openSheet('Your morning',
+    h('div', { class: 'plan-hello' }, stan({ pose: sum.outcome.onTime ? 'hop' : 'wave', size: 72 }), h('div', { class: 'sum-say' }, sum.say.map((k) => h('div', null, STAN_LINES[k]?.say || '')))),
+    h('div', { class: `sum-outcome ${sum.outcome.onTime ? 'on' : 'late'}` }, outcomeText(sum.outcome, t)),
+    sum.with ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, `You and ${sum.with}.`) : null,
+    h('div', { class: 'sum-grid' },
+      sum.shift.depotMin != null ? h('div', null, h('span', null, 'At the depot'), h('b', null, `${sum.shift.depotMin} min`)) : null,
+      h('div', null, h('span', null, 'On the run'), h('b', null, clock(sum.shift.runMin * 60000))),
+      h('div', null, h('span', null, 'Stops'), h('b', null, String(sum.shift.stops))),
+      sum.shift.papers ? h('div', null, h('span', null, 'Papers'), h('b', null, String(sum.shift.papers))) : null),
+    h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Pace'),
+    h('p', { class: `sum-pace ${sum.pace.word}` }, paceText(sum.pace)),
+    graph,
+    h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Quality'),
+    h('ul', { class: 'sum-quality' },
+      q.allTicked ? good('Every stop ticked.') : flag(`${q.done} of ${q.total} stops ticked.`),
+      q.notDelivered ? flag(`${q.notDelivered} marked not delivered.`) : null,
+      q.atPct != null ? (q.atPct >= 90 ? good : flag)(`${q.atPct}% of ticks made at the address.${q.atPct < 90 ? ' Tick as you drop the paper, not a few houses on.' : ''}`) : h('li', null, 'Not enough ticks to check where they were made.'),
+      q.noGps ? flag(`${q.noGps} tick${q.noGps === 1 ? '' : 's'} had no location. Check location is switched on for the app.`) : null),
+    h('button', { class: 'btn primary big', style: 'margin-top:8px', onclick: () => close() }, 'Done'));
+}
+const svgEl = (markup) => { const d = document.createElement('div'); d.innerHTML = markup; return d.firstElementChild; };
+/** Shows the summary once the morning is done: after going off duty, or the next time the app is opened. */
+async function showSummary(todayRuns, { force = false, settled = false } = {}) {
+  try {
+    if (!app.me?.name || onDuty()) return false;
+    const key = `stb.summary.seen.${app.me.name}`; const today = nzToday();
+    if (!force && pref(key, '') === today) return false;
+    if (!todayRuns.some((r) => (r.done || 0) > 0)) return false;
+    if (settled && todayRuns.some((r) => (r.done || 0) > 0 && !runComplete(r))) return false;   // someone is still out on a run
+    const sum = await loadSummary(todayRuns);
+    if (!sum) { if (force) toast('Nothing to show yet: I can’t see any of your ticks from this morning.'); return false; }
+    await noSheet();
+    if (onDuty()) return false;
+    try { localStorage.setItem(key, today); } catch { /* private mode */ }
+    await openSummary(sum);
+    return true;
+  } catch { if (force) toast('Couldn’t work out your morning just now. Try again when there’s signal.'); return false; }
+}
+/** A button on the Runs page to see the morning again, once it has been shown today. */
+function summarySlot() {
+  const slot = h('div', { class: 'summary-slot' });
+  slot._update = (runs) => {
+    const show = app.me?.name && !onDuty() && pref(`stb.summary.seen.${app.me.name}`, '') === nzToday();
+    slot.replaceChildren(...(show ? [h('button', { class: 'btn notice-btn', onclick: () => showSummary(runs, { force: true }) }, '📈 Your morning')] : []));
+  };
+  return slot;
 }
 // ---- Spare papers (decision 0042) ----
 /** Asks a driver how many spares are on board (start) or left (end), and at the end who any went to. Never blocks: Skip is always there. */
@@ -774,6 +842,9 @@ async function viewHome() {
   let dutyEl = null;
   const planEl = planSlot((runs) => drawDuty(runs));
   const noticeEl = noticeSlot(); let noticesAsked = false;
+  const summaryEl = summarySlot(); let summaryAsked = false; let lastRuns = [];
+  const onSummary = () => { if (summaryEl.isConnected) summaryEl._update(lastRuns); else document.removeEventListener('stb-summary', onSummary); };
+  document.addEventListener('stb-summary', onSummary);
   const drawDuty = (runs) => {
     // Left on duty after the morning's runs were all closed? End the shift at the time the last run closed (decision 0038).
     const off = autoOffAt(app.store.myDuty(), runs);
@@ -799,6 +870,7 @@ async function viewHome() {
     stanCardSlot(),
     stanChatButton('home'),
     noticeEl,
+    summaryEl,
     list));
 
   async function renderList() {
@@ -809,7 +881,8 @@ async function viewHome() {
     }
     app.todayRuns = runs.filter((r) => r.delivery_date === nzToday());
     drawDuty(runs);
-    planEl._update(runs).finally(() => { if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } });
+    const todays = runs.filter((r) => r.delivery_date === nzToday()); lastRuns = todays; summaryEl._update(todays);
+    planEl._update(runs).finally(() => { if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } if (!summaryAsked) { summaryAsked = true; setTimeout(async () => { if (await showSummary(todays, { settled: true })) summaryEl._update(todays); }, 1500); } });
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
         boredStan(stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' })),

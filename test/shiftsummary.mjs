@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { buildShiftSummary, paceText, outcomeText, trendPoints } from '../js/shiftsummary.js';
+import { STAN_LINES } from '../js/stanlines.js';
+let failed = 0;
+const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
+// Five past weekdays and "today". Lisa does Run 6 (40 stops) and Run 10 (30 stops); Mike does Run 13 (20 stops).
+const DAYS = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20']; const TODAY = '2026-11-23';
+const nz = (d, mins) => new Date(Date.parse(`${d}T00:00:00+13:00`) + mins * 60e3).toISOString();
+const runs = []; const ticks = [];
+const lay = (id, route, d, who, startMin, n, total, opt = {}) => { runs.push({ id, route, delivery_date: d });
+  for (let i = 0; i < n; i++) { const away = opt.away?.includes(i); const nogps = opt.noGps?.includes(i);
+    ticks.push({ run_id: id, address_key: `H|${route}|${i}`, done: true, user_name: opt.by?.[i] || who, device_time: nz(d, startMin + (i * total) / (n - 1)), lat: nogps ? null : -36.9 + i * 0.0005 + (away ? 0.002 : 0), lng: nogps ? null : 174.93, accuracy_m: 8 }); } };
+DAYS.forEach((d, i) => { lay(`a${i}`, 'HOWICK06', d, 'Lisa', 200, 40, 60); lay(`b${i}`, 'HOWICK10', d, 'Lisa', 270, 30, 40); lay(`c${i}`, 'HOWICK13', d, 'Mike', 200, 20, 30); });
+const base = () => ({ runs: [...runs], ticks: [...ticks] });
+const todayRuns = (extra = {}) => [{ id: 'aT', route: 'HOWICK06', summary: { lines: 40, copies: 44 }, done: 40, notDelivered: 0, ...extra.a }, { id: 'bT', route: 'HOWICK10', summary: { lines: 30, copies: 31 }, done: 30, notDelivered: 0, ...extra.b }];
+const clock = (x) => new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit' }).format(new Date(x)).replace(/\s/g, ' ');
+const duty = [{ state: 'on_duty', device_time: nz(TODAY, 170), helpers: ['Lenny'] }, { state: 'on_run', device_time: nz(TODAY, 195) }, { state: 'off_duty', device_time: nz(TODAY, 330) }];
+const make = (fn, args = {}) => { const b = base(); const sv = { runs, ticks }; const r0 = runs.length; const t0 = ticks.length; fn(); const out = { runs: [...runs], ticks: [...ticks] }; runs.length = r0; ticks.length = t0; return buildShiftSummary({ name: 'Lisa', crew: ['Lisa', 'Lenny'], date: TODAY, ...out, todayRuns: todayRuns(args.extra), duty, ...args.over }); };
+
+const good = make(() => { lay('aT', 'HOWICK06', TODAY, 'Lisa', 200, 40, 52, { by: Object.fromEntries([...Array(10)].map((_, i) => [i * 3, 'Lenny'])) }); lay('bT', 'HOWICK10', TODAY, 'Lisa', 262, 30, 38); });
+t('the card leads with the outcome: every run in, and how long before the deadline', () => { assert.equal(good.outcome.onTime, true); assert.equal(good.outcome.marginMin, 60); assert.equal(outcomeText(good.outcome, clock), 'All 2 runs in by 5:00 am, 60 min before the deadline.'); });
+t('it only counts the runs the crew did, not other drivers’ runs', () => { assert.deepEqual(good.outcome.runs, ['Run 6', 'Run 10']); assert.equal(good.shift.stops, 70); assert.equal(good.shift.papers, 75); });
+t('depot time is from On duty to leaving, and run time from the first tick to the last', () => { assert.equal(good.shift.depotMin, 25); assert.equal(good.shift.runMin, 100); });
+t('pace is today against the crew’s own usual for the same runs', () => { assert.deepEqual({ u: good.pace.usualMin, a: good.pace.actualMin, d: good.pace.diffMin, w: good.pace.word }, { u: 100, a: 90, d: 10, w: 'quicker' }); assert.equal(paceText(good.pace), '10 min quicker than your usual for Run 6 and Run 10: 90 min against 100.'); });
+t('a helper’s ticks count as the crew’s', () => { assert.equal(good.quality.ticks, 70); assert.equal(good.with, 'Lenny'); });
+t('ticks at the letterbox are checked against where each address is usually ticked', () => { assert.equal(good.quality.checked, 70); assert.equal(good.quality.atPct, 100); assert.equal(good.quality.noGps, 0); });
+t('a clean, on-time, quicker morning gets Stan’s best lines', () => assert.deepEqual(good.say, ['sum.great', 'sum.faster', 'sum.ticks.good']));
+t('the trend is the pace on each of the crew’s mornings, today last', () => { assert.equal(good.trend.length, 6); assert.deepEqual(good.trend.at(-1), { date: TODAY, pct: 10 }); assert.equal(good.trend[0].pct, 0); });
+
+const late = make(() => { lay('aT', 'HOWICK06', TODAY, 'Lisa', 260, 40, 70, { away: [...Array(16).keys()] }); lay('bT', 'HOWICK10', TODAY, 'Lisa', 340, 30, 45, { noGps: [0, 1, 2] }); }, { extra: { b: { done: 28, notDelivered: 1 } } });
+t('a late morning says how late, against the deadline', () => { assert.equal(late.outcome.onTime, false); assert.equal(outcomeText(late.outcome, clock), 'All 2 runs in by 6:25 am, 25 min after the 6:00 am deadline.'); });
+t('slower than usual is said plainly, in minutes', () => { assert.equal(late.pace.word, 'slower'); assert.equal(paceText(late.pace), '15 min slower than your usual for Run 6 and Run 10: 115 min against 100.'); });
+t('stops not ticked and not-delivered are counted', () => { assert.equal(late.quality.allTicked, false); assert.equal(late.quality.done, 68); assert.equal(late.quality.total, 70); assert.equal(late.quality.notDelivered, 1); });
+t('ticks away from the letterbox lower the figure; ticks with no location are counted apart', () => { assert.equal(late.quality.noGps, 3); assert.equal(late.quality.checked, 67); assert.equal(late.quality.atPct, 76); });
+t('a late, slower morning gets the gentle lines, and nothing about ticks when they’re middling', () => assert.deepEqual(late.say, ['sum.late', 'sum.slower']));
+const far = make(() => { lay('aT', 'HOWICK06', TODAY, 'Lisa', 200, 40, 60, { away: [...Array(20).keys()] }); });
+t('when under 70% of ticks are at the letterbox, Stan says so', () => { assert.equal(far.quality.atPct, 50); assert.ok(far.say.includes('sum.ticks.low')); assert.ok(far.say.includes('sum.same')); });
+const blind = make(() => { lay('aT', 'HOWICK06', TODAY, 'Lisa', 200, 40, 60, { noGps: [...Array(12).keys()] }); });
+t('lots of ticks with no location: Stan asks about location, not about ticking', () => { assert.ok(blind.say.includes('sum.nogps')); assert.ok(!blind.say.includes('sum.ticks.low')); });
+const bulk = make(() => { lay('aT', 'HOWICK06', TODAY, 'Lisa', 200, 40, 2); });
+t('a run ticked all together can’t be timed, and the card says so', () => { assert.equal(bulk.pace.word, 'none'); assert.equal(paceText(bulk.pace), 'Couldn’t measure the pace today: the stops were ticked together.'); assert.equal(bulk.quality.atPct, null); assert.deepEqual(bulk.say, ['sum.great']); });
+const newbie = buildShiftSummary({ name: 'Zaph', crew: ['Zaph'], date: TODAY, runs: [{ id: 'z', route: 'HOWICK11', delivery_date: TODAY }], ticks: [...Array(12)].map((_, i) => ({ run_id: 'z', address_key: `Z|${i}`, done: true, user_name: 'Zaph', device_time: nz(TODAY, 300 + i * 2), lat: -36.9, lng: 174.9, accuracy_m: 5 })), todayRuns: [{ id: 'z', route: 'HOWICK11', summary: { lines: 12, copies: 12 }, done: 12 }], duty: [] });
+t('with no usual yet, the card says what it needs and shows no trend', () => { assert.equal(newbie.pace.word, 'none'); assert.equal(paceText(newbie.pace), 'No usual to compare with yet. I need 3 mornings on a run first.'); assert.deepEqual(newbie.trend, []); assert.equal(newbie.shift.depotMin, null); assert.equal(outcomeText(newbie.outcome, clock), 'Run 11 in by 5:22 am, 38 min before the deadline.'); });
+t('someone who did no run today gets no card', () => assert.equal(buildShiftSummary({ name: 'Moana', crew: ['Moana'], date: TODAY, ...base(), todayRuns: [], duty: [] }), null));
+t('every line Stan can say about a shift is one he has', () => { for (const s of [good, late, far, blind, bulk, newbie]) for (const k of s.say) assert.ok(STAN_LINES[k], k); });
+t('the trend draws as points either side of a zero line: quicker is higher', () => { const g = trendPoints([{ date: 'a', pct: -10 }, { date: 'b', pct: 0 }, { date: 'c', pct: 10 }], 280, 70, 8); assert.equal(g.y0, 35); assert.deepEqual(g.pts.map((p) => [p.x, p.y]), [[8, 62], [140, 35], [272, 8]]); assert.deepEqual(trendPoints([]).pts, []); });
+console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
