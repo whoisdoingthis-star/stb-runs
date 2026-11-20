@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Stan's new voice, in progress** (Mike, 21 Nov): a tuning page, `tools/voice.html`, for choosing by ear how much reverb and "robot" to put on Stan's recorded lines. Nothing in the app has changed yet: the phones don't load any of this.
 - **Spare papers are counted** (Mike, 20 Nov, after Lisa used the notice board to report them): when a driver leaves the depot, Stan asks **how many spares are on board**; when they go off duty, **how many are left** and **whether any went to someone** (regulars are buttons; "Someone else…" adds one). Both can be skipped. On Sundays it asks about the Sunday Star-Times too. ([decision 0042](docs/decisions/0042-spares-and-pinned-rules.md))
 - **Pinned rules:** a note can be **pinned as a rule**. Pinned rules stay at the top of the notice board under **How we do things** and don't expire.
 - **This morning, on the notice board:** each run's finish time (and how late, if it was) and the spares, worked out by the app so nobody has to type it.

@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stan's voice: tune by ear</title>
+<style>
+  body { margin: 0; background: #0b0b0c; color: #f4f4f5; font: 17px/1.45 system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; } p { color: #a1a1aa; margin: 6px 0 16px; }
+  .card { background: #18181b; border: 1px solid #2a2a2e; border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; }
+  label { display: block; font-weight: 700; margin: 12px 0 2px; } label span { float: right; color: #ffc400; font-variant-numeric: tabular-nums; }
+  small { color: #a1a1aa; display: block; margin-bottom: 4px; }
+  input[type=range] { width: 100%; accent-color: #ffc400; height: 36px; }
+  button { font: inherit; font-weight: 700; border-radius: 12px; border: 1px solid #3f3f46; background: #27272a; color: inherit; padding: 12px 16px; min-height: 48px; cursor: pointer; }
+  button.primary { background: #ffc400; color: #111; border-color: #ffc400; } .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  #code { font: 700 22px ui-monospace, monospace; color: #22e6f2; margin: 6px 0; user-select: all; }
+  input[type=file] { width: 100%; margin: 6px 0; color: #a1a1aa; }
+</style>
+<main>
+  <h1>Stan's voice: tune by ear</h1>
+  <p>Load one of Stan's recordings, move the sliders until he sounds right, then tell Claude the code at the bottom.</p>
+  <div class="card">
+    <b>1. Choose a recording</b>
+    <small>An .mp3 downloaded from ElevenLabs. It stays on this device.</small>
+    <input id="file" type="file" accept="audio/*">
+    <div id="got" style="color:#a1a1aa">No recording loaded yet.</div>
+  </div>
+  <div class="card">
+    <b>2. Tune</b>
+    <div class="row" style="margin-top:8px"><button data-p="0,35,0,100">Clean</button><button data-p="12,35,15,100">Light</button><button data-p="22,45,30,100">Medium</button><button data-p="35,60,50,97">Strong</button></div>
+    <label for="reverb">Reverb <span id="v-reverb"></span></label><small>How much room echo is mixed in.</small><input id="reverb" type="range" min="0" max="60">
+    <label for="room">Room size <span id="v-room"></span></label><small>Small box to big hall.</small><input id="room" type="range" min="0" max="100">
+    <label for="robot">Robot <span id="v-robot"></span></label><small>A tight metallic ring on the voice.</small><input id="robot" type="range" min="0" max="80">
+    <label for="speed">Pitch and speed <span id="v-speed"></span></label><small>Below 100 is lower and slightly slower.</small><input id="speed" type="range" min="88" max="106">
+    <div class="row" style="margin-top:10px"><button class="primary" id="play">▶ Play</button><button id="stop">■ Stop</button><button id="plain">Play without the effect</button></div>
+  </div>
+  <div class="card">
+    <b>3. Tell Claude this code</b>
+    <div id="code"></div>
+    <button id="copy">Copy</button>
+  </div>
+</main>
+<script type="module">
+import { STAN_VOICE, playStanClip } from '../js/stanvoice.js';
+const $ = (id) => document.getElementById(id); const keys = ['reverb', 'room', 'robot', 'speed'];
+let ctx = null; let buffer = null; let playing = null;
+const now = () => Object.fromEntries(keys.map((k) => [k, +$(k).value]));
+const show = () => { for (const k of keys) $(`v-${k}`).textContent = $(k).value; $('code').textContent = `STAN ${keys.map((k) => $(k).value).join('-')}`; };
+const set = (o) => { for (const k of keys) $(k).value = o[k]; show(); };
+const stop = () => { try { playing?.stop(); } catch { /* already stopped */ } playing = null; };
+const play = (opts) => { if (!buffer) { $('got').textContent = 'Choose a recording first.'; return; } stop(); ctx.resume(); playing = playStanClip(ctx, buffer, opts); };
+$('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { ctx ||= new (window.AudioContext || window.webkitAudioContext)(); buffer = await ctx.decodeAudioData(await f.arrayBuffer()); $('got').textContent = `Loaded: ${f.name} (${buffer.duration.toFixed(1)} seconds)`; }
+  catch { $('got').textContent = 'Couldn’t read that file. Try the .mp3 download.'; }
+});
+for (const k of keys) $(k).addEventListener('input', show);
+for (const b of document.querySelectorAll('[data-p]')) b.addEventListener('click', () => { const [reverb, room, robot, speed] = b.dataset.p.split(',').map(Number); set({ reverb, room, robot, speed }); play(now()); });
+$('play').addEventListener('click', () => play(now())); $('stop').addEventListener('click', stop);
+$('plain').addEventListener('click', () => play({ reverb: 0, room: 0, robot: 0, speed: 100 }));
+$('copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('code').textContent); $('copy').textContent = 'Copied'; } catch { $('copy').textContent = 'Select the code and copy it'; } });
+set(STAN_VOICE); window.ready = true;
+</script>
+</html>
