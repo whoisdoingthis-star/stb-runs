@@ -1176,3 +1176,7 @@ drop policy if exists run_km_add on public.run_km;
 create policy run_km_add on public.run_km for insert to authenticated with check (public.is_member());
 drop policy if exists run_km_change on public.run_km;
 create policy run_km_change on public.run_km for update to authenticated using (public.is_member()) with check (public.is_member());
+
+-- ---- The route as delivered (Mike, 21 Nov 2026; docs/decisions/0046-route-as-delivered.md) ----
+-- The road the map says was driven between a run's ticks: one line per vehicle, each a list of [lat, lng].
+alter table public.run_km add column if not exists trace jsonb;

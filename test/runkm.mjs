@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { tickPath, tickTracks, runDistance, lineKm, thin, chunks, routeKm, bestKm, clockKm, ROAD_FACTOR } from '../js/runkm.js';
+import { tickPath, tickTracks, runDistance, lineKm, thin, chunks, routeKm, routeTrack, simplify, doubledBack, bestKm, clockKm, ROAD_FACTOR } from '../js/runkm.js';
 let failed = 0; const later = [];
 const t = (name, fn) => { const run = async () => { try { await fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } }; later.push(run); };
 const tick = (i, lat, lng, extra = {}) => ({ done: true, lat, lng, accuracy_m: 8, device_time: new Date(Date.parse('2026-11-20T15:00:00Z') + i * 30000).toISOString(), ...extra });
@@ -16,10 +16,22 @@ t('an answer that is not believable, or a failed piece, gives no driving figure'
 // Two cars on one run: one works south from -36.900, the other works south from -36.950, ticking in turn every 30 seconds.
 const two = []; for (let i = 0; i < 10; i++) { two.push(tick(i * 2, -36.9 - i * 0.001, 174.93, { user_name: 'Lisa' })); two.push(tick(i * 2 + 1, -36.95 - i * 0.001, 174.93, { user_name: 'Mike' })); }
 t('two cars on one run are two tracks, not one path zig-zagging between them', () => { const tr = tickTracks(two); assert.equal(tr.length, 2); assert.deepEqual(tr.map((x) => x.length), [10, 10]); assert.ok(lineKm(tickTracks(two)[0]) < 1.1); });
-t('a run’s kilometres add the cars together', async () => { const d = await runDistance(two, async (pts) => lineKm(pts) * 1250); assert.deepEqual(d, { line_km: 2, road_km: 2.5, points: 20 }); });
+t('a run’s kilometres add the cars together', async () => { const d = await runDistance(two, async (pts) => lineKm(pts) * 1250); assert.deepEqual(d, { line_km: 2, road_km: 2.5, points: 20, trace: null }); });
 t('a driver and a helper ticking from the same car are one track', () => { const same = []; for (let i = 0; i < 12; i++) same.push(tick(i, -36.9 - i * 0.001, 174.93, { user_name: i % 3 ? 'Lisa' : 'Lenny' })); assert.equal(tickTracks(same).length, 1); });
 t('a stray point far from the car adds nothing', async () => { const stray = [...two.filter((x) => x.user_name === 'Lisa'), tick(9, -36.2, 174.5)]; const d = await runDistance(stray, async () => null); assert.equal(d.line_km, 1); assert.equal(d.road_km, null); assert.equal(d.points, 10); });
 t('nothing driven, no figure', async () => assert.equal(await runDistance([tick(0, -36.9, 174.93), tick(1, -36.9, 174.93)], async () => 5), null));
+// the map hands back the road it took, as [lng, lat] points: here, the path itself with a point halfway along each hop
+const withLine = async (pts) => ({ metres: lineKm(pts) * 1100, line: pts.flatMap((p, i) => (i ? [[(pts[i - 1].lng + p.lng) / 2, (pts[i - 1].lat + p.lat) / 2], [p.lng, p.lat]] : [[p.lng, p.lat]])) });
+t('when the map hands back the road it took, the trace is kept as lat/lng, thinned to its shape', async () => { const r = await routeTrack(path, withLine); assert.equal(r.km, 0.36); assert.deepEqual(r.line, [[-36.9, 174.93], [-36.903, 174.93]]); });
+t('a run’s trace has one line per car, and none if the map gave no road', async () => { const d = await runDistance(two, withLine); assert.equal(d.trace.length, 2); assert.deepEqual(d.trace[0][0], [-36.9, 174.93]); assert.equal((await runDistance(two, async (pts) => lineKm(pts) * 1250)).trace, null); });
+t('thinning keeps corners and drops points along a straight', () => assert.deepEqual(simplify([[-36.9, 174.93], [-36.9005, 174.93], [-36.901, 174.93], [-36.901, 174.931], [-36.901, 174.932]]), [[-36.9, 174.93], [-36.901, 174.93], [-36.901, 174.932]]));
+t('going back over the same road is found, whichever way it is driven', () => {
+  const outAndBack = [[[-36.9, 174.93], [-36.905, 174.93], [-36.9, 174.93]]]; const g = doubledBack(outAndBack);
+  assert.ok(Math.abs(g.metres - 553) < 40, String(g.metres)); assert.ok(Math.abs(g.totalMetres - 1106) < 30, String(g.totalMetres)); assert.equal(g.pieces.length, 1);
+  const loop = [[[-36.9, 174.93], [-36.905, 174.93], [-36.905, 174.936], [-36.9, 174.936], [-36.9, 174.93]]]; assert.equal(doubledBack(loop).metres, 0); assert.deepEqual(doubledBack(loop).pieces, []);
+  assert.deepEqual(doubledBack([]), { metres: 0, totalMetres: 0, pieces: [] });
+});
+t('two cars on the same street are not each other’s doubling back', () => assert.equal(doubledBack([[[-36.9, 174.93], [-36.905, 174.93]], [[-36.9, 174.93], [-36.905, 174.93]]]).metres, 0));
 t('the figure shown is routed when every run has one, otherwise stretched from the straight line and marked rough', () => {
   assert.deepEqual(bestKm([{ line_km: 8, road_km: 10.44 }, { line_km: 5, road_km: 6.5 }]), { km: 16.9, routed: true, runs: 2 });
   assert.deepEqual(bestKm([{ line_km: 8, road_km: 10.44 }, { line_km: 5, road_km: null }]), { km: +(10.44 + 5 * ROAD_FACTOR).toFixed(1), routed: false, runs: 2 }); assert.equal(bestKm([]), null);

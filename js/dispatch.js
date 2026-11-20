@@ -43,7 +43,7 @@ import { buildInsights, EARLY_DAYS, duration, runMornings } from './insights.js'
 import { runStats, buildPlan, planText, clockTime } from './dayplan.js';
 import { STAN_LINES, linesToRecord } from './stanlines.js';
 import { playStanClip } from './stanfx.js';
-import { runDistance, ROAD_FACTOR } from './runkm.js';
+import { runDistance, doubledBack, ROAD_FACTOR } from './runkm.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt, shiftCrews } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -822,7 +822,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const workOutKm = async () => {
       INS.kmStop = false; INS.kmError = null; const todo = kmTodo(); let n = 0; let last = 0;
       const through = async (pts) => { const wait = 1700 - (Date.now() - last); if (wait > 0) await new Promise((ok) => setTimeout(ok, wait)); last = Date.now();   // the mapping service allows 40 requests a minute
-        const { data, error } = await sb.functions.invoke('route', { body: { through: pts.map((p) => [p.lng, p.lat]) } }); return error || typeof data?.metres !== 'number' ? null : data.metres; };
+        const { data, error } = await sb.functions.invoke('route', { body: { through: pts.map((p) => [p.lng, p.lat]) } }); return error || typeof data?.metres !== 'number' ? null : { metres: data.metres, line: data.line || null }; };
       for (const r of todo) {
         if (INS.kmStop) break;
         INS.kmBusy = `${++n} of ${todo.length}`; paint();
@@ -830,7 +830,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
           const d = await runDistance(INS.rows.ticks.filter((t) => t.run_id === r.id), through); if (!d) continue;
           const row = { run_id: r.id, ...d, computed_by: app.me.name, computed_at: new Date().toISOString() };
           const { error } = await sb.from('run_km').upsert(row); if (error) throw error;
-          INS.km.set(r.id, row);
+          INS.km.set(r.id, { ...row, trace: undefined });
         } catch (e) { INS.kmError = `Stopped: ${e.message}`; break; }
       }
       INS.kmBusy = null; paint();
@@ -996,23 +996,62 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const key = h('div', { class: 'dz-shift-key small' },
       h('span', null, h('i', { class: 'pin-todo' }), 'To do'), h('span', null, h('i', { class: 'pin-done' }), 'Done'), h('span', null, h('i', { class: 'pin-failed' }), 'Couldn\u2019t deliver'),
       h('span', null, h('i', { class: 'pin-who' }), 'Driver (pinged)'));
-    openSheet(`${shortRoute(r.route)} on the map \u00b7 ${r.delivery_date}`, info, el, key, people, pingMsg);
+    const asDriven = h('div', { class: 'dz-asdriven' });
+    openSheet(`${shortRoute(r.route)} on the map \u00b7 ${r.delivery_date}`, info, asDriven, el, key, people, pingMsg);
     try { await leaflet(); } catch (e) { info.textContent = e.message; return; }
     const m = L.map(el, { zoomControl: true }); maps.push(m);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '\u00a9 OpenStreetMap contributors' }).addTo(m);
-    const layer = L.layerGroup().addTo(m); const whoLayer = L.layerGroup().addTo(m);
+    const layer = L.layerGroup().addTo(m); const whoLayer = L.layerGroup().addTo(m); const traceLayer = L.layerGroup().addTo(m);
     let first = true; let data = null;
+    // ---- The route as delivered (decision 0046): the road between the ticks, in the order they were made ----
+    const TR = { row: undefined, show: true, busy: false, error: null };
+    const drawTrace = () => {
+      traceLayer.clearLayers();
+      const t = TR.row?.trace; const back = t ? doubledBack(t) : null;
+      if (t && TR.show) {
+        for (const line of t) L.polyline(line, { color: '#f59e0b', weight: 5, opacity: 0.85 }).addTo(traceLayer);
+        for (const piece of back.pieces) L.polyline(piece, { color: '#dc2626', weight: 7, opacity: 0.9 }).bindTooltip('Driven more than once').addTo(traceLayer);
+      }
+      const located = (data?.status || []).filter((x) => x.done && x.lat != null).length;
+      asDriven.replaceChildren(...[
+        t ? h('label', { class: 'dz-check' }, h('input', { type: 'checkbox', checked: TR.show || null, onchange: (e) => { TR.show = e.target.checked; drawTrace(); draw(); } }), ' Show the route as delivered') : null,
+        t ? h('span', { class: 'small' }, h('i', { class: 'trace-key' }), `As delivered: ${Number(TR.row.road_km).toFixed(1)} km along the roads${t.length > 1 ? ` (${t.length} cars)` : ''}. `,
+          back.metres >= 100 ? h('span', null, h('i', { class: 'trace-key back' }), `${(back.metres / 1000).toFixed(1)} km of it was over road already driven.`) : 'No road driven twice.') : null,
+        !t && TR.row !== undefined && located >= 2 && !TR.busy ? h('button', { class: 'btn small', onclick: trace }, 'Trace the route as delivered') : null,
+        !t && TR.row !== undefined && located < 2 ? h('span', { class: 'small muted' }, 'No route to trace yet: it needs ticks with a location.') : null,
+        TR.busy ? h('span', { class: 'small muted' }, 'Asking the map for the roads between the ticks…') : null,
+        TR.error ? h('span', { class: 'small bad' }, TR.error) : null,
+        t ? h('span', { class: 'small muted' }, ' It is the map’s likely route between ticks, not a recording of the drive.') : null].filter(Boolean));
+    };
+    const loadTrace = async () => { try { const { data: row, error } = await sb.from('run_km').select('run_id, line_km, road_km, points, trace').eq('run_id', r.id).maybeSingle(); if (error) throw error; TR.row = row?.trace ? row : null; } catch { TR.row = null; } drawTrace(); };
+    const trace = async () => {
+      TR.busy = true; TR.error = null; drawTrace();
+      try {
+        let last = 0;
+        const through = async (pts) => { const wait = 1700 - (Date.now() - last); if (wait > 0) await new Promise((ok) => setTimeout(ok, wait)); last = Date.now();
+          const { data: d, error } = await sb.functions.invoke('route', { body: { through: pts.map((p) => [p.lng, p.lat]) } }); return error || typeof d?.metres !== 'number' ? null : { metres: d.metres, line: d.line || null }; };
+        const d = await runDistance((data?.status || []).filter((x) => x.done), through);
+        if (!d?.trace) throw new Error('The map couldn’t trace this one. Try again in a minute.');
+        const row = { run_id: r.id, ...d, computed_by: app.me.name, computed_at: new Date().toISOString() };
+        const { error } = await sb.from('run_km').upsert(row); if (error) throw error;
+        TR.row = row;
+      } catch (e) { TR.error = e.message; }
+      TR.busy = false; drawTrace(); draw();
+    };
     const draw = async () => {
       if (!el.isConnected) { clearInterval(timer); return; }
       let raw; try { raw = await app.store.loadRunMap(r.id, r.route); } catch (e) { info.textContent = `Couldn\u2019t load the run: ${e.message}`; return; }
       data = runMapData(raw); data.status = raw.status; data.lines = raw.lines;
       layer.clearLayers();
-      for (const sg of data.trail) L.polyline([sg.from, sg.to], { color: sg.travelled ? '#16a34a' : '#2563eb', weight: sg.travelled ? 4 : 3, opacity: sg.travelled ? 0.9 : 0.55, dashArray: sg.travelled ? null : '6 7' }).addTo(layer);
-      data.stops.forEach((st, i) => L.circleMarker([st.lat, st.lng], PIN[st.state]).bindTooltip(`${i + 1}. ${st.label}${st.state === 'done' ? ` \u2713 ${st.by || ''} ${st.at ? fmtStamp(st.at) : ''}` : st.state === 'failed' ? ' \u26a0 not delivered' : ''}`).addTo(layer));
+      for (const sg of data.trail) if (!(sg.travelled && TR.row?.trace && TR.show)) L.polyline([sg.from, sg.to], { color: sg.travelled ? '#16a34a' : '#2563eb', weight: sg.travelled ? 4 : 3, opacity: sg.travelled ? 0.9 : 0.55, dashArray: sg.travelled ? null : '6 7' }).addTo(layer);
+      const nth = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
+      const rank = new Map([...data.stops].filter((x) => x.at && x.state !== 'todo').sort((x, y) => String(x.at).localeCompare(String(y.at))).map((x, n) => [x.key, n + 1]));
+      data.stops.forEach((st, i) => L.circleMarker([st.lat, st.lng], PIN[st.state]).bindTooltip(`${i + 1}. ${st.label}${rank.has(st.key) ? ` (delivered ${nth(rank.get(st.key))})` : ''}${st.state === 'done' ? ` \u2713 ${st.by || ''} ${st.at ? fmtStamp(st.at) : ''}` : st.state === 'failed' ? ' \u26a0 not delivered' : ''}`).addTo(layer));
       const c = data.counts;
       info.textContent = `${c.done} of ${c.total} stops done${c.failed ? `, ${c.failed} not delivered` : ''}, ${c.todo} to go.${c.missing ? ` ${c.missing} not on the map yet (no position): ${data.missing.slice(0, 4).join(', ')}${c.missing > 4 ? '\u2026' : ''}.` : ''} Updates every 20 seconds.`;
       if (first && data.stops.length) { m.fitBounds(data.stops.map((x) => [x.lat, x.lng]), { padding: [24, 24], maxZoom: 18 }); first = false; } else if (first) m.setView(HOWICK, 15);
       drawPeople();
+      if (TR.row === undefined && !TR.loading) { TR.loading = true; loadTrace(); } else drawTrace();
     };
     const lastTickOf = (name) => {
       const mine = (data?.status || []).filter((x) => x.done && x.user_name === name && x.lat != null).sort((a, b) => String(b.device_time).localeCompare(String(a.device_time)))[0];

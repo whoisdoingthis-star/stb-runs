@@ -962,3 +962,7 @@ html.big .sum-say { font-size: 22px; } html.big .sum-outcome { font-size: 23px; 
 
 /* Odometer (decision 0045) */
 .odo-input { width: 100%; box-sizing: border-box; font-size: 22px; font-weight: 700; letter-spacing: .04em; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+
+/* The route as delivered, on the run map (decision 0046) */
+.dz-asdriven { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 4px 0 8px; } .dz-asdriven:empty { display: none; }
+.trace-key { display: inline-block; width: 18px; height: 5px; border-radius: 3px; background: #f59e0b; margin-right: 6px; vertical-align: middle; } .trace-key.back { background: #dc2626; height: 7px; }

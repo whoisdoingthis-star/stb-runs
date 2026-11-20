@@ -185,7 +185,7 @@ class Base {
   // Kilometres on a run (decision 0045). Demo mode has no mapping service; tests can hand one in.
   async routeThrough(points) { return globalThis.__stbFakeThrough ? globalThis.__stbFakeThrough(points) : null; }
   async loadRunKm(ids) { const all = LS.get('stb.runkm', {}); return ids.map((id) => all[id]).filter(Boolean); }
-  async saveRunKm(row) { LS.set('stb.runkm', { ...LS.get('stb.runkm', {}), [row.run_id]: row }); }
+  async saveRunKm(row) { const { trace, ...small } = row; LS.set('stb.runkm', { ...LS.get('stb.runkm', {}), [row.run_id]: small }); }   // the traced line is big: it lives in the database, not on the phone
   // Spare papers (decision 0042). Kept on this phone; the shared store sends them on.
   async saveSpares(row) { const r = { id: uuid(), user_name: this.me?.name || 'Me', ...row }; LS.set('stb.spares', [...LS.get('stb.spares', []), r].slice(-60)); return r; }
   async loadSpares() { return LS.get('stb.spares', []); }
@@ -734,7 +734,7 @@ export class SupabaseStore extends Base {
   /** Driving metres through a list of points, from the mapping service. Its failures never touch the co-driver's routing. */
   async routeThrough(points) {
     const { data, error } = await this.sb.functions.invoke('route', { body: { through: points.map((p) => [p.lng, p.lat]) } });
-    return error || typeof data?.metres !== 'number' ? null : data.metres;
+    return error || typeof data?.metres !== 'number' ? null : { metres: data.metres, line: data.line || null };
   }
   async loadRunKm(ids) {
     try { if (!ids.length) return []; const { data, error } = await this.sb.from('run_km').select('run_id, line_km, road_km, points').in('run_id', ids); if (error) throw error; return data; }

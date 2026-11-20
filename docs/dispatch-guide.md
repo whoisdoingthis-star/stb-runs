@@ -49,6 +49,9 @@ Everything the family tells Stan (Chat with Stan on the phones): who, when, from
 - People who didn't tap On duty show from first to last tick; a shift with no Off duty says so.
 - **Depot**: *Set the depot…* takes a long Google Maps link (open a short goo.gl link first, then copy the address bar) or **Use my location** while standing there. Phones use it to say "You're at the depot".
 
+### The route as delivered (on a run's map)
+Open a run's **Map**. If the run has been measured, an **orange line** shows the road the map says was driven between the ticks, in the order they were made, and the line above the map gives the kilometres. **Red** marks road that was driven more than once, with how far that was: the first place to look when thinking about a better order (a cul-de-sac will always show red). Hover a stop to see when it was delivered (3rd, 14th…). Untick **Show the route as delivered** to go back to the planned-order trail. If there's no orange line yet, press **Trace the route as delivered**. It is the map's likely route, not a recording.
+
 ### Kilometres per run (on Insights)
 Under the headline numbers. For the dates chosen it shows each run's kilometres: the middle morning, and the shortest and longest. A **~** means a rough figure. Press **Work out … along the roads** to have the map measure the runs that haven't been done yet; it takes several minutes for a month, so leave the page open. Watch the middle morning when the order of a run is changed: if the new order really is shorter, it comes down.
 

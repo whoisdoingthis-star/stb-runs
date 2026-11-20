@@ -6,8 +6,8 @@
 //
 //   POST { from: [lng, lat], to: [lng, lat] }   -> ORS GeoJSON route with turn instructions
 //   POST { geocode: "27 Luplau Crescent, Howick" } -> { lng, lat, label } or 404
-//   POST { through: [[lng, lat], ...] }          -> { metres } the driving distance through 2 to 50 points in order
-//                                                   (for kilometres on a run, decision 0045)
+//   POST { through: [[lng, lat], ...] }          -> { metres, line } the driving distance through 2 to 50 points in order,
+//                                                   and the road taken as [lng, lat] points (kilometres on a run, decision 0045)
 //
 // Needs one secret (Supabase -> Edge Functions -> Secrets):
 //   ORS_API_KEY   a free "Standard" key from https://account.heigit.org (2,000 directions a day).
@@ -66,7 +66,8 @@ Deno.serve(async (req) => {
       if (!r.ok) return reply(r.status, { error: out?.error?.message ?? `Routing failed (${r.status}).` });
       const metres = out?.features?.[0]?.properties?.summary?.distance;
       if (typeof metres !== 'number') return reply(502, { error: 'The routing service sent no distance.' });
-      return reply(200, { metres });
+      const line = out?.features?.[0]?.geometry?.coordinates;
+      return reply(200, { metres, line: Array.isArray(line) ? line : null });
     }
 
     if (!inNZ(body.from) || !inNZ(body.to)) return reply(400, { error: 'from and to must be [lng, lat] in New Zealand.' });
