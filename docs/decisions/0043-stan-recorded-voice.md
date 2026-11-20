@@ -18,6 +18,13 @@ A generated voice can only say what has been recorded in advance, unless every p
 5. **Dispatch → Stan's voice** lists every line, plays it, and records the missing ones. If a line's words are changed in the code, it shows as needing recording again.
 6. **The robot finish is added when a clip is played**, not recorded in (`js/stanfx.js`): a little reverb, a tight metallic ring, and optionally a slightly lower pitch. It is four numbers (currently "Light": 12-35-15-100), tuned by ear on `tools/voice.html`.
 
+7. **How lines are used** (Mike, 21 Nov 2026, the same day: "the phrases can be recycled across other events, and we can use different phrases for the same event to keep him interesting"). Built as `STAN_MOMENTS` and `stanLine` in `js/stanlines.js`, tested:
+   - **Lines belong to moments.** Each moment in the app (a run finishing, a new note, a shorter route) has a pool of lines, and a line can sit in as many pools as it suits.
+   - **He doesn't repeat himself.** A moment's pool is used up before any line comes round again.
+   - **Mood has to match.** Celebrations are marked; on a rough morning (late, slow, something went wrong) they are never used.
+   - **He doesn't always speak.** Routine moments speak some of the time; big ones (everything done, running late, a new note) always do.
+   The catalogue grew to 112 lines the same day.
+
 ## What it does not do yet
 - The phones don't play these clips: wiring each line to its moment, and keeping the clips on the phone for when there's no signal, comes next.
 - The clips are public files (anyone with the address can hear "Morning, Lisa"). They contain first names only.

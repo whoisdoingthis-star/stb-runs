@@ -88,6 +88,51 @@ export const STAN_LINES = {
     'word.okidoo': 'Oki-doo!',
     'word.hey': 'Hey!',
   }),
+  ...G('Kilometres and the odometer', {
+    'km.odo.1': 'What’s the odometer say?',
+    'km.odo.2': 'Big number on the dash, please.',
+    'km.shorter': 'Shorter than usual today. Nice.',
+    'km.further': 'Further than usual today. Scenic route?',
+  }),
+  ...G('The route and the order', {
+    'route.twice': 'We drove that bit twice. Just saying.',
+    'route.idea': 'I think there’s a shorter way. Want to see?',
+    'route.new': 'New order today. Trust me. Mostly.',
+    'route.won': 'That was shorter. Goo-doo!',
+    'route.lost': 'Hmm. That wasn’t shorter. My mistake.',
+  }),
+  ...G('The crew', {
+    'crew.who': 'Who’s driving today?',
+    'crew.helper': 'Helper on board. Folding power.',
+    'crew.thanks': 'Thanks for helping today.',
+    'crew.with.lisa': 'You’re with Lisa today.', 'crew.with.mike': 'You’re with Mike today.', 'crew.with.moana': 'You’re with Mum today.',
+  }),
+  ...G('The depot and the board', {
+    'board.short': 'Papers short? Put it on the board.',
+    'board.note': 'New note on the board.',
+    'board.rule': 'There’s a new rule. Have a read.',
+    'plan.changed': 'Plan’s changed. Have a look.',
+    'plan.early': 'Early one tomorrow. Sorry.',
+  }),
+  ...G('Each run, by name', {
+    'runname.6': 'Run six. Done.', 'runname.8': 'Run eight. Done.', 'runname.10': 'Run ten. Done.', 'runname.11': 'Run eleven. Done.', 'runname.13': 'Run thirteen. Done.',
+  }),
+  ...G('Milestones', {
+    'mile.first': 'First paper of the day. Here we go.',
+    'mile.half': 'Halfway. Keep going.',
+    'mile.last': 'Last run. Nearly there.',
+    'mile.week': 'A whole week on time. Stan-tastic.',
+    'mile.weekend': 'Weekend. Seven o’clock deadline. Luxury.',
+  }),
+  ...G('Walkthroughs and videos', {
+    'tour.hi': 'Hi, I’m Stan. Let me show you around.',
+    'tour.tick': 'This is where you tick.',
+    'tour.end': 'And that’s the tour.',
+  }),
+  ...G('Short reactions', {
+    're.nice': 'Nice one.', 're.tidy': 'Tidy.', 're.easy': 'Easy.', 're.there': 'There we go.', 're.nearly': 'Nearly.', 're.whoops': 'Whoops.',
+    're.hang': 'Hang on.', 're.think': 'Let me think.', 're.back': 'Back in a tick.', 're.thanks': 'Thanks.', 're.done': 'Done.', 're.gold': 'Good as gold.',
+  }),
   ...G('Little noises', {
     'noise.uhhuh': 'Uh-huh.',
     'noise.mmhmm': 'Mm-hmm.',
@@ -111,4 +156,66 @@ export const clipUrl = (base, key, stamp = '') => `${String(base).replace(/\/$/,
 export function linesToRecord(recorded = [], lines = STAN_LINES) {
   const have = new Map(recorded.map((r) => [r.key, r.text]));
   return Object.entries(lines).filter(([k, l]) => have.get(k) !== l.say).map(([key, l]) => ({ key, say: l.say, why: have.has(key) ? 'changed' : 'new' }));
+}
+
+// ---- Which lines suit which moment (Mike, 21 Nov 2026) ----
+// 1. Lines belong to moments: each moment has a pool, and a line can sit in as many pools as it suits.
+// 2. He doesn't repeat himself: a moment's pool is used up before any line comes round again.
+// 3. Mood has to match: on a rough morning (late, slow, something went wrong) he never uses a cheerful line.
+// 4. He doesn't always speak: routine moments speak some of the time (say), big ones always.
+
+/** Lines that are celebrations. Never used when the mood is rough. Everything else is safe any time. */
+export const CHEERFUL = new Set(['done.1', 'done.2', 'done.3', 'done.4', 'run.2', 'sum.great', 'sum.streak', 'word.stantastic', 'word.goodoo', 'route.won', 'mile.week', 'mile.weekend', 'game.high',
+  'noise.yay', 'noise.tada', 're.nice', 're.easy', 're.gold', 'km.shorter', 'sum.faster', 'sum.ontime', 'sum.ticks.good', 'bored.3', 'duty.fold', 'hello.2', 'crew.helper']);
+
+/** moment → { lines: the pool, say: how often he speaks (1 = always) }. Add a line to a pool to recycle it. */
+export const STAN_MOMENTS = {
+  'open':            { say: 0.6, lines: ['hello.1', 'hello.2', 'hello.3', 'word.hey'] },
+  'plan.show':       { say: 1,   lines: ['plan.1', 'plan.2', 'plan.follow'] },
+  'plan.changed':    { say: 1,   lines: ['plan.changed', 'plan.early', 're.hang'] },
+  'duty.on':         { say: 0.7, lines: ['duty.who', 'crew.who', 'word.okidoo'] },
+  'duty.alone':      { say: 0.7, lines: ['duty.alone', 'word.okidoo', 'noise.uhhuh'] },
+  'duty.helper':     { say: 0.7, lines: ['crew.helper', 'duty.fold', 'word.okidoo'] },
+  'depot.prep':      { say: 0.5, lines: ['duty.fold', 'noise.mmhmm', 're.back'] },
+  'depot.leave':     { say: 1,   lines: ['leave.1', 'leave.2', 'plan.follow', 'mile.first'] },
+  'odometer':        { say: 0.5, lines: ['km.odo.1', 'km.odo.2'] },
+  'spares':          { say: 0.4, lines: ['spares.1', 'board.short'] },
+  'run.done':        { say: 0.5, lines: ['run.1', 'run.2', 're.done', 're.nice', 're.tidy', 're.there', 'word.goodoo', 'noise.phew'] },
+  'run.last':        { say: 0.6, lines: ['mile.last', 're.nearly', 'mile.half'] },
+  'all.done':        { say: 1,   lines: ['done.1', 'done.2', 'done.3', 'done.4', 'word.stantastic', 'noise.tada', 're.done', 'noise.phew'] },
+  'late.warn':       { say: 1,   lines: ['late.1', 'late.2', 'late.3', 'late.safe'] },
+  'duty.off':        { say: 0.8, lines: ['off.1', 'off.2', 'crew.thanks', 're.thanks'] },
+  'summary':         { say: 1,   lines: ['sum.intro', 're.think'] },
+  'note.new':        { say: 1,   lines: ['note.1', 'board.note', 'word.hey'] },
+  'note.rule':       { say: 1,   lines: ['board.rule', 'word.hey'] },
+  'untick':          { say: 1,   lines: ['untick.1', 're.hang', 'noise.huh'] },
+  'oops':            { say: 0.8, lines: ['oops.retry', 'noise.oopsie', 're.whoops', 'noise.hmm'] },
+  'offline':         { say: 0.5, lines: ['oops.signal'] },
+  'route.doubled':   { say: 0.6, lines: ['route.twice', 'noise.hmm'] },
+  'route.suggest':   { say: 1,   lines: ['route.idea', 'route.new', 'noise.aha'] },
+  'route.shorter':   { say: 1,   lines: ['route.won', 'km.shorter', 'word.goodoo', 're.gold'] },
+  'route.longer':    { say: 1,   lines: ['route.lost', 'km.further', 'noise.oopsie'] },
+  'bored':           { say: 1,   lines: ['bored.1', 'bored.2', 'bored.3', 'noise.umm', 'noise.hmm'] },
+  'game.hit':        { say: 0.5, lines: ['game.dog', 'game.box', 'noise.ouch', 're.whoops', 'noise.oopsie'] },
+  'game.best':       { say: 1,   lines: ['game.high', 'word.goodoo', 'noise.yay', 'word.stantastic'] },
+  'tour':            { say: 1,   lines: ['tour.hi', 'tour.tick', 'tour.end'] },
+  'ok':              { say: 0.3, lines: ['noise.uhhuh', 'noise.mmhmm', 'word.okidoo', 're.done', 're.thanks'] },
+};
+
+/**
+ * What Stan says for a moment, or null if he keeps quiet this time.
+ * mood: 'rough' on a late or bad morning (no cheerful lines) · heard: { moment: [keys already used] }, handed back updated
+ * rand: a 0–1 number source (Math.random), so tests can steer it · force: speak even if it's a sometimes-moment
+ * Returns { key, say, heard }.
+ */
+export function stanLine(moment, { mood = 'fine', heard = {}, rand = Math.random, force = false, lines = STAN_LINES, moments = STAN_MOMENTS } = {}) {
+  const m = moments[moment]; if (!m) return { key: null, say: null, heard };
+  if (!force && m.say < 1 && rand() >= m.say) return { key: null, say: null, heard };
+  const pool = m.lines.filter((k) => lines[k] && !(mood === 'rough' && CHEERFUL.has(k)));
+  if (!pool.length) return { key: null, say: null, heard };
+  let used = (heard[moment] || []).filter((k) => pool.includes(k));
+  if (used.length >= pool.length) used = used.slice(-1);          // been through them all: start again, but not with the one just said
+  const fresh = pool.filter((k) => !used.includes(k)); const from = fresh.length ? fresh : pool;
+  const key = from[Math.min(from.length - 1, Math.floor(rand() * from.length))];
+  return { key, say: lines[key].say, heard: { ...heard, [moment]: [...used, key] } };
 }
