@@ -182,6 +182,9 @@ class Base {
   myScores() { return LS.get('stb.scores', []); }
   async saveScore(row) { const r = { user_name: this.me?.name || 'Me', ...row, device_time: new Date().toISOString() }; LS.set('stb.scores', [...this.myScores(), r].sort((a, b) => b.score - a.score).slice(0, 20)); return r; }
   async loadScores() { return this.myScores(); }
+  // Stan's recorded lines (decision 0047). Demo mode has none, unless a test hands some in.
+  async loadStanLines() { return globalThis.__stbStanLines || []; }
+  stanClipUrl(key, stamp) { return globalThis.__stbStanClipUrl ? globalThis.__stbStanClipUrl(key, stamp) : null; }
   // Kilometres on a run (decision 0045). Demo mode has no mapping service; tests can hand one in.
   async routeThrough(points) { return globalThis.__stbFakeThrough ? globalThis.__stbFakeThrough(points) : null; }
   async loadRunKm(ids) { const all = LS.get('stb.runkm', {}); return ids.map((id) => all[id]).filter(Boolean); }
@@ -731,6 +734,9 @@ export class SupabaseStore extends Base {
     try { const { error } = await this.sb.from('notice_seen').upsert(ids.map((id) => ({ notice_id: id, user_name: this.me.name })), { onConflict: 'notice_id,user_name', ignoreDuplicates: true }); if (error) throw error; }
     catch { LS.set('stb.noticeseenpending', [...new Set([...LS.get('stb.noticeseenpending', []), ...ids])]); }
   }
+  /** Which of Stan's lines have been recorded, and when (so a re-recording is fetched again). */
+  async loadStanLines() { const { data, error } = await this.sb.from('stan_lines').select('key, recorded_at'); if (error) throw error; return data; }
+  stanClipUrl(key, stamp) { return `${this.sb.storage.from('stan-voice').getPublicUrl(`${key}.mp3`).data.publicUrl}?v=${encodeURIComponent(stamp)}`; }
   /** Driving metres through a list of points, from the mapping service. Its failures never touch the co-driver's routing. */
   async routeThrough(points) {
     const { data, error } = await this.sb.functions.invoke('route', { body: { through: points.map((p) => [p.lng, p.lat]) } });

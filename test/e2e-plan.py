@@ -31,6 +31,7 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     ctx = b.new_context(**p.devices['Pixel 7'])
     page = ctx.new_page()
+    page.add_init_script("globalThis.__stbStanLog = [];")   # what Stan was asked to say out loud
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto('http://localhost:8765/')
@@ -83,7 +84,11 @@ with sync_playwright() as p:
     check('Prepping at the depot: on duty, with the helpers on the record', len(d) == 1 and d[0]['state'] == 'on_duty' and sorted(d[0].get('helpers')) == ['Lenny', 'seira'], json.dumps(d))
     check('the duty card then offers Leaving the depot now', page.locator('.duty-card.on .leave-btn').count() == 1 and 'On duty' in page.inner_text('.duty-card'))
     if SHOTS: page.screenshot(path=f'{SHOTS}/leaving-depot.png')
+    page.evaluate("globalThis.__stbStanLog.length = 0")
     page.locator('.leave-btn').click(); page.wait_for_timeout(800)
+    said = page.evaluate("globalThis.__stbStanLog"); toast = page.inner_text('#toast')
+    LEAVE = {'leave.1': 'Off we go. Drive safe.', 'leave.2': 'Papers on board. I counted. Roughly.', 'plan.follow': 'Okay. Follow me.', 'mile.first': 'First paper of the day. Here we go.'}
+    check('leaving the depot, Stan says one of his lines for it out loud, and the same words are on the screen', len(said) >= 1 and said[0][0] in LEAVE and LEAVE[said[0][0]] in toast, json.dumps(said) + toast)
     d = duty()
     check('Leaving the depot now starts the run', len(d) == 2 and d[1]['state'] == 'on_run' and 'On the run' in page.inner_text('.duty-card') and page.locator('.leave-btn').count() == 0, json.dumps(d))
     spares = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.spares') || '[]')")
@@ -109,6 +114,26 @@ with sync_playwright() as p:
     sp = spares()
     check('the end count is saved with who the spares went to, and a new name is remembered', len(sp) == 2 and sp[1]['moment'] == 'end' and sp[1]['odometer_km'] is None and sp[1]['counts'] == {'NZH': 1} and sp[1]['given'] == [{'to': 'Aunty Pat', 'n': 1}, {'to': 'Mr Lee', 'n': 1}] and 'Mr Lee' in page.evaluate("JSON.parse(localStorage.getItem('stb.sparepeople'))"), json.dumps(sp))
     check('the typed name is kept as a helper for next time', any(c['name'] == 'seira' and c['crew'] == 'helper' for c in page.evaluate("JSON.parse(localStorage.getItem('stb.crew'))")))
+
+    # he doesn't repeat himself: leave the depot again and it is a different line
+    first_line = said[0][0]
+    page.evaluate(SEED, ['driver', ['Lenny'], 0, 'Me']); home()
+    page.locator('.sheet button', has_text='Got it').click(); page.locator('.duty-btn').click(); page.wait_for_timeout(300)
+    check('going on duty, Stan asks his question out loud', any(k[-1] in ('duty.who', 'crew.who', 'word.okidoo') for k in page.evaluate("globalThis.__stbStanLog")), json.dumps(page.evaluate("globalThis.__stbStanLog")))
+    page.locator('.sheet button', has_text='Prepping at the depot').click(); page.wait_for_timeout(500)
+    page.evaluate("globalThis.__stbStanLog.length = 0"); page.locator('.leave-btn').click(); page.wait_for_timeout(700)
+    again = page.evaluate("globalThis.__stbStanLog")
+    check('the same moment gets a different line the next time', len(again) >= 1 and again[0][0] in LEAVE and again[0][0] != first_line, json.dumps(again))
+    page.locator('.sheet button', has_text='Skip').click(); page.wait_for_timeout(200)
+    # sound off: the words still show, nothing is played. Stan off: the plain message.
+    page.evaluate("localStorage.setItem('stb-stan-talk', 'off')")
+    page.evaluate(SEED, ['driver', ['Lenny'], 0, 'Me']); home()
+    page.locator('.sheet button', has_text='Got it').click(); page.locator('.duty-btn').click(); page.wait_for_timeout(300)
+    page.locator('.sheet button', has_text='Prepping at the depot').click(); page.wait_for_timeout(500)
+    page.evaluate("globalThis.__stbStanLog.length = 0"); page.locator('.leave-btn').click(); page.wait_for_timeout(700)
+    check('with Stan set to Quiet, his words still show but nothing is played', len(page.evaluate("globalThis.__stbStanLog")) == 0 and any(v in page.inner_text('#toast') for v in LEAVE.values()), page.inner_text('#toast'))
+    page.locator('.sheet button', has_text='Skip').click(); page.wait_for_timeout(200)
+    page.evaluate("localStorage.removeItem('stb-stan-talk')")
 
     # ---- on their own ----
     page.evaluate(SEED, ['driver', [], 0, 'Me']); page.evaluate("localStorage.setItem('stb.dayplans', JSON.stringify(JSON.parse(localStorage.getItem('stb.dayplans')).map((p) => ({ ...p, updated_at: '2026-11-19T08:00:00Z' }))))")

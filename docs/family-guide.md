@@ -57,6 +57,12 @@ Drivers only. Both questions have a **Skip** button, so they never hold you up.
 - On Sundays there's a second row for the Sunday Star-Times.
 - **The odometer:** the same two sheets ask for the big kilometres number on the dash. Type it in if you can; leave it blank if you can't. It's how we know how far the morning really was.
 
+### Stan talks
+Stan now speaks at the big moments: when you go on duty (he'll say good morning by name), when you leave the depot, when a run or the whole morning is done, when there's a note for you, and a few more. The words are always on the screen too. He says different things on different days, and he doesn't comment on everything.
+- **Too chatty, or the house is asleep?** Tap the cog, then **Stan talks → Quiet**. His words still show.
+- He needs one tap on the screen before he can make a sound, so he's silent when the app first opens.
+- The Driver Assistant's directions are still in his old voice.
+
 ### Your morning
 When you go off duty, Stan shows you how the morning went (if you forget, he shows you the next time you open the app):
 - **The big line at the top:** when your last paper went out, and how long before the deadline (or after it).

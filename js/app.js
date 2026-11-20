@@ -13,6 +13,8 @@ import { stanReply, STAN_HELLO } from './stanchat.js';
 import { avatar, setKnown, knownAvatars, ICONS as AVATAR_ICONS, photoToDataUrl } from './avatars.js';
 import { readExif, photoProof } from './exif.js';
 import { cleanNotice, expiryFor, unreadFor, boardFor, seenBy, NOTICE_DAYS } from './notices.js';
+import { stanLine, STAN_LINES } from './stanlines.js';
+import { deadlineFor } from './watch.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt, runFinishedAt } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -448,7 +450,8 @@ function boredStan(says) {
     if (!box.isConnected || onDuty() || document.querySelector('.sg, .sheet')) return;
     const st = says.querySelector('.stan'); const p = says.querySelector('p');
     if (st) st.className = 'stan st-idle st-bored';
-    if (p) p.textContent = 'Yawn… nothing to deliver. Fancy a game while we wait?';
+    const line = stanMoment('bored', { force: true });
+    if (p) p.textContent = line ? `${line} Fancy a game while we wait?` : 'Yawn… nothing to deliver. Fancy a game while we wait?';
     box.append(h('button', { class: 'btn primary big bored-play', onclick: () => playStanGame() }, 'Play Stan’s Paper Run'));
   }, globalThis.__stbBoredMs ?? BORED_MS);
   return box;
@@ -476,9 +479,36 @@ function goOffDuty(after) {
   const start = shiftStart(app.store.myDuty());
   const close = openSheet('Go off duty?',
     h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
-    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); after?.(); (async () => { await askSpares('end', app.todayRuns || []); await new Promise((ok) => setTimeout(ok, 300)); await showSummary(app.todayRuns || []); document.dispatchEvent(new Event('stb-summary')); })(); } }, 'Off duty'),
+    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); stanMoment('duty.off'); after?.(); (async () => { await askSpares('end', app.todayRuns || []); await new Promise((ok) => setTimeout(ok, 300)); await showSummary(app.todayRuns || []); document.dispatchEvent(new Event('stb-summary')); })(); } }, 'Off duty'),
     h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
 }
+// ---- Stan's recorded voice (decisions 0043, 0047) ----
+// stanMoment('run.done') picks his line for that moment (or none: he doesn't always speak), plays it if sound is on,
+// and hands back the words so they can go on the screen. Stan switched off: nothing. Sound off: words only.
+const stanTalks = () => pref('stb-stan-talk', 'on') !== 'off';   // his recorded voice: on unless switched to Quiet in Settings
+let stanSayMod = null;
+const loadStanSay = () => (stanSayMod ||= import('./stansay.js').catch(() => null));
+/** A morning that has run past its deadline is a rough one: no celebrating for the next few hours. */
+function stanMood() { try { const dl = deadlineFor(nzToday()).at; const now = Date.now(); return now > dl && now < dl + 5 * 3600e3 && (app.todayRuns || []).some((r) => (r.done || 0) > 0) ? 'rough' : 'fine'; } catch { return 'fine'; } }
+function stanPlay(keys) {
+  if (!stanOn() || !stanTalks() || !keys.length) return;
+  loadStanSay().then((m) => m?.playStanKeys(keys.filter((k) => STAN_LINES[k]), app.store)).catch(() => {});
+}
+function stanMoment(moment, { force = false, mood, before = [] } = {}) {
+  try {
+    if (!stanOn()) return null;
+    let heard = {}; try { heard = JSON.parse(localStorage.getItem('stb.stan.heard') || '{}'); } catch { /* start again */ }
+    const r = stanLine(moment, { mood: mood || stanMood(), heard, force });
+    if (!r.key) return null;
+    try { localStorage.setItem('stb.stan.heard', JSON.stringify(r.heard)); } catch { /* private mode */ }
+    stanPlay([...before, r.key]);
+    return r.say;
+  } catch { return null; }
+}
+// Sound can only start after a tap; and once the app has settled, fetch any clips this phone doesn't hold yet.
+document.addEventListener('pointerdown', () => { if (stanOn() && stanTalks()) loadStanSay().then((m) => m?.unlockStanAudio()); }, { passive: true });
+setTimeout(() => { if (stanOn() && app.store && navigator.onLine !== false) loadStanSay().then((m) => m?.syncStanClips(app.store)).catch(() => {}); }, 6000);
+
 // ---- The end-of-shift summary (decision 0044) ----
 const noSheet = (ms = 120000) => new Promise((ok) => { const t0 = Date.now(); const tick = () => (!document.querySelector('.sheet-backdrop') || Date.now() - t0 > ms ? ok() : setTimeout(tick, 400)); tick(); });
 /** Works out my crew's morning from the last four weeks. Returns the card, or null if we did no run today. */
@@ -513,6 +543,7 @@ async function openSummary(sum) {
       ${g.pts.map((p, i) => `<circle cx="${p.x}" cy="${p.y}" r="${i === g.pts.length - 1 ? 5 : 2.5}" class="${i === g.pts.length - 1 ? 'sum-now' : 'sum-dot'}"/>`).join('')}</svg>`),
     h('div', { class: 'small muted' }, sum.inherited ? `The last ${g.pts.length} mornings you helped: each dot is the driver you were with that day, against their usual. The big dot is today.` : `Your last ${g.pts.length} mornings. Above the line is quicker than your usual; the big dot is today.`)) : null;
   const good = (text) => h('li', { class: 'sq-ok' }, text); const flag = (text) => h('li', { class: 'sq-flag' }, text);
+  stanPlay(sum.say);
   const close = openSheet('Your morning',
     h('div', { class: 'plan-hello' }, stan({ pose: sum.outcome.onTime ? 'hop' : 'wave', size: 72 }), h('div', { class: 'sum-say' }, sum.say.map((k) => h('div', null, STAN_LINES[k]?.say || '')))),
     h('div', { class: `sum-outcome ${sum.outcome.onTime ? 'on' : 'late'}` }, outcomeText(sum.outcome, t)),
@@ -583,6 +614,7 @@ async function askSpares(moment, todayRuns = []) {
       } }, 'Someone else…'));
     if (moment === 'end') drawPeople();
     const odo = h('input', { type: 'text', inputmode: 'numeric', maxlength: 9, class: 'odo-input', placeholder: 'e.g. 84512', 'aria-label': 'Odometer reading in kilometres' });
+    stanMoment(moment === 'start' ? 'odometer' : 'spares');
     const close = openSheet(moment === 'start' ? 'Spares on board?' : 'Spares left?',
       h('p', { class: 'muted' }, moment === 'start' ? 'How many more papers do you have than the sheets need? A rough count is fine.' : 'How many spare papers are left over?'),
       ...papers.map((p) => stepper(() => counts[p], (v) => { counts[p] = v; }, PAPERS[p])),
@@ -657,7 +689,7 @@ function noticeSlot() {
     const unread = unreadFor(data.notices, data.seen, app.me.name);
     if (!unread.length || showing || !slot.isConnected) return;
     if (document.querySelector('.sheet-backdrop')) { if (tries < 80) setTimeout(() => pop(tries + 1), 1500); return; }   // wait for the plan (or anything else) to be closed
-    showing = true;
+    showing = true; stanMoment(unread.some((n) => n.pinned) ? 'note.rule' : 'note.new');
     const close = openSheet(unread.length > 1 ? `${unread.length} notes for you` : 'A note for you',
       h('div', { class: 'plan-hello' }, stan({ pose: 'wave', size: 64 }), h('div', { class: 'plan-who' }, unread.length > 1 ? 'The family left you some notes.' : `${unread[0].from_name} left ${unread[0].to_names?.length ? 'you' : 'everyone'} a note.`)),
       h('div', { class: 'nb-list' }, unread.map((n) => h('div', { class: 'nb-note' }, h('div', { class: 'nb-from' }, `${n.from_name} · ${noticeWhen(n.created_at)}`), h('p', null, n.body)))),
@@ -698,7 +730,7 @@ function startShift(rerender, todayRuns = []) {
     const helpers = alone ? [] : names().filter((n) => picked.has(n));
     const t = Date.now(); const f = await fix;
     noteDuty('on_duty', { helpers, device_time: new Date(t).toISOString() }, f);
-    if (prepped) { const first = myRuns().map((id) => todayRuns.find((r) => r.id === id)).find((r) => r && !runComplete(r)); noteDuty('on_run', { run_id: first?.id, device_time: new Date(t + 1).toISOString() }, f); toast('On the run. Drive safe!', null, { stan: 'wave' }); }
+    if (prepped) { const first = myRuns().map((id) => todayRuns.find((r) => r.id === id)).find((r) => r && !runComplete(r)); noteDuty('on_run', { run_id: first?.id, device_time: new Date(t + 1).toISOString() }, f); toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); }
     rerender();
     if (prepped) askSpares('start', todayRuns);
   };
@@ -718,6 +750,7 @@ function startShift(rerender, todayRuns = []) {
       h('button', { class: 'btn primary big', disabled: ok ? null : true, onclick: () => begin(false) }, 'Prepping at the depot'),
       h('button', { class: 'btn big', style: 'margin-top:8px', disabled: ok ? null : true, onclick: () => begin(true) }, 'Prepped: starting the run'));
   };
+  const hello = `name.${String(app.me.name).toLowerCase()}`; stanMoment('duty.on', { force: true, before: STAN_LINES[hello] ? [hello] : [] });
   const close = openSheet('Who’s with you?', row, next);
   draw();
 }
@@ -780,7 +813,7 @@ function planSlot(redrawDuty) {
           h('div', { class: 'plan-card-sub' }, `${part.runs.map((r) => r.name.replace('Run ', '')).join(' → ')} · done by ${t(part.finishAt)}`)),
         h('span', { class: 'rt-go' }, 'See')));
       const stamp = `${row.delivery_date}|${row.updated_at}`; const key = `stb.plan.seen.${app.me.name}`;
-      if (!popped && pref(key, '') !== stamp && !document.querySelector('.sheet-backdrop')) { popped = true; try { localStorage.setItem(key, stamp); } catch { /* private mode */ } openPlan(info); }
+      if (!popped && pref(key, '') !== stamp && !document.querySelector('.sheet-backdrop')) { popped = true; try { localStorage.setItem(key, stamp); } catch { /* private mode */ } stanMoment('plan.show'); openPlan(info); }
     } catch { slot.replaceChildren(); }
   };
   return slot;
@@ -816,7 +849,7 @@ function dutyCard(todayRuns, rerender) {
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
     st.state === 'on_duty' && (app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')
-      ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast('On the run. Drive safe!', null, { stan: 'wave' }); rerender(); askSpares('start', todayRuns); } }, 'Leaving the depot now') : null,
+      ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); rerender(); askSpares('start', todayRuns); } }, 'Leaving the depot now') : null,
     mineRow, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
   card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
   return card;
@@ -991,6 +1024,7 @@ function openSettings(fileInput) {
       h('div', { class: 'choice-row avatar-row' }, h('span', { class: 'choice-label' }, 'My icon'), avatar(app.me.name, 40),
         h('button', { class: 'btn small', onclick: () => { close(); openAvatarPicker(() => openSettings(fileInput)); } }, 'Change')),
       choiceRow('Stan', [['on', 'Show'], ['off', 'Hide']], stanOn() ? 'on' : 'off', (v) => setStan(v === 'on')),
+      stanOn() ? choiceRow('Stan talks', [['on', 'Out loud'], ['off', 'Quiet']], stanTalks() ? 'on' : 'off', (v) => { try { localStorage.setItem('stb-stan-talk', v); } catch { /* private mode */ } if (v === 'on') { loadStanSay().then((m) => { m?.unlockStanAudio(); m?.syncStanClips(app.store); }); setTimeout(() => stanPlay(['word.okidoo']), 400); } }) : null,
       stanOn() ? choiceRow('Voice', [['stan', 'Stan\u2019s'], ['phone', 'Phone\u2019s']], voicePref(), (v) => { setVoicePref(v); close(); openSettings(fileInput); if (v === 'stan') loadStanVoice({ ask: false }); }) : null,
       stanOn() ? voiceStatus() : null,
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
@@ -1576,7 +1610,7 @@ async function viewRun(ids) {
   const offMotion = geo.onFix((f) => {
     const st = duty();
     if (!st?.onDuty || st.state === 'on_run') return;
-    if (motion.update(f)) { noteDuty('on_run', { source: 'auto', run_id: firstOpen() }, f); toast('On the run. Drive safe!', null, { stan: 'wave' }); }
+    if (motion.update(f)) { noteDuty('on_run', { source: 'auto', run_id: firstOpen() }, f); toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); }
   });
   function runDoneHere(runId) {
     const st = status();
@@ -1603,17 +1637,17 @@ async function viewRun(ids) {
           if (seg) [...seg.children].forEach((b, i) => b.setAttribute('aria-pressed', String(['all', ...here][i] === next)));
           render();
         }
-        toast(`✓ ${name} done. On to ${nextName}.`, null, { stan: 'hop' });
+        toast(`✓ ${name} done. On to ${nextName}.`, null, { stan: 'hop' }); stanMoment('run.done');
         setTimeout(() => goNext(true), 600);
       } else {
         const go = () => { if (onDuty()) noteDuty('on_run', { source: 'move_on', run_id: next }, geo.last); location.hash = `#/r/${mine.filter((id) => !finished(id)).join('+')}`; };
-        toast(`✓ ${name} done. Next: ${nextName}.`, { label: `Go to ${nextName}`, fn: go }, { stan: 'hop' });
+        toast(`✓ ${name} done. Next: ${nextName}.`, { label: `Go to ${nextName}`, fn: go }, { stan: 'hop' }); stanMoment('run.done');
       }
       return;
     }
     if (onDuty() && (!mine.length || mine.every(finished))) {
-      toast(`✓ ${name} done. That’s all your runs. Stan-tastic!`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
-    } else toast(`✓ ${name} done. Stan-tastic!`, null, { stan: 'hop' });
+      toast(`✓ ${name} done. That’s all your runs. ${stanMoment('all.done', { force: true }) || 'Stan-tastic!'}`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
+    } else toast(`✓ ${name} done. ${stanMoment('run.done', { force: true }) || 'Stan-tastic!'}`, null, { stan: 'hop' });
   }
   const updateSync = (n = app.store.pendingCount()) => {
     if (app.store.mode === 'demo') { syncChip.textContent = 'On this phone'; syncChip.className = 'st'; return; }
@@ -1636,6 +1670,7 @@ async function viewRun(ids) {
     const latest = cur.reduce((a, b) => (String(a.device_time) > String(b.device_time) ? a : b));
     const who = [...new Set(cur.map((c) => c.user_name).filter(Boolean))]; const mine = who.length === 1 && who[0] === app.me.name;
     const when = new Date(latest.device_time).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+    stanMoment('untick');
     const close = openSheet('Already ticked',
       h('p', { style: 'margin:0 0 12px' }, `${label} was ticked at ${when}${mine ? '' : ` by ${who.join(' and ') || 'someone'}`}. What would you like to do?`),
       h('div', { class: 'menu-group' },
