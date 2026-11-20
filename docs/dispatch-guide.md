@@ -122,3 +122,11 @@ Every change on the dashboard is logged (who, when, what) in `dispatch_history`.
 **Helpers without a login:** names a driver typed under "Other…" when going on duty (Serene, Seira). Remove one here if it was a typo.
 
 **Driver or Helper** (the *On the run* column): drivers take runs; helpers ride with a driver. Stan's day plan and the "Who's with you?" question use it. It doesn't change what anyone can see or do in the app.
+
+## Stan's voice
+Everything Stan says out loud in his recorded voice, grouped by when he says it.
+- **▶** plays a line as the phones will hear it, with his light robot finish. **plain** plays the recording with nothing added.
+- **Record the ones that are missing** records every new line, one after another. **Record again** re-does one that came out wrong. Each recording uses a few credits from the voice service.
+- "Words changed" means the line was reworded after it was recorded, so it needs recording again.
+- If it says the voice key isn't set, the key needs adding in Supabase (Edge Functions → Secrets, `ELEVENLABS_API_KEY`). Never put the key in a message or in the code.
+

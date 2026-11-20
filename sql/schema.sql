@@ -1129,3 +1129,25 @@ drop policy if exists spare_people_add on public.spare_people;
 create policy spare_people_add on public.spare_people for insert to authenticated with check (public.is_member());
 drop policy if exists spare_people_remove on public.spare_people;
 create policy spare_people_remove on public.spare_people for delete to authenticated using (public.is_dispatcher());
+
+-- ---- Stan's recorded voice (Mike, 21 Nov 2026; docs/decisions/0043-stan-recorded-voice.md) ----
+-- One row per line that has been recorded. The clips are in the public "stan-voice" bucket as <key>.mp3.
+-- Only the stan-voice Edge Function writes here (with the service key), so there is no insert policy.
+create table if not exists public.stan_lines (
+  key         text primary key,
+  text        text not null,
+  voice_id    text,
+  model       text,
+  bytes       integer,
+  recorded_by text,
+  recorded_at timestamptz not null default now()
+);
+alter table public.stan_lines enable row level security;
+drop policy if exists stan_lines_read on public.stan_lines;
+create policy stan_lines_read on public.stan_lines for select to authenticated using (public.is_member());
+do $$
+begin
+  if exists (select 1 from information_schema.schemata where schema_name = 'storage') then
+    insert into storage.buckets (id, name, public) values ('stan-voice', 'stan-voice', true) on conflict (id) do nothing;
+  end if;
+end $$;

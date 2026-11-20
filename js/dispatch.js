@@ -41,6 +41,8 @@ import { runMapData, pingText } from './runmap.js';
 import { buildReport, evidenceText, nzDate, reportFileName, reportRef } from './report.js';
 import { buildInsights, EARLY_DAYS, duration, runMornings } from './insights.js';
 import { runStats, buildPlan, planText, clockTime } from './dayplan.js';
+import { STAN_LINES, linesToRecord } from './stanlines.js';
+import { playStanClip } from './stanfx.js';
 import { DEFAULT_DEADLINES, deadlineFor, runWatch, typicalDuration, summaryText, needsAttention } from './watch.js';
 import { shiftSegments, runOwners, parseLatLng, clock, SEGMENT_LABEL, DUTY_LABEL, currentDuty, autoOffAt, shiftCrews } from './shifts.js';
 export async function viewDispatch(ctx, tab = 'overview') {
@@ -198,7 +200,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
   }
 
   // ---- layout
-  const tabs = [['overview', 'Overview'], ['insights', 'Insights'], ['plan', 'Day plan'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['history', 'Change log']];
+  const tabs = [['overview', 'Overview'], ['insights', 'Insights'], ['plan', 'Day plan'], ['runs', 'Runs & sheets'], ['complaints', 'Complaints'], ['addresses', 'Addresses'], ['locations', 'Locations'], ['policies', 'Policies'], ['users', 'People'], ['voice', 'Stan’s voice'], ['history', 'Change log']];
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const body = h('div', { class: 'dz-body' }, h('p', { class: 'muted' }, 'Loading…'));
   const nav = h('nav', { class: 'dz-nav', 'aria-label': 'Dispatch' });
@@ -224,7 +226,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
       k === 'addresses' && D.addresses.some((a) => !a.operating_location_id) ? h('span', { class: 'dz-count' }, D.addresses.filter((a) => !a.operating_location_id).length) : null,
       k === 'complaints' && D.register.some((c) => c.status === 'open') ? h('span', { class: 'dz-count bad' }, D.register.filter((c) => c.status === 'open').length) : null)));
     body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
-      ({ overview: renderOverview, insights: renderInsights, plan: renderPlan, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
+      ({ overview: renderOverview, insights: renderInsights, plan: renderPlan, voice: renderVoice, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
   // Morning watch keeps itself fresh: every minute while the Overview is showing a day with a run still under way.
@@ -664,6 +666,63 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const lo = new Date(Date.parse(`${from}T00:00:00Z`) - 36 * 3600e3).toISOString(); const hi = new Date(Date.parse(`${to}T00:00:00Z`) + 36 * 3600e3).toISOString();
     const photos = must(await sb.from('photos').select('address_key, taken_at, user_name, route, path').gte('taken_at', lo).lte('taken_at', hi).order('taken_at').limit(5000));
     return { runs, ticks, lines, photos, complaints: D.register };
+  }
+  // ================= Stan's voice (decision 0043) =================
+  // Every line Stan says in his recorded voice: listen, record what's missing, record again if it came out wrong.
+  const VOICE = { rows: undefined, busy: null, error: null, ctx: null, playing: null, stop: false };
+  function renderVoice() {
+    const box = h('div', { class: 'sv' });
+    const load = async () => { try { const { data, error } = await sb.from('stan_lines').select('*'); if (error) throw error; VOICE.rows = data || []; } catch (e) { VOICE.rows = []; VOICE.error = `Couldn’t read the recordings: ${e.message}`; } paint(); };
+    const record = async (key) => {
+      const { data, error } = await sb.functions.invoke('stan-voice', { body: { key, text: STAN_LINES[key].say } });
+      if (error) { let msg = error.message; try { msg = (await error.context.json()).error || msg; } catch { /* keep */ } throw new Error(msg); }
+      VOICE.rows = [...VOICE.rows.filter((r) => r.key !== key), data];
+    };
+    const recordMany = async (keys) => {
+      VOICE.error = null; VOICE.stop = false;
+      for (const key of keys) {
+        if (VOICE.stop) break;
+        VOICE.busy = key; paint();
+        try { await record(key); } catch (e) { VOICE.error = `Stopped at “${STAN_LINES[key].say}”: ${e.message}`; break; }
+      }
+      VOICE.busy = null; paint();
+    };
+    const play = async (key, plain) => {
+      try {
+        const row = VOICE.rows.find((r) => r.key === key); if (!row) return;
+        VOICE.ctx ||= new (window.AudioContext || window.webkitAudioContext)(); await VOICE.ctx.resume();
+        try { VOICE.playing?.stop(); } catch { /* finished already */ }
+        const url = `${sb.storage.from('stan-voice').getPublicUrl(`${key}.mp3`).data.publicUrl}?v=${encodeURIComponent(row.recorded_at)}`;
+        const buf = await VOICE.ctx.decodeAudioData(await (await fetch(url)).arrayBuffer());
+        VOICE.playing = playStanClip(VOICE.ctx, buf, plain ? { reverb: 0, robot: 0, speed: 100 } : {});
+      } catch (e) { toast(`Couldn’t play it: ${e.message}`); }
+    };
+    function paint() {
+      if (VOICE.rows === undefined) { box.replaceChildren(h('p', { class: 'muted' }, 'Loading…')); return; }
+      const todo = linesToRecord(VOICE.rows); const by = new Map(VOICE.rows.map((r) => [r.key, r])); const groups = new Map();
+      for (const [key, l] of Object.entries(STAN_LINES)) { if (!groups.has(l.when)) groups.set(l.when, []); groups.get(l.when).push([key, l]); }
+      const total = Object.keys(STAN_LINES).length;
+      box.replaceChildren(...[
+        h('p', { class: 'muted', style: 'max-width:760px' }, 'What Stan says out loud in his own recorded voice. ▶ plays a line the way the phones will hear it, with his light robot finish. Each recording uses a few credits from the voice service, so record a line again only if it came out wrong.'),
+        h('div', { class: 'banner' }, `${total - todo.length} of ${total} lines recorded.${todo.length ? ` ${todo.filter((x) => x.why === 'new').length} not recorded yet${todo.some((x) => x.why === 'changed') ? `, ${todo.filter((x) => x.why === 'changed').length} with changed words` : ''}.` : ' All done.'}`),
+        VOICE.error ? h('div', { class: 'banner bad' }, VOICE.error) : null,
+        h('div', { class: 'dz-polgrid' },
+          todo.length && !VOICE.busy ? h('button', { class: 'btn primary', onclick: () => recordMany(todo.map((x) => x.key)) }, `Record the ${todo.length} that ${todo.length === 1 ? 'is' : 'are'} missing`) : null,
+          VOICE.busy ? h('button', { class: 'btn', onclick: () => { VOICE.stop = true; } }, 'Stop after this one') : null,
+          VOICE.busy ? h('span', { class: 'small muted' }, `Recording “${STAN_LINES[VOICE.busy].say}”…`) : null),
+        ...[...groups.entries()].map(([when, lines]) => h('div', { class: 'sv-group' }, h('h3', null, when),
+          h('table', { class: 'dz-table' }, h('tbody', null, lines.map(([key, l]) => { const r = by.get(key); const changed = r && r.text !== l.say;
+            return h('tr', null,
+              h('td', null, h('b', null, l.say), changed ? h('div', { class: 'small warn' }, `Recorded as “${r.text}”`) : null),
+              h('td', { class: 'small muted' }, VOICE.busy === key ? 'Recording…' : r ? `${changed ? 'Words changed · ' : ''}${r.recorded_by || ''} ${new Date(r.recorded_at).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : 'Not recorded'),
+              h('td', { style: 'white-space:nowrap;text-align:right' },
+                r ? h('button', { class: 'btn small', 'aria-label': `Play: ${l.say}`, onclick: () => play(key, false) }, '▶') : null, ' ',
+                r ? h('button', { class: 'link small', onclick: () => play(key, true) }, 'plain') : null, ' ',
+                h('button', { class: 'link small', disabled: VOICE.busy ? true : null, onclick: () => recordMany([key]) }, r ? 'Record again' : 'Record'))); }))))),
+      ].filter(Boolean));
+    }
+    paint(); if (VOICE.rows === undefined) load();
+    return box;
   }
   // ================= Day plan (decision 0040) =================
   // Who is driving, who is helping, and Stan works out the order and the start times from how long the runs really take.

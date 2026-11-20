@@ -944,3 +944,6 @@ html.big .nb-note p { font-size: 21px; } html.big .nb-from { font-size: 16px; }
 .step-btn { width: 56px; min-height: 52px; font-size: 26px; font-weight: 800; padding: 0; }
 .nb-note.nb-pinned { border-left-color: #ffc400; } .nb-note.nb-morning { border-left-color: #16a34a; } .nb-morning ul { margin: 0 0 6px; padding-left: 18px; font-size: 16px; line-height: 1.5; } .nb-morning li.late { color: #f87171; }
 html.big .step-label { font-size: 22px; } html.big .nb-morning ul { font-size: 20px; }
+
+/* Dispatch: Stan's voice (decision 0043) */
+.sv-group { max-width: 860px; margin-top: 14px; } .sv-group h3 { margin: 0 0 4px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; } .sv-group td { vertical-align: middle; }
