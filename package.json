@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Send The Boy: newspaper run app (PoC)",
   "scripts": {
-    "test": "node test/unit.mjs && node test/assistant.mjs && node test/shifts.mjs && node test/runmap.mjs && node test/report.mjs && node test/watch.mjs && node test/exif.mjs && node test/stangame.mjs && node test/insights.mjs && node test/dayplan.mjs && node test/notices.mjs && node test/spares.mjs && node test/stanlines.mjs && node test/sfx.mjs && node test/shiftsummary.mjs && node test/streaks.mjs && node test/runkm.mjs && node test/sequence.mjs && node test/rows.mjs && node test/village.mjs && node test/sql.mjs",
+    "test": "node test/unit.mjs && node test/assistant.mjs && node test/shifts.mjs && node test/runmap.mjs && node test/report.mjs && node test/watch.mjs && node test/exif.mjs && node test/stangame.mjs && node test/insights.mjs && node test/dayplan.mjs && node test/notices.mjs && node test/spares.mjs && node test/stanlines.mjs && node test/sfx.mjs && node test/shiftsummary.mjs && node test/streaks.mjs && node test/runkm.mjs && node test/sequence.mjs && node test/strays.mjs && node test/rows.mjs && node test/village.mjs && node test/sql.mjs",
     "test:sheets": "node test/village.mjs ../sheets/*.pdf",
     "docs:check": "node tools/check-docs.mjs",
     "check": "npm test && npm run docs:check"

@@ -7,6 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound, chimes } from './splash.js';
+import { findStrays, findSwaps } from './strays.js';
 import { createStanWalk, walkOn, setWalk } from './stanwalk.js';
 import { playSfx, unlockSfx, sfxOn, setSfx, nextTickStep, canDuck, musicMode, setMusicMode, holdMusic } from './sfx.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays, stbLogo } from './stan.js';
@@ -1424,6 +1425,11 @@ async function viewRun(ids) {
       h('a', { class: 'btn', href: '#/' }, 'Back to runs')));
     return;
   }
+  // "Shown as" corrections (decision 0055): where the sheet keys a unit and number the wrong way round, a dispatcher
+  // can say how it should read. The sheet's own version stays on the tile in small print, and its key is untouched.
+  let labels = {}; try { labels = (await app.store.getSetting('address_labels')) || {}; } catch { labels = {}; }
+  const applyLabels = () => { for (const d of data) for (const l of d.lines) { const fix = labels[l.address_key]?.number; const sheet = l.sheetNumber ?? l.number; if (fix && fix !== sheet) { l.sheetNumber = sheet; l.number = fix; } else if (l.sheetNumber) { l.number = l.sheetNumber; delete l.sheetNumber; } } };
+  applyLabels();
   const S = {
     data,
     events: await app.store.loadEvents(ids),
@@ -1466,6 +1472,38 @@ async function viewRun(ids) {
     h('button', { 'data-v': 'sheet', onclick: () => { S.useCustom = false; render(); } }, '📄 Sheet order'));
   const orderRow = h('div', { class: 'rh-row', hidden: true }, orderSeg);
   const body = h('div', { class: 'runbody' });
+  // ---- Stan's check of the addresses before the run is driven (decision 0055): suggestions only ----
+  const checkSlot = h('div', { class: 'check-slot' });
+  const okKey = 'stb.check.ok'; const okd = () => { try { return JSON.parse(localStorage.getItem(okKey) || '[]'); } catch { return []; } };
+  const leave = (sig) => { try { localStorage.setItem(okKey, JSON.stringify([...okd().filter((x) => x !== sig), sig].slice(-400))); } catch { /* private mode */ } drawCheck(); };
+  const isBoss = () => app.store.mode !== 'shared' || app.me.role === 'dispatcher';
+  function drawCheck() {
+    const seen = new Set(okd()); const cards = [];
+    const st = status(); const started = (d) => d.lines.some((l) => st[`${l.run_id}::${l.line_key}`]?.done);
+    for (const d of visibleData()) {
+      if (layoutFor(d.run.route) || started(d)) continue;      // the village has its own fixed order; and once a run is under way Stan keeps quiet
+      const route = d.run.route; const lines = orderedLines(d); const name = (k) => { const l = d.lines.find((x) => x.address_key === k); return l ? addrText(l) : k; };
+      for (const sx of findStrays(lines)) {
+        const sig = `stray|${route}|${sx.key}|${sx.anchorKey}`; if (seen.has(sig)) continue;
+        cards.push(h('div', { class: 'check-card' }, stanOn() ? stan({ pose: 'point', size: 40 }) : null, h('div', { class: 'check-body' },
+          h('div', { class: 'check-say' }, `${name(sx.key)} is ${sx.gap} stops away from the rest of ${titleCase(sx.street)}. Put it ${sx.after ? 'after' : 'before'} ${name(sx.anchorKey)}?`),
+          h('div', { class: 'check-acts' },
+            h('button', { class: 'btn small primary', onclick: () => { const before = S.seq[route] || null; const current = orderedLines(d).map((l) => l.address_key); const next = moveKeys(current, [sx.key], sx.anchorKey, sx.after); const merged = mergeOrder(before?.keys, next); const own = app.store.personalOrders || !!before?.mine;
+              S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString(), mine: own }; S.useCustom = true; app.store.saveSequence(route, merged, app.me.name, { own }); render(); toast(`Moved ${name(sx.key)} next to ${name(sx.anchorKey)}${own ? ', in your own order' : ''}.`); } }, 'Move it'),
+            h('button', { class: 'btn small', onclick: () => leave(sig) }, 'Leave it')))));
+      }
+      if (isBoss()) for (const sw of findSwaps(d.lines)) {
+        const sig = `swap|${sw.key}`; if (seen.has(sig) || labels[sw.key]) continue;
+        const shown = fmtNumber(sw.suggest); const now = fmtNumber(sw.number);
+        cards.push(h('div', { class: 'check-card' }, stanOn() ? stan({ pose: 'point', size: 40 }) : null, h('div', { class: 'check-body' },
+          h('div', { class: 'check-say' }, `The sheet has ${String(sw.number).replace(/\s+/g, '')} ${titleCase(sw.street)}, which shows as number ${now.main}, ${now.sub}. Nothing else is at number ${now.main}, but there are units at number ${shown.main}. Is it really ${shown.sub} at number ${shown.main}?`),
+          h('div', { class: 'check-acts' },
+            h('button', { class: 'btn small primary', onclick: async () => { try { const all = { ...((await app.store.getSetting('address_labels')) || {}), [sw.key]: { number: sw.suggest, by: app.me.name, at: new Date().toISOString() } }; await app.store.setSetting('address_labels', all, app.me.name); labels = all; applyLabels(); render(); toast(`Everyone now sees it as ${shown.main} ${titleCase(sw.street)}, ${shown.sub}. The sheet’s version stays in small print.`); } catch { toast('Couldn’t save that just now. Try again when there’s signal.'); } } }, `Yes, show ${shown.main}, ${shown.sub}`),
+            h('button', { class: 'btn small', onclick: () => leave(sig) }, 'No, leave it')))));
+      }
+    }
+    checkSlot.replaceChildren(...cards.slice(0, 3));
+  }
   const search = h('input', { class: 'search', type: 'search', placeholder: 'Find a number, street or note', enterkeyhint: 'search', autocomplete: 'off' });
   search.addEventListener('input', () => { S.query = search.value.trim().toLowerCase(); render(); });
   const searchRow = h('div', { class: 'rh-row', hidden: true }, search,
@@ -2002,6 +2040,7 @@ async function viewRun(ids) {
   }
 
   function render() {
+    try { drawCheck(); } catch { checkSlot.replaceChildren(); }
     const st = status();
     const isDone = (l) => !!st[`${l.run_id}::${l.line_key}`]?.done;
     const visibleRuns = S.show === 'all' ? S.data : S.data.filter((d) => d.run.id === S.show);
@@ -2239,6 +2278,7 @@ async function viewRun(ids) {
       plainNZH && l.qty > 1 ? h('span', { class: 'badge qty' }, `×${l.qty}`) : null,
       done ? h('span', { class: 'who' }, `${ev.user_name || ''} ${fmtTime(ev.device_time)}`.trim()) : null),
     fmtNumber(l.number).sub ? h('div', { class: 'unit' }, fmtNumber(l.number).sub) : null,
+    l.sheetNumber ? h('div', { class: 'sheet-says' }, `Sheet says ${String(l.sheetNumber).replace(/\s+/g, '')}`) : null,
     plainNZH ? null : h('div', { class: 'pubs' }, parts.map((pt) => pubChip(pt.pub, pt.qty, kind))),
     S.query || opts.showStreet ? h('div', { class: 'street-name' }, titleCase(l.street)) : null,
     l.bankNote ? h('div', { class: 'flags' }, h('span', { class: 'flag weekday', title: l.bankNote }, 'Check bank')) : null,
@@ -2286,8 +2326,19 @@ async function viewRun(ids) {
           for (const d of runs) { if (app.store.personalOrders) { app.store.saveSequence(d.run.route, null, app.me.name); S.seq[d.run.route] = app.store.sharedSequence(d.run.route); } else S.seq[d.run.route] = app.store.dropOwnOrder(d.run.route); }
           render(); toast('Back on the usual order.');
         }) : null,
-        !app.store.personalOrders && visibleData().some((d) => !S.seq[d.run.route]?.mine) ? menuItem('Keep my own order…', () => { close(); keepMyOrder(); }, { hint: 'So nobody else\u2019s changes move your tiles' }) : null,
-        app.store.personalOrders ? null : menuItem('Put back in the sheet’s order…', () => {
+        app.store.mode === 'shared' && app.me.role === 'dispatcher' && visibleData().some((d) => S.seq[d.run.route]?.mine) ? menuItem('Make my order the usual order…', async () => {
+          close();
+          const runs = visibleData().filter((d) => S.seq[d.run.route]?.mine);
+          if (!confirm(`Make your order the usual order for ${runs.map((d) => shortRoute(d.run.route)).join(', ')}?\n\nEveryone who hasn’t made their own order will see it from their next run. People with their own order keep theirs.`)) return;
+          try { for (const d of runs) await app.store.makeUsualOrder(d.run.route, S.seq[d.run.route].keys, app.me.name); toast('Done. Your order is now the usual one. Yours stays as it is.'); } catch { toast('Couldn’t save that just now. Try again when there’s signal.'); }
+        }, { hint: 'For everyone who hasn’t made their own' }) : null,
+        Object.keys(labels).some((k) => visibleData().some((d) => d.lines.some((l) => l.address_key === k && l.sheetNumber))) && isBoss() ? menuItem('Undo an address correction…', () => {
+          close();
+          const fixed = visibleData().flatMap((d) => d.lines.filter((l) => l.sheetNumber));
+          const shut = openSheet('Address corrections', h('p', { class: 'small muted' }, 'These are shown differently from the sheet. Tap one to go back to what the sheet says.'), h('div', { class: 'menu-group' }, fixed.map((l) => menuItem(`${addrText(l)} (sheet says ${String(l.sheetNumber).replace(/\s+/g, '')})`, async () => { try { const all = { ...((await app.store.getSetting('address_labels')) || {}) }; delete all[l.address_key]; await app.store.setSetting('address_labels', all, app.me.name); labels = all; applyLabels(); shut(); render(); toast('Back to what the sheet says.'); } catch { toast('Couldn’t save that just now.'); } }))));
+        }) : null,
+        false && visibleData().some((d) => !S.seq[d.run.route]?.mine) ? menuItem('Keep my own order…', () => { close(); keepMyOrder(); }, { hint: 'So nobody else\u2019s changes move your tiles' }) : null,
+        app.store.mode === 'shared' ? null : menuItem('Put back in the sheet’s order…', () => {
           close();
           const runs = visibleData().filter((d) => hasCustom(d) && !S.seq[d.run.route]?.mine);
           if (!runs.length) return toast(visibleData().some((d) => S.seq[d.run.route]?.mine) ? 'You\u2019re on your own order. Drop it first to change the usual one.' : 'Already in sheet order.');
@@ -2325,6 +2376,7 @@ async function viewRun(ids) {
       searchRow,
       walk?.el,
       fbFill),
+    checkSlot,
     body,
     daPanel,
     actionbar);

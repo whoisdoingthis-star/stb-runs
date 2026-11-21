@@ -1055,3 +1055,11 @@ html.big .home-mini { grid-template-columns: 1fr; }
 .streak-n { font-size: 44px; line-height: 1; min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
 .streak-fam { margin: 8px 0 0; font-weight: 700; }
 .streak-line { font-size: 14px; font-weight: 700; color: var(--muted); }
+
+/* ===== Stan's check of a run's addresses (decision 0055) ===== */
+.check-slot { max-width: 900px; margin: 0 auto; padding: 0 12px; }
+.check-card { display: flex; gap: 10px; align-items: flex-start; border: 2px solid #ffc400; border-radius: 14px; background: var(--card); padding: 10px 12px; margin: 10px 0 0; }
+.check-card .stan { flex: none; } .check-body { flex: 1; min-width: 0; }
+.check-say { font-weight: 700; } .check-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.check-acts .btn.small { min-height: 44px; }
+.tile .sheet-says { font-size: 12px; color: var(--muted); font-weight: 400; }

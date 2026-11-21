@@ -109,7 +109,10 @@ class Base {
   pendingSeqs() { return LS.get('stb.seqpending', {}); }
   /** keys = ordered address keys, or null to go back to sheet order. */
   /** Drivers' drags make their own order; a dispatcher's change the usual order everyone sees (Mike, 11 Nov 2026). */
-  get personalOrders() { return !!this.me && this.me.role !== 'dispatcher'; }
+  /** Everyone's drags make their own order, dispatchers included (Mike, 21 Nov 2026; decision 0054). It was: a dispatcher's changed the usual order. */
+  get personalOrders() { return !!this.me; }
+  /** A dispatcher's deliberate step: this order becomes the usual one, for everyone who hasn't made their own. */
+  async makeUsualOrder(route, keys, by) { LS.set(`stb.seqshared.${route}`, { keys, by, at: new Date().toISOString(), mine: false }); }
   sharedSequence(route) { return LS.get(`stb.seqshared.${route}`, null); }
   /** opts.own: save as this person's own order (a dispatcher who chose to keep their own, decision 0031). */
   saveSequence(route, keys, by, opts = {}) {
@@ -817,6 +820,12 @@ export class SupabaseStore extends Base {
     const { error } = await this.sb.from('app_settings').upsert({ key, value, updated_by: by, updated_at: new Date().toISOString() });
     if (error) throw error;
     LS.set(`stb.setting.${key}`, value);
+  }
+  async makeUsualOrder(route, keys, by) {
+    const at = new Date().toISOString();
+    const { error } = await this.sb.from('route_sequences').upsert({ route, address_keys: keys, updated_by: by, updated_at: at }, { onConflict: 'route' });
+    if (error) throw error;
+    LS.set(`stb.seqshared.${route}`, { keys, by, at, mine: false });
   }
   async myLastOrder(route) {
     try {

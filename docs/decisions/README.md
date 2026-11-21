@@ -57,6 +57,8 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0051 | [Sounds on a run, a nudge at stops that aren't routine, and Stan over the phone's music](0051-run-sounds-and-music.md) | 2026-11-21 | Accepted |
 | 0052 | [Stan walks the street along the top of a run](0052-walking-stan.md) | 2026-11-21 | Accepted |
 | 0053 | [Clean mornings in a row, with one let-off a week, and the family's week](0053-clean-mornings.md) | 2026-11-21 | Accepted |
+| 0054 | [Everyone's moves make their own order; the usual order changes only on purpose](0054-own-order-for-everyone.md) | 2026-11-21 | Accepted |
+| 0055 | [Stan checks a run's addresses before it's driven](0055-stans-address-check.md) | 2026-11-21 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 
