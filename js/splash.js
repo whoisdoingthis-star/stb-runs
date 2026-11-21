@@ -1,13 +1,13 @@
-// Opening animation (Mike's design, 14 Nov 2026; decision 0033): Stan pops up with the name on his band,
-// winks, spins once on a cyan swoosh, and cheers with a burst of sparks. With the sound on, each beat has its own
-// soft note, rising (the chimes from decision 0016). About a second and three quarters, over the top of the app
-// while it loads (it never holds the app up), and a tap skips it.
+// Opening animation (Mike's design, 21 Nov 2026; decision 0056): Stan runs in with his newspaper satchel in his hand,
+// each little footstep a soft note, then jumps and pumps his fist: "Stan-tastic!". About two and a quarter seconds,
+// over the top of the app while it loads (it never holds the app up), and a tap skips it.
+// (Before this: he popped up, winked, spun and cheered; decision 0033.)
 //  - Shown every time the app is opened or brought back to the front, and after signing in
 //    (app.js decides when; not while a run is on screen).
 //  - Sound (a soft note per beat) is OFF unless switched on in Settings: runs start around 5am.
 //    Phones only allow sound after a touch, so on a cold open it may stay silent anyway.
 // See docs/decisions/0033-brand.md (and 0016 for the first opening).
-import { stanHead, STAN_DEFS } from './stan.js';
+import { stanFigure, STAN_DEFS } from './stan.js';
 
 const DAY_KEY = 'stb-splash-day';
 const SOUND_KEY = 'stb-sound';
@@ -42,40 +42,44 @@ export function chimes(notes) {
         g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
         o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
       };
-      for (const [ms, f] of notes) {
+      for (const [ms, f, d = 0.42, v = 0.065] of notes) {   // [ms from now, Hz, seconds long, loudness]
         if (ms - late < -150) continue; // too late to match its stop: leave it out
         const t = ctx.currentTime + Math.max(0, ms - late) / 1000;
-        tone(f, t, 0.42, 0.065); tone(f * 2.01, t, 0.18, 0.006, 'triangle');
+        tone(f, t, d, v); if (d > 0.2) tone(f * 2.01, t, 0.18, 0.006, 'triangle');
       }
     };
     if (ctx.state === 'running') go(); else ctx.resume().then(go).catch(() => {});
   } catch { /* no sound on this phone */ }
 }
 
-// The beats (ms): hello, wink, spin, cheer, and the note each one plays: C, E, G, then the C above.
-const HELLO_AT = 60; const WINK_AT = 380; const SPIN_AT = 620; const CHEER_AT = 1060;
-const NOTES = [[HELLO_AT, 1046.5], [WINK_AT, 1318.5], [SPIN_AT, 1568], [CHEER_AT, 2093]];
+// The beats (ms). Four footsteps as he runs in, each a short note a step higher; then the jump, three quick notes up.
+export const STEP_MS = 200; export const STEPS = [110, 310, 510, 710]; export const STOP_AT = 880; export const JUMP_AT = 980; export const END_AT = 2050;
+export const STEP_NOTES = STEPS.map((ms, i) => [ms, [261.63, 293.66, 329.63, 392][i], 0.09, 0.075]);
+export const JUMP_NOTES = [[JUMP_AT, 523.25], [JUMP_AT + 90, 783.99], [JUMP_AT + 180, 1046.5]];
+const SATCHEL = `<g class="sp-bag"><path d="M10 138q-8 6-6 16" fill="none" stroke="#7a4a1e" stroke-width="5" stroke-linecap="round"/><rect x="-26" y="150" width="50" height="40" rx="8" fill="#b0692b" stroke="#7a4a1e" stroke-width="3"/><path d="M-26 164h50" stroke="#7a4a1e" stroke-width="3"/><rect x="-14" y="138" width="28" height="18" rx="3" fill="#f4f1ea" stroke="#8a8478" stroke-width="2"/><path d="M-8 144h16M-8 150h10" stroke="#8a8478" stroke-width="2"/></g>`;
 const SVG = `<svg viewBox="0 0 380 300" role="img" aria-label="Send The Boy">${STAN_DEFS}
   <ellipse class="sp-glow" cx="190" cy="262" rx="86" ry="7" fill="#22e6f2"/>
-  <path class="sp-swoosh" d="M70 226q120 52 250-12" fill="none" stroke="#22e6f2" stroke-width="7" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
-  <g class="sp-burst" stroke="#ffc400" stroke-width="6" stroke-linecap="round"><path d="M66 118l-26-8"/><path d="M70 160l-28 6"/><path d="M314 118l26-8"/><path d="M310 160l28 6"/></g>
-  <g transform="translate(60 26) scale(1.3)"><g class="sp-stan">${stanHead('stb')}</g></g>
+  <g class="sp-burst" stroke="#ffc400" stroke-width="6" stroke-linecap="round"><path d="M92 74l-24-12"/><path d="M84 116l-28 2"/><path d="M300 60l22-16"/><path d="M312 104l28-4"/><path d="M262 22l8-24"/></g>
+  <g class="sp-run"><g class="sp-fig"><g transform="translate(110 62) scale(.8)">${stanFigure('stb')}${SATCHEL}</g></g></g>
+  <text class="sp-word" x="190" y="296" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-style="italic" font-size="34" fill="#ffc400">Stan-tastic!</text>
 </svg>`;
 
 let showing = null;
 /**
- * Play the opening. `sound`: play the chimes too (only if the phone allows it).
- * Returns straight away; the overlay removes itself. Does nothing if one is already showing.
+ * Play the opening. `sound`: play the notes too (only if the phone allows it). `onCheer`: called as he jumps, so the
+ * app can play his recorded "Stan-tastic!" if he's allowed to talk. Returns straight away; the overlay removes itself.
+ * Does nothing if one is already showing.
  */
-export function playSplash({ sound = false } = {}) {
+export function playSplash({ sound = false, onCheer } = {}) {
   set(DAY_KEY, today());
   if (showing || !document.body.animate) return;
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { if (sound) chimes([[0, 1568]]); return; }
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { if (sound) chimes([[0, 1046.5]]); return; }
   const el = document.createElement('div');
   el.className = 'splash';
   el.setAttribute('aria-hidden', 'true');
   el.innerHTML = SVG;
-  const done = () => { if (showing !== el) return; showing = null; el.remove(); };
+  let cheer = null;
+  const done = () => { if (showing !== el) return; showing = null; clearTimeout(cheer); el.remove(); };
   el.addEventListener('click', done); // click, not pointerdown: the tap must not fall through to a run card underneath
   document.body.append(el);
   showing = el;
@@ -83,19 +87,28 @@ export function playSplash({ sound = false } = {}) {
   const q = (s) => el.querySelector(s);
   const O = 'cubic-bezier(.2,1.5,.4,1)';
   const a = (n, kf, o) => n.animate(kf, { fill: 'both', ...o });
-  const show = (sel, from, to = 1e6) => el.querySelectorAll(sel).forEach((n) => a(n, [{ opacity: 0 }, { opacity: 0, offset: Math.min(.999, from / 1800) }, { opacity: 1, offset: Math.min(1, from / 1800 + .001) },
-    ...(to < 1800 ? [{ opacity: 1, offset: to / 1800 }, { opacity: 0, offset: to / 1800 + .001 }] : []), { opacity: to < 1800 ? 0 : 1 }], { duration: 1800 }));
-  const stan = q('.sp-stan'); stan.style.transformBox = 'fill-box'; stan.style.transformOrigin = '50% 58%';
-  // hello (pop in), then one spin, then a little jump for the cheer
-  a(stan, [{ opacity: 0, transform: 'scale(.5)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 260, delay: HELLO_AT, easing: O });
-  a(stan, [{ transform: 'rotate(0)' }, { transform: 'rotate(-14deg)', offset: .18 }, { transform: 'rotate(360deg)' }], { duration: 420, delay: SPIN_AT, easing: 'ease-in-out', composite: 'add' });
-  a(stan, [{ transform: 'translateY(0)' }, { transform: 'translateY(-16px)', offset: .4 }, { transform: 'translateY(0)' }], { duration: 300, delay: CHEER_AT, easing: 'ease-out', composite: 'add' });
-  // eyes: open, then a wink, then happy
-  show('.st-eye-l', 0, CHEER_AT); show('.st-eye-open', 0, WINK_AT); show('.st-eye-wink', WINK_AT, CHEER_AT); show('.st-eye-happy', CHEER_AT);
-  a(q('.sp-swoosh'), [{ strokeDashoffset: 1, opacity: 1 }, { strokeDashoffset: 0, opacity: 1, offset: .6 }, { strokeDashoffset: 0, opacity: 0 }], { duration: 520, delay: SPIN_AT - 40, easing: 'ease-out' });
+  const show = (sel, from, to = 1e6) => el.querySelectorAll(sel).forEach((n) => a(n, [{ opacity: 0 }, { opacity: 0, offset: Math.min(.999, from / END_AT) }, { opacity: 1, offset: Math.min(1, from / END_AT + .001) },
+    ...(to < END_AT ? [{ opacity: 1, offset: to / END_AT }, { opacity: 0, offset: to / END_AT + .001 }] : []), { opacity: to < END_AT ? 0 : 1 }], { duration: END_AT }));
+  // he runs in from the left: the whole of him slides across, bobbing once per step, legs and arms swinging
+  a(q('.sp-run'), [{ transform: 'translateX(-125%)' }, { transform: 'translateX(0)' }], { duration: STOP_AT, easing: 'cubic-bezier(.25,.6,.4,1)' });
+  const fig = q('.sp-fig');
+  a(fig, [{ transform: 'translateY(0)' }, { transform: 'translateY(-9px)' }, { transform: 'translateY(0)' }], { duration: STEP_MS, iterations: STEPS.length, delay: STEPS[0] - STEP_MS / 2, easing: 'ease-in-out' });
+  el.querySelectorAll('.st-leg').forEach((leg, i) => { leg.style.transformBox = 'fill-box'; leg.style.transformOrigin = '50% 6%';
+    a(leg, [{ transform: `rotate(${i ? -24 : 24}deg)` }, { transform: `rotate(${i ? 24 : -24}deg)` }], { duration: STEP_MS, iterations: STOP_AT / STEP_MS, direction: 'alternate', easing: 'ease-in-out' }).finished.then(() => { leg.style.transform = 'none'; }, () => {}); });
+  const armR = q('.st-armR'); armR.style.transformOrigin = '166px 130px'; armR.parentNode.append(armR);   // in front of his head, so the raised fist shows
+  a(armR, [{ transform: 'rotate(26deg)' }, { transform: 'rotate(-10deg)' }], { duration: STEP_MS, iterations: STOP_AT / STEP_MS, direction: 'alternate', easing: 'ease-in-out' });
+  const bag = q('.sp-bag'); bag.style.transformOrigin = '10px 136px';
+  a(bag, [{ transform: 'rotate(-10deg)' }, { transform: 'rotate(12deg)' }], { duration: STEP_MS, iterations: STOP_AT / STEP_MS, direction: 'alternate', easing: 'ease-in-out' });
+  // the jump: up and down once, fist in the air, happy eyes, sparks, and the word
+  a(fig, [{ transform: 'translateY(0)' }, { transform: 'translateY(-52px)', offset: .42, easing: 'ease-in' }, { transform: 'translateY(0)' }], { duration: 560, delay: JUMP_AT, easing: 'ease-out', composite: 'add' });
+  a(armR, [{ transform: 'translate(0px, 0px) rotate(8deg) scale(1)' }, { transform: 'translate(10px, -46px) rotate(-56deg) scale(1.4)' }], { duration: 200, delay: JUMP_AT - 40, easing: O });
+  show('.st-eye-l', 0, JUMP_AT); show('.st-eye-open', 0, JUMP_AT); show('.st-eye-happy', JUMP_AT);
   const burst = q('.sp-burst'); burst.style.transformBox = 'fill-box'; burst.style.transformOrigin = 'center';
-  a(burst, [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 220, delay: CHEER_AT, easing: O });
-  a(q('.sp-glow'), [{ opacity: 0 }, { opacity: .5 }], { duration: 300, delay: CHEER_AT });
-  if (sound) chimes(NOTES);
-  a(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 1750, easing: 'ease-in' }).finished.then(done, done);
+  a(burst, [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 220, delay: JUMP_AT + 120, easing: O });
+  a(q('.sp-glow'), [{ opacity: 0 }, { opacity: .5 }], { duration: 300, delay: STOP_AT });
+  const word = q('.sp-word'); word.style.transformBox = 'fill-box'; word.style.transformOrigin = 'center';
+  a(word, [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 240, delay: JUMP_AT + 100, easing: O });
+  if (sound) chimes([...STEP_NOTES, ...JUMP_NOTES]);
+  if (onCheer) cheer = setTimeout(() => { try { onCheer(); } catch { /* quiet */ } }, JUMP_AT + 60);
+  a(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: END_AT, easing: 'ease-in' }).finished.then(done, done);
 }

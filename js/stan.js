@@ -54,13 +54,15 @@ const ARM = (side) => {
   const [sx, sy, rot, len] = side === 'L' ? [34, 132, 148, 30] : [166, 130, -34, 40];
   return `<g class="st-arm${side}"><g transform="translate(${sx} ${sy}) rotate(${rot})"><rect x="-8" y="-12" width="${len + 8}" height="24" rx="12" fill="url(#stn-k)" stroke="${LIMB_EDGE}" stroke-width="1"/>${TIP(`M${len - 14}-12h2a12 12 0 0 1 0 24h-2a13 13 0 0 0 0-24z`)}</g></g>`;
 };
-const LEG = (x, r) => `<g transform="rotate(${r} ${x + 14} 160)"><rect x="${x}" y="150" width="28" height="64" rx="14" fill="url(#stn-k)" stroke="${LIMB_EDGE}" stroke-width="1"/>${TIP(`M${x} 198q14 6 28 0v2a14 14 0 0 1-28 0z`)}</g>`;
+const LEG = (x, r) => `<g class="st-leg"><g transform="rotate(${r} ${x + 14} 160)"><rect x="${x}" y="150" width="28" height="64" rx="14" fill="url(#stn-k)" stroke="${LIMB_EDGE}" stroke-width="1"/>${TIP(`M${x} 198q14 6 28 0v2a14 14 0 0 1-28 0z`)}</g></g>`;
 
 const BODY = `
   <ellipse class="st-floor" cx="100" cy="234" rx="56" ry="6" fill="${CY}" opacity=".3"/>
   <g class="st-bob">${LEG(60, 9)}${LEG(106, 2)}${ARM('L')}${ARM('R')}
     ${stanHead('stan')}</g>`;
 const HEAD = stanHead('none');
+/** All of Stan as SVG markup (legs, arms, head), for the opening. `band`: none | stan | stb. Legs are .st-leg, arms .st-armL / .st-armR. */
+export const stanFigure = (band = 'stb') => `${LEG(60, 9)}${LEG(106, 2)}${ARM('L')}${ARM('R')}${stanHead(band)}`;
 
 /** The logo: Stan beside the name (decision 0033). `ink`: colour of "Send" (white on dark, near-black on light). */
 export function stbLogo({ height = 64, ink = 'currentColor', outline = false, label = 'Send The Boy' } = {}) {

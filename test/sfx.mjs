@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { walkOffset, STREET_PX } from '../js/stanwalk.js';
+import { STEP_NOTES, JUMP_NOTES, STEPS, STOP_AT, JUMP_AT, END_AT } from '../js/splash.js';
 import { SFX, sfxNotes, TICK_SCALE, nextTickStep, TICK_PAUSE_MS } from '../js/sfx.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
@@ -11,4 +12,5 @@ t('a pause starts the scale again: one tick after another climbs, a tick after a
 t('a problem at a stop sounds nothing like a tick: lower, and twice', () => { const p = sfxNotes('problem'); const k = sfxNotes('tick', 4); assert.equal(p.length, 2); assert.ok(Math.max(...p.map((n) => n[1])) < Math.min(...[0, 1, 2, 3, 4].map((s) => sfxNotes('tick', s)[0][1])) / 2); assert.notEqual(p[0][4], k[0][4]); });
 t('a sound nobody has made is silence, not an error', () => assert.deepEqual(sfxNotes('nope'), []));
 t('the street slides from the start to the end of the run, and never past either', () => { assert.equal(walkOffset(0, 98), 0); assert.equal(walkOffset(49, 98), -STREET_PX / 2); assert.equal(walkOffset(98, 98), -STREET_PX); assert.equal(walkOffset(120, 98), -STREET_PX); assert.equal(walkOffset(3, 0), 0); });
+t('the opening: four footsteps, each a short note a step higher, then he jumps with three quick notes up, all inside two and a half seconds', () => { assert.equal(STEP_NOTES.length, 4); for (let i = 1; i < 4; i++) assert.ok(STEP_NOTES[i][1] > STEP_NOTES[i - 1][1] && STEP_NOTES[i][0] > STEP_NOTES[i - 1][0]); assert.ok(STEP_NOTES.every((n) => n[2] <= 0.12)); assert.ok(STEPS[3] < STOP_AT && STOP_AT < JUMP_AT); assert.ok(JUMP_NOTES[0][0] === JUMP_AT && JUMP_NOTES[2][1] > JUMP_NOTES[0][1]); assert.ok(END_AT + 260 <= 2500); });
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

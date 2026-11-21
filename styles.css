@@ -639,7 +639,7 @@ html.big body:has(.actionbar.has-last) #toast { bottom: calc(150px + var(--safe-
 /* Opening animation (js/splash.js): over everything, a tap skips it */
 .splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #050506; color: #fff; touch-action: manipulation; }
 .splash svg { width: min(92vw, 440px); height: auto; overflow: visible; }
-.splash .sp-stan, .splash .sp-burst, .splash .sp-glow, .splash .st-eye-wink, .splash .st-eye-happy { opacity: 0; } .splash .sp-glow { filter: blur(6px); } .splash .st-mouth { display: none; }
+.splash .sp-word, .splash .sp-burst, .splash .sp-glow, .splash .st-eye-wink, .splash .st-eye-happy { opacity: 0; } .splash .sp-run { transform: translateX(-125%); } .splash .sp-glow { filter: blur(6px); } .splash .st-mouth { display: none; }
 /* Five buttons after a tick: Maps shows just its arrow, and buttons use less padding. */
 .actionbar.has-last .ab-btn { padding: 0 6px; min-width: 0; gap: 4px; }
 .actionbar.with-undo .ab-lbl { display: none; }

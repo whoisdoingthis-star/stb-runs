@@ -179,11 +179,11 @@ async function boot() {
   // while the app loads underneath. Never while a run is on screen: a driver coming back from
   // Maps or the camera must be able to tick straight away.
   const onRun = () => location.hash.startsWith('#/r/');
-  if (!onRun()) playSplash({ sound: soundOn() });
+  if (!onRun()) openingNow();
   let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
-    if (hiddenAt && Date.now() - hiddenAt >= 3000 && !onRun()) playSplash({ sound: soundOn() });
+    if (hiddenAt && Date.now() - hiddenAt >= 3000 && !onRun()) openingNow();
     hiddenAt = 0;
   });
   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
@@ -264,7 +264,7 @@ function viewLogin(error) {
     onsubmit: async (ev) => {
       ev.preventDefault();
       btn.disabled = true; btn.textContent = 'Signing in…';
-      try { await app.store.signIn(email.value.trim(), pw.value); playSplash({ sound: soundOn() }); await route(); } catch (e) {
+      try { await app.store.signIn(email.value.trim(), pw.value); openingNow(); await route(); } catch (e) {
         msg.hidden = false; msg.className = 'banner bad'; msg.textContent = e.message;
         btn.disabled = false; btn.textContent = 'Sign in';
       }
@@ -493,6 +493,8 @@ let stanSayMod = null;
 const loadStanSay = () => (stanSayMod ||= import('./stansay.js').catch(() => null));
 /** A morning that has run past its deadline is a rough one: no celebrating for the next few hours. */
 function stanMood() { try { const dl = deadlineFor(nzToday()).at; const now = Date.now(); return now > dl && now < dl + 5 * 3600e3 && (app.todayRuns || []).some((r) => (r.done || 0) > 0) ? 'rough' : 'fine'; } catch { return 'fine'; } }
+/** The opening (decision 0056): the notes if the opening's sound is on, and Stan's own "Stan-tastic!" if he's allowed to talk. */
+function openingNow(force = false) { playSplash({ sound: force || soundOn(), onCheer: () => stanPlay(['word.stantastic']) }); }
 function stanPlay(keys) {
   if (!stanOn() || !stanTalks() || !keys.length) return;
   // On an iPhone set to it, the music is held while he talks and handed back after (decision 0051).
@@ -1101,9 +1103,9 @@ function openSettings(fileInput) {
       stanOn() ? voiceStatus() : null,
       choiceRow('Run sounds', [['on', 'On'], ['off', 'Off']], sfxOn() ? 'on' : 'off', (v) => { setSfx(v === 'on'); if (v === 'on') { unlockSfx(); playSfx('tick'); } }),
       stanOn() && canDuck() ? choiceRow('Music while Stan talks', [['mix', 'Keeps playing'], ['solo', 'Pauses']], musicMode(), (v) => setMusicMode(v)) : null,
-      choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
+      choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); openingNow(true); } })),
     (close) => h('div', { class: 'menu-group' },
-      menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays each time you open the app' }),
+      menuItem('Play the opening', () => { close(); openingNow(); }, { hint: 'It plays each time you open the app' }),
       app.store.mode === 'shared' ? menuItem('Get Runs from RouteSmart…', () => { close(); openRefetch(); }, { hint: 'Fetches the latest sheets for a day. Use it if a change is phoned in' }) : null,
       menuItem('Upload a run sheet (PDF)…', () => { close(); fileInput?.click(); }, { hint: 'A sheet you downloaded yourself' }),
       app.me.role === 'dispatcher' ? menuItem('Dispatch dashboard', () => { close(); location.hash = '#/dispatch'; }) : null),
