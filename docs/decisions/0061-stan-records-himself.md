@@ -4,7 +4,7 @@
 - **Status:** Accepted
 
 ## Context
-Stan's lines are written in the code and recorded in his voice by pressing a button on **Dispatch → Set-up → Stan's voice** ([0043](0043-stans-recorded-voice.md)). With *What's new* read aloud ([0060](0060-whats-new-read-aloud.md)) every change now brings a new line, and each would wait for Mike to press the button. Mike (22 Nov 2026): "I need a way for us to use Stan's new voice, which can download from ElevenLabs, without me needing to approve or stage the file then upload… this functionality is critical for where we are developing towards, having Stan become more and more customisable."
+Stan's lines are written in the code and recorded in his voice by pressing a button on **Dispatch → Set-up → Stan's voice** ([0043](0043-stan-recorded-voice.md)). With *What's new* read aloud ([0060](0060-whats-new-read-aloud.md)) every change now brings a new line, and each would wait for Mike to press the button. Mike (22 Nov 2026): "I need a way for us to use Stan's new voice, which can download from ElevenLabs, without me needing to approve or stage the file then upload… this functionality is critical for where we are developing towards, having Stan become more and more customisable."
 
 ## Decision
 1. **A job on GitHub records what's missing after each publish** that touches Stan's lines or the *What's new* cards (`.github/workflows/record-stan.yml`, running `tools/record-stan.mjs`). It compares the lines in the code with the ones already recorded and asks the existing `stan-voice` function to record each new or reworded one. A few minutes after a publish, Stan can say it. It can also be run by hand from GitHub's Actions tab, with a dry run that only lists what it would do.
