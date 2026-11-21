@@ -6,6 +6,8 @@
 
 const G = (when, lines) => Object.fromEntries(Object.entries(lines).map(([k, say]) => [k, { say, when }]));
 
+import { UPDATES } from './whatsnew.js';
+
 export const STAN_LINES = {
   ...G('Opening the app', {
     'hello.1': 'Oh! Hello. It’s Stan.',
@@ -153,6 +155,9 @@ export const STAN_LINES = {
 export const clipUrl = (base, key, stamp = '') => `${String(base).replace(/\/$/, '')}/storage/v1/object/public/stan-voice/${key}.mp3${stamp ? `?v=${encodeURIComponent(stamp)}` : ''}`;
 
 /** What still needs recording, or recording again because the words changed. recorded: rows from stan_lines. */
+// What's new cards, read aloud (decision 0060): each card's spoken version is one of his lines, so it is recorded the same way.
+for (const u of UPDATES) if (u.say) STAN_LINES[`news.${u.id}`] = { say: u.say, when: 'What’s new, read aloud' };
+
 export function linesToRecord(recorded = [], lines = STAN_LINES) {
   const have = new Map(recorded.map((r) => [r.key, r.text]));
   return Object.entries(lines).filter(([k, l]) => have.get(k) !== l.say).map(([key, l]) => ({ key, say: l.say, why: have.has(key) ? 'changed' : 'new' }));

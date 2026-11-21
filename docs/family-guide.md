@@ -114,6 +114,8 @@ At the bottom of the **Your morning** card is a count: **clean mornings in a row
 ### What's new
 When something in the app changes, **Stan tells you the next time you open it**: a short card for each change, saying **what changed** and **why**. Tap **Next** to go through them and **Got it** at the end. You only get the ones that matter to you (helpers don't get drivers' rules). It never pops up while you're on duty. Want to read them again? **⚙ Settings → What's new**.
 
+**Let Stan read it to you:** tap **🔊 Stan, read it to me** on a card and he reads it out, then each next card as you tap **Next**. **🔇 Stop reading** hushes him. He needs signal the first time he reads a card. The first time you open it there's a lot to go through (everything since we started on 8 November): you can close it whenever you like and it carries on from where you stopped next time.
+
 **One to know now:** if someone else delivered a run (like Gagan on Run 8 at the weekend), **don't tick it**. Mike or Lisa closes it on the dispatch board (**Runs & sheets → Close run…**), which records who really did it.
 
 ### The notice board

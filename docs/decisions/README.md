@@ -63,6 +63,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0057 | [Duty hard lines: odometer before the first stop, the last delivery ends the shift, and no walking off a run](0057-duty-hard-lines.md) | 2026-11-22 | Accepted |
 | 0058 | [Hardening the data: location on before a run, spares actually counted, damaged papers kept apart](0058-location-and-counted-spares.md) | 2026-11-22 | Accepted |
 | 0059 | [What's new: Stan walks each person through changes, with why](0059-whats-new.md) | 2026-11-22 | Accepted |
+| 0060 | [What's new goes back to the first live trial, and Stan reads it aloud](0060-whats-new-read-aloud.md) | 2026-11-22 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 

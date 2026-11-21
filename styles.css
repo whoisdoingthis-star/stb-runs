@@ -1075,3 +1075,4 @@ html.big .home-mini { grid-template-columns: 1fr; }
 .news-why { font-size: 16px; line-height: 1.45; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
 .news-acts { display: flex; gap: 8px; margin-top: 16px; } .news-acts .btn { flex: 1; }
 .upd-cell.warn-text { font-weight: 700; }
+.news-read { margin-top: 12px; width: 100%; min-height: 48px; }

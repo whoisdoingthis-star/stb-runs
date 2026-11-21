@@ -470,28 +470,37 @@ const whenNoSheet = () => new Promise((ok) => { const go = () => (document.query
 async function showWhatsNew({ force = false } = {}) {
   try {
     if (!force && (onDuty() || (app.store.mode !== 'shared' && !globalThis.__stbNews))) return;
-    const { unseenFor, updatesFor, rolesOf, whoText } = await import('./whatsnew.js');
+    const { unseenFor, updatesFor, rolesOf, whoText, sayKey } = await import('./whatsnew.js');
     const roles = rolesOf({ driver: amDriver(), dispatcher: app.me?.role === 'dispatcher' });
     const cards = force ? updatesFor(roles).slice(0, 30) : unseenFor(roles, await app.store.updatesSeen(), nzToday());
     if (!cards.length) { if (force) toast('Nothing new just now.'); return; }
     await whenNoSheet();
     let at = 0; const seen = new Set(); const box = h('div', { class: 'news' });
+    // Stan reads the card aloud once the speaker is tapped (phones only allow sound after a tap), and then each card after it.
+    let aloud = false; let reading = 0;
+    const hush = () => { reading += 1; loadStanSay().then((m) => m?.stopStan()).catch(() => {}); };
+    const read = async (btn) => { const mine = ++reading; const u = cards[at]; const m = await loadStanSay(); if (!m || mine !== reading) return;
+      if (btn) { btn.textContent = '🔊 Reading…'; }
+      const how = await m.readStanAloud(sayKey(u), app.store); if (mine !== reading) return;
+      if (how === 'none' || how === 'offline' || how === 'silent') { aloud = false; toast(how === 'none' ? 'Stan hasn’t recorded this one yet. It’s all in the words here.' : how === 'offline' ? 'Stan needs signal to fetch his voice for this one.' : 'Stan can’t make sound on this phone just now.'); }
+      const b = box.querySelector('.news-read'); if (b) b.textContent = aloud ? '🔇 Stop reading' : '🔊 Stan, read it to me'; };
     const day = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
     const mark = () => { const ids = [...seen]; if (ids.length && !force) app.store.markUpdatesSeen(ids).catch(() => {}); };
-    const draw = () => { const u = cards[at]; seen.add(u.id);
+    const draw = () => { const u = cards[at]; seen.add(u.id); hush();
       box.replaceChildren(
         h('div', { class: 'news-top' }, stanOn() ? stan({ pose: at === cards.length - 1 ? 'wave' : 'point', size: 54 }) : null, h('div', null, h('div', { class: 'news-k' }, `${at + 1} of ${cards.length} · ${day(u.date)}`), h('div', { class: 'news-who' }, `For: ${whoText(u)}`))),
         h('h3', { class: 'news-title' }, u.title),
         h('p', { class: 'news-what' }, u.what),
         h('p', { class: 'news-why' }, h('b', null, 'Why: '), u.why),
+        stanOn() && u.say ? h('button', { class: 'btn news-read', onclick: (e) => { if (aloud) { aloud = false; hush(); e.currentTarget.textContent = '🔊 Stan, read it to me'; } else { aloud = true; read(e.currentTarget); } } }, aloud ? '🔇 Stop reading' : '🔊 Stan, read it to me') : null,
         h('div', { class: 'news-acts' },
-          at > 0 ? h('button', { class: 'btn big', onclick: () => { at -= 1; draw(); } }, 'Back') : null,
-          at < cards.length - 1 ? h('button', { class: 'btn primary big', onclick: () => { at += 1; draw(); } }, 'Next') : h('button', { class: 'btn primary big', onclick: () => close() }, 'Got it'))); };
+          at > 0 ? h('button', { class: 'btn big', onclick: () => { at -= 1; draw(); if (aloud) read(); } }, 'Back') : null,
+          at < cards.length - 1 ? h('button', { class: 'btn primary big', onclick: () => { at += 1; draw(); if (aloud) read(); } }, 'Next') : h('button', { class: 'btn primary big', onclick: () => close() }, 'Got it'))); };
     const close = openSheet(force ? 'What’s new' : 'What’s new since last time', box);
     draw();
     const sheetEl = [...document.querySelectorAll('.sheet')].pop();
     await new Promise((ok) => { const iv = setInterval(() => { if (!sheetEl?.isConnected) { clearInterval(iv); ok(); } }, 200); });
-    mark();   // the ones they got to; any they didn't reach come back next time
+    hush(); mark();   // the ones they got to; any they didn't reach come back next time
   } catch { /* never in the way */ }
 }
 // ---- Duty hard lines (Mike, 22 Nov 2026; decision 0057) ----
