@@ -59,6 +59,7 @@ with sync_playwright() as p:
     check('it shows the shift: time on the run and stops', '1:20' in s and str(n) in s and 'On the run' in s and 'Stops' in s, s)
     check('pace is against my own usual, in minutes', '20 min quicker than your usual' in s and '80 min against 100' in s, s)
     check('there is a line graph of my last mornings, with a description', page.locator('.sum-trend svg polyline').count() == 1 and page.locator('.sum-trend circle').count() == 5 and 'last 5 mornings' in s)
+    check('clean mornings: the card gives the count in a row and what a clean morning is, and says nothing about speed there', page.locator('.sum-streak').count() == 1 and page.locator('.streak-n').inner_text().strip().isdigit() and 'A clean morning is ticked as the papers go in' in page.inner_text('.sum-streak'), page.inner_text('.sheet')[-500:])
     check('quality: every stop ticked and ticks at the address', 'Every stop ticked.' in s and '100% of ticks made at the address.' in s and page.locator('.sum-quality li.sq-ok').count() == 2, s)
     check('the card fits the phone', page.evaluate("document.documentElement.scrollWidth <= innerWidth"))
     if SHOTS: page.screenshot(path=f'{SHOTS}/summary-good.png')

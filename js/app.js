@@ -519,6 +519,17 @@ async function loadSummary(todayRuns) {
   const [{ buildShiftSummary }, rows, deadlines, crewEvents, crew] = await Promise.all([import('./shiftsummary.js'), app.store.loadCardRows(28), app.store.getSetting('deadlines').catch(() => null), app.store.loadCrewEvents(28).catch(() => []), app.crew ? app.crew : app.store.crewList().catch(() => [])]);
   const helper = (crew || []).some((c) => c.name === app.me.name && c.crew === 'helper');
   const sum = buildShiftSummary({ name: app.me.name, helper, crewEvents, date: nzToday(), runs: rows.runs, ticks: rows.ticks, todayRuns, duty: app.store.myDuty(), deadlines: deadlines || undefined });
+  // Clean mornings in a row, and the family's week (decision 0053). Kept on the phone for the line on the Runs page.
+  if (sum) { try {
+    const k = await import('./streaks.js'); const all = k.crewMornings({ runs: rows.runs, ticks: rows.ticks, crewEvents, deadlines: deadlines || undefined });
+    const st = k.streak(k.personDays(all, app.me.name).filter((d) => d.date <= sum.date));
+    if (st.last?.date === sum.date) {
+      const bestKey = `stb.streak.best.${app.me.name}`; const best = Math.max(st.best, Number(pref(bestKey, '0')) || 0);
+      sum.streak = { ...st, best, words: k.streakText({ ...st, best }), family: k.familyWeek(all, sum.date) };
+      try { localStorage.setItem(bestKey, String(best)); localStorage.setItem(`stb.streak.${app.me.name}`, JSON.stringify({ date: sum.date, count: st.count, family: sum.streak.family })); } catch { /* private mode */ }
+      if (st.last.clean && st.count === 3 && !sum.say.includes('sum.streak')) sum.say.push('sum.streak');
+    }
+  } catch { /* the card works without it */ } }
   if (sum) { try { sum.distance = await Promise.race([shiftDistance(sum, rows.ticks), new Promise((ok) => setTimeout(() => ok(null), 9000))]); } catch { sum.distance = null; } }
   return sum;
 }
@@ -568,7 +579,21 @@ async function openSummary(sum) {
       q.notDelivered ? flag(`${q.notDelivered} marked not delivered.`) : null,
       q.atPct != null ? (q.atPct >= 90 ? good : flag)(`${q.atPct}% of ticks made at the address.${q.atPct < 90 ? ' Tick as you drop the paper, not a few houses on.' : ''}`) : h('li', null, 'Not enough ticks to check where they were made.'),
       q.noGps ? flag(`${q.noGps} tick${q.noGps === 1 ? '' : 's'} had no location. Check location is switched on for the app.`) : null),
+    sum.streak ? h('div', { class: 'sum-streak' },
+      h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Clean mornings'),
+      h('div', { class: 'streak-row' }, h('b', { class: 'streak-n' }, String(sum.streak.count)), h('div', null, sum.streak.words.map((w) => h('div', null, w)))),
+      sum.streak.family.total > 1 ? h('p', { class: 'streak-fam' }, `The family this week: ${sum.streak.family.clean} of ${sum.streak.family.total} mornings clean.`) : null,
+      h('p', { class: 'small muted', style: 'margin:4px 0 0' }, 'A clean morning is ticked as the papers go in, at the address. It has nothing to do with how quick you were, and a stop you couldn’t deliver, recorded properly, doesn’t count against it.')) : null,
     h('button', { class: 'btn primary big', style: 'margin-top:8px', onclick: () => close() }, 'Done'));
+  if (sum.streak?.last?.clean && sum.streak.count >= 2) setTimeout(() => playSfx('streak'), 400);
+}
+/** Before the shift: where the count stands, from the last card shown on this phone (nothing is fetched for it). */
+function streakLine() {
+  try {
+    const c = JSON.parse(pref(`stb.streak.${app.me?.name}`, 'null')); if (!c || !c.date || (Date.parse(nzToday()) - Date.parse(c.date)) / 864e5 > 7) return null;
+    const bits = [c.count > 0 ? `★ ${c.count === 1 ? '1 clean morning' : `${c.count} clean mornings in a row`}` : null, c.family?.total > 1 ? `Family this week: ${c.family.clean} of ${c.family.total} clean` : null].filter(Boolean);
+    return bits.length ? h('div', { class: 'streak-line' }, bits.join(' · ')) : null;
+  } catch { return null; }
 }
 const svgEl = (markup) => { const d = document.createElement('div'); d.innerHTML = markup; return d.firstElementChild; };
 /** Shows the summary once the morning is done: after going off duty, or the next time the app is opened. */
@@ -836,6 +861,7 @@ function dutyCard(todayRuns, rerender) {
     const hint = h('p', { class: 'muted duty-hint' }, firstTime ? 'Hi, I’m Stan! Tap On duty when you get to the depot, and I’ll count your time from there, sorting and loading too.' : 'Tap when you get to the depot. It counts sorting and loading too.');
     card.append(...[h('div', { class: 'duty-state' }, 'Off duty'), firstTime ? h('div', { class: 'duty-hello' }, stan({ pose: 'wave', size: 44 }), hint) : hint,
       h('button', { class: 'btn primary big duty-btn', onclick: () => startShift(rerender, todayRuns) }, 'On duty'),
+      streakLine(),
       // Before the shift the tiles below start a run, so the order only needs a small Change beside it; Continue shows once something is ticked.
       ...(mine.length && !mine.some((r) => r.done) ? [h('div', { class: 'my-runs' }, h('span', null, `My runs: ${mine.map((r) => shortRoute(r.route)).join(' → ')}`),
         h('button', { class: 'btn small', 'aria-label': 'Change my runs', onclick: () => openMyRuns(todayRuns, rerender) }, 'Change'))] : [mineRow, pickBtn])].filter(Boolean));

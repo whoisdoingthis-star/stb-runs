@@ -1049,3 +1049,9 @@ html.big .home-mini { grid-template-columns: 1fr; }
 @keyframes sw-step { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-4px) rotate(-4deg); } }
 @keyframes sw-toss { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 55% { transform: translate(70px, -12px) rotate(220deg); opacity: 1; } 100% { transform: translate(130px, 10px) rotate(400deg); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sw-street { transition: none; } .sw-stan.step, .stan-walk.all-done .sw-stan { animation: none; } }
+
+/* ===== Clean mornings in a row (decision 0053) ===== */
+.streak-row { display: flex; align-items: center; gap: 14px; }
+.streak-n { font-size: 44px; line-height: 1; min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
+.streak-fam { margin: 8px 0 0; font-weight: 700; }
+.streak-line { font-size: 14px; font-weight: 700; color: var(--muted); }

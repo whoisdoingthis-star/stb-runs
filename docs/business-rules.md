@@ -223,5 +223,8 @@ Rules attached to exactly one group, operating location, service location or add
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.
 
+## A clean morning (agreed with Mike, 21 Nov 2026)
+A crew's morning is clean when no run was ticked in one go afterwards, and at least 90% of the ticks that can be checked were made within 60 m of where that address is usually ticked. Time plays no part, and a stop recorded as couldn't-deliver doesn't count against it. One morning a week (Monday to Sunday) that isn't clean is let go. See [decision 0053](decisions/0053-clean-mornings.md).
+
 ## Run 8 and Run 10 (Mike, 21 Nov 2026)
 Run 8 (the village) is normally dropped off part-way through Run 10, by the same crew. On rare mornings someone does Run 8 on its own. The app shows them together when the plan has them together, and never forces it: whoever has Run 8 without Run 10 in My runs sees it as a run of its own.

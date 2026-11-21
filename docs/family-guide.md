@@ -93,6 +93,17 @@ When you go off duty, Stan shows you how the morning went (if you forget, he sho
 
 Tap **Done**. The **📈 Your morning** button on the Runs page shows it again that day.
 
+### Clean mornings
+At the bottom of the **Your morning** card is a count: **clean mornings in a row**.
+
+- A **clean morning** is one where you ticked each stop as the paper went in, at the address. That's it. **It has nothing to do with how fast you were.**
+- Couldn't deliver somewhere and recorded why (⚠)? That's doing it right, and doesn't count against you.
+- A morning isn't clean if a run was ticked all in one go afterwards, or lots of ticks were made away from the address. The card tells you which.
+- **One let-off a week:** the first morning in a week that isn't clean is let go, and you keep your count. A second one that week starts it again.
+- Days you don't work don't break it. If you were helping, your morning is your driver's.
+- **The family this week** shows how many of everyone's mornings were clean, with no names.
+- Before your next shift, a small line under **On duty** shows where you're up to.
+
 ### The notice board
 The **📌 Notice board** button on the Runs page is for telling the family something: "papers will be late", "the gate code has changed".
 - **To leave a note:** Notice board → **Leave a note**. Type it, choose **Everyone** or the people it's for, choose **For 3 days** or **Until I remove it**, then **Post it**.
