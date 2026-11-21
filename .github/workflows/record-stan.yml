@@ -1,0 +1,34 @@
+# Records any of Stan's lines that are in the code but not yet in his voice (docs/decisions/0061-stan-records-himself.md).
+# Runs after a publish that touched his lines or the What's new cards, and can be run by hand from the Actions tab.
+# It only ever runs for the main branch of this repository: a pull request from outside can't reach the secrets.
+name: Record Stan's new lines
+on:
+  push:
+    branches: [main]
+    paths: ['js/stanlines.js', 'js/whatsnew.js', 'tools/record-stan.mjs', '.github/workflows/record-stan.yml']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (say what would be recorded, record nothing)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: record-stan
+  cancel-in-progress: false
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Record what's missing
+        run: node tools/record-stan.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}

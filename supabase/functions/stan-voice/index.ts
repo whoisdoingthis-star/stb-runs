@@ -1,6 +1,10 @@
 // Supabase Edge Function: records one of Stan's lines (decision 0043).
 //
-// Only an active dispatcher can call it. Body: { key, text }.
+// Who can call it (it checks for itself, so it is deployed with the gateway's own sign-in check off):
+//   - an active dispatcher, signed in (the button on Dispatch → Set-up → Stan's voice), or
+//   - the publishing job on GitHub (decision 0061), which sends the project's server key in the x-server-key header.
+//     The key is proved by using it: it must be able to do something only a server key can.
+// Body: { key, text }.
 // It asks ElevenLabs to say `text` in Stan's voice, keeps the clip in the public "stan-voice" bucket as <key>.mp3,
 // and notes it in the stan_lines table. One line per call, so a slow one can't sink the rest.
 //
@@ -14,7 +18,7 @@ const VOICE_ID = Deno.env.get('STAN_VOICE_ID') ?? 'KmDkZyMv2YNBDYoB7H1S';   // "
 const MODEL = Deno.env.get('STAN_VOICE_MODEL') ?? 'eleven_v3';
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',   // x-server-key is deliberately not here: it is for servers, never a browser
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const reply = (status: number, body: unknown) =>
@@ -24,11 +28,21 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-    const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-    const { data: { user }, error: authErr } = await admin.auth.getUser(jwt);
-    if (authErr || !user) return reply(401, { error: 'Sign in first.' });
-    const { data: me } = await admin.from('members').select('display_name, role, active').ilike('email', user.email ?? '').maybeSingle();
-    if (!me || !me.active || me.role !== 'dispatcher') return reply(403, { error: 'Only a dispatcher can record Stan’s lines.' });
+    let who = '';
+    const serverKey = (req.headers.get('x-server-key') ?? '').trim();
+    if (serverKey) {
+      // Only a server key can list the project's users. A wrong or ordinary key fails here.
+      const probe = await createClient(Deno.env.get('SUPABASE_URL')!, serverKey, { auth: { persistSession: false } }).auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (probe.error) return reply(401, { error: 'That server key isn’t accepted.' });
+      who = 'Stan (auto)';
+    } else {
+      const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      const { data: { user }, error: authErr } = await admin.auth.getUser(jwt);
+      if (authErr || !user) return reply(401, { error: 'Sign in first.' });
+      const { data: me } = await admin.from('members').select('display_name, role, active').ilike('email', user.email ?? '').maybeSingle();
+      if (!me || !me.active || me.role !== 'dispatcher') return reply(403, { error: 'Only a dispatcher can record Stan’s lines.' });
+      who = me.display_name;
+    }
 
     const body = await req.json().catch(() => ({}));
     const key = String(body.key ?? '');
@@ -54,7 +68,7 @@ Deno.serve(async (req) => {
     const path = `${key}.mp3`;
     const up = await admin.storage.from('stan-voice').upload(path, audio, { contentType: 'audio/mpeg', upsert: true, cacheControl: '300' });
     if (up.error) return reply(500, { error: `Couldn’t keep the clip: ${up.error.message}` });
-    const row = { key, text, voice_id: VOICE_ID, model: MODEL, bytes: audio.length, recorded_by: me.display_name, recorded_at: new Date().toISOString() };
+    const row = { key, text, voice_id: VOICE_ID, model: MODEL, bytes: audio.length, recorded_by: who, recorded_at: new Date().toISOString() };
     const saved = await admin.from('stan_lines').upsert(row);
     if (saved.error) return reply(500, { error: `Couldn’t note the clip: ${saved.error.message}` });
     return reply(200, { ok: true, ...row });

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { STAN_LINES, STAN_MOMENTS, CHEERFUL, stanLine, clipUrl, linesToRecord } from '../js/stanlines.js';
+import { recordingBatch, AUTO_MAX_LINES, AUTO_MAX_CHARS, STAN_LINES, STAN_MOMENTS, CHEERFUL, stanLine, clipUrl, linesToRecord } from '../js/stanlines.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 const all = Object.entries(STAN_LINES);
@@ -28,4 +28,10 @@ t('on a rough morning he never uses a cheerful line', () => { let heard = {}; fo
 t('routine moments only speak some of the time; big ones always do', () => { assert.equal(stanLine('run.done', { rand: () => 0.9 }).key, null); assert.ok(stanLine('run.done', { rand: () => 0.1 }).key); assert.ok(stanLine('run.done', { rand: () => 0.9, force: true }).key); assert.ok(stanLine('late.warn', { rand: () => 0.99 }).key); });
 t('a moment he doesn’t know says nothing', () => assert.deepEqual(stanLine('nope'), { key: null, say: null, heard: {} }));
 t('what he says comes back as words too, for the screen', () => assert.equal(stanLine('odometer', { rand: () => 0, force: true }).say, 'What’s the odometer say?'));
+t('the publishing job records new lines before reworded ones, short before long, and never past its caps', () => {
+  const todo = [{ key: 'a', say: 'x'.repeat(200), why: 'changed' }, { key: 'b', say: 'x'.repeat(250), why: 'new' }, { key: 'c', say: 'x'.repeat(40), why: 'new' }];
+  assert.deepEqual(recordingBatch(todo).batch.map((l) => l.key), ['c', 'b', 'a']);
+  const capped = recordingBatch(todo, { maxChars: 300 }); assert.deepEqual(capped.batch.map((l) => l.key), ['c', 'b']); assert.equal(capped.left, 1); assert.equal(capped.chars, 290);
+  assert.equal(recordingBatch(todo, { maxLines: 1 }).batch.length, 1); assert.ok(AUTO_MAX_LINES <= 100 && AUTO_MAX_CHARS <= 10000);
+});
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

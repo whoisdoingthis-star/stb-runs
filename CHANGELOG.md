@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Stan records his own new lines** (Mike, 22 Nov): when a change adds or rewords something Stan says (including the *What's new* cards), it is recorded in his voice by itself a few minutes after the change goes out. Nobody has to press **Record**. The button on **Dispatch → Set-up → Stan's voice** is still there if it's ever needed. See [decision 0061](docs/decisions/0061-stan-records-himself.md).
 - **What's new, from the start, and read aloud** (Mike, 22 Nov): Stan's cards now go back to the first live trial on 8 Nov, covering everything built since that still applies (19 more cards). And each card has a **🔊 Stan, read it to me** button: tap it and Stan reads that card and each one after it, in his own voice. Mike needs to record them first (**Dispatch → Set-up → Stan's voice → Record the missing ones**). See [decision 0060](docs/decisions/0060-whats-new-read-aloud.md).
 - **Stan tells you what's new** (Lisa's and Mike's idea, 22 Nov): when the app changes, the next time you open it Stan shows a short card for each change that matters to you: what changed, and **why**. Tap **Next** through them and **Got it**. Read them again from **⚙ Settings → What's new**. Mike and Lisa can see on **Dispatch → People** who is up to date. See [decision 0059](docs/decisions/0059-whats-new.md).
 - Fixed: a helper's phone now really does catch up when their driver's last delivery puts them off duty.

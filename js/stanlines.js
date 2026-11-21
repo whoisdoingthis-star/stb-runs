@@ -163,6 +163,19 @@ export function linesToRecord(recorded = [], lines = STAN_LINES) {
   return Object.entries(lines).filter(([k, l]) => have.get(k) !== l.say).map(([key, l]) => ({ key, say: l.say, why: have.has(key) ? 'changed' : 'new' }));
 }
 
+/**
+ * What the publishing job records in one go (decision 0061): the lines to do, new ones before reworded ones and short
+ * before long, stopping at the caps so one publish can never spend more than a known amount.
+ * Returns { batch: [{ key, say, why }], left: how many were held back, chars: characters in the batch }.
+ */
+export const AUTO_MAX_LINES = 60; export const AUTO_MAX_CHARS = 9000;
+export function recordingBatch(todo, { maxLines = AUTO_MAX_LINES, maxChars = AUTO_MAX_CHARS } = {}) {
+  const sorted = [...todo].sort((a, b) => (a.why === b.why ? a.say.length - b.say.length : a.why === 'new' ? -1 : 1));
+  const batch = []; let chars = 0;
+  for (const l of sorted) { if (batch.length >= maxLines || chars + l.say.length > maxChars) continue; batch.push(l); chars += l.say.length; }
+  return { batch, left: todo.length - batch.length, chars };
+}
+
 // ---- Which lines suit which moment (Mike, 21 Nov 2026) ----
 // 1. Lines belong to moments: each moment has a pool, and a line can sit in as many pools as it suits.
 // 2. He doesn't repeat himself: a moment's pool is used up before any line comes round again.
