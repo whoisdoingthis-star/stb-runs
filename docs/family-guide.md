@@ -64,6 +64,9 @@ Drivers only. Both questions have a **Skip** button, so they never hold you up.
 - On Sundays there's a second row for the Sunday Star-Times.
 - **The odometer:** the same two sheets ask for the big kilometres number on the dash. Type it in if you can; leave it blank if you can't. It's how we know how far the morning really was.
 
+### Stan walks your run
+At the top of a run there's a little street with **Stan and his newspaper satchel**. Each time you tick a stop, the street moves along and he tosses a paper. By the end of the run he's walked the whole street. He only moves when you tick, and you can't tap him. Don't want him there? **⚙ Settings → Walking Stan → Hide**.
+
 ### Sounds on a run
 - **Tick:** one soft note. Each tick is a step higher than the last, and it starts low again after a break, so a street of ticks sounds like you're getting somewhere.
 - **Untick:** two notes going down.

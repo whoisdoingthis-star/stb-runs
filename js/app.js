@@ -7,6 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound, chimes } from './splash.js';
+import { createStanWalk, walkOn, setWalk } from './stanwalk.js';
 import { playSfx, unlockSfx, sfxOn, setSfx, nextTickStep, canDuck, musicMode, setMusicMode, holdMusic } from './sfx.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays, stbLogo } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
@@ -1067,6 +1068,7 @@ function openSettings(fileInput) {
       h('div', { class: 'choice-row avatar-row' }, h('span', { class: 'choice-label' }, 'My icon'), avatar(app.me.name, 40),
         h('button', { class: 'btn small', onclick: () => { close(); openAvatarPicker(() => openSettings(fileInput)); } }, 'Change')),
       choiceRow('Stan', [['on', 'Show'], ['off', 'Hide']], stanOn() ? 'on' : 'off', (v) => setStan(v === 'on')),
+      stanOn() ? choiceRow('Walking Stan', [['on', 'Show'], ['off', 'Hide']], walkOn() ? 'on' : 'off', (v) => setWalk(v === 'on')) : null,
       stanOn() ? choiceRow('Stan talks', [['on', 'Out loud'], ['off', 'Quiet']], stanTalks() ? 'on' : 'off', (v) => { try { localStorage.setItem('stb-stan-talk', v); } catch { /* private mode */ } if (v === 'on') { loadStanSay().then((m) => { m?.unlockStanAudio(); m?.syncStanClips(app.store); }); setTimeout(() => stanPlay(['word.okidoo']), 400); } }) : null,
       stanOn() ? choiceRow('Voice', [['stan', 'Stan\u2019s'], ['phone', 'Phone\u2019s']], voicePref(), (v) => { setVoicePref(v); close(); openSettings(fileInput); if (v === 'stan') loadStanVoice({ ask: false }); }) : null,
       stanOn() ? voiceStatus() : null,
@@ -1422,6 +1424,7 @@ async function viewRun(ids) {
 
   // ---- header: one slim sticky bar (back, run, search, menu), progress and status under it
   const fbFill = h('i', { class: 'fb-fill' });
+  const walk = stanOn() && walkOn() ? createStanWalk(stan({ size: 30 })) : null;   // Stan walks the street as stops are ticked (decision 0052)
   const fbProg = h('span', { class: 'fb-prog' });
   const fbTime = h('span', { class: 'fb-time' });
   const fbNote = h('span', { class: 'fb-note' });
@@ -1753,7 +1756,7 @@ async function viewRun(ids) {
     S.flash = done ? flashKey : null;
     app.store.addEvents(evs, !fresh);
     if (navigator.vibrate) navigator.vibrate(done ? 15 : [10, 40, 10]);
-    if (done) { S.tickStep = nextTickStep(S.tickStep, Date.now()); playSfx('tick', { step: S.tickStep.step }); } else playSfx('untick');
+    if (done) { S.tickStep = nextTickStep(S.tickStep, Date.now()); playSfx('tick', { step: S.tickStep.step }); walk?.toss(); } else playSfx('untick');
     const wasNext = body.querySelector('.tile.next')?.getAttribute('data-key') === flashKey;
     S.last = done ? { lines, label, flashKey } : (S.last?.flashKey === flashKey ? null : S.last);
     render();
@@ -1988,6 +1991,7 @@ async function viewRun(ids) {
     }
     fbProg.replaceChildren(h('b', null, `${stopsDone}/${stops}`), ` · ${copiesDone}/${copies} items`);
     fbFill.style.width = `${stops ? (100 * stopsDone) / stops : 0}%`;
+    walk?.set(stopsDone, stops);
     S.progress = { done: stopsDone, total: stops, runIds: visibleRuns.map((d) => d.run.id) };
     // Everything open (all of My runs), for the finish time: stops done and left, and runs not started.
     const all = { done: 0, total: 0, unstarted: 0 };
@@ -2293,6 +2297,7 @@ async function viewRun(ids) {
       seg ? h('div', { class: 'rh-row' }, seg) : null,
       orderRow,
       searchRow,
+      walk?.el,
       fbFill),
     body,
     daPanel,
