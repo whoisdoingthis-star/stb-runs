@@ -7,6 +7,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound, chimes } from './splash.js';
+import { playSfx, unlockSfx, sfxOn, setSfx, nextTickStep, canDuck, musicMode, setMusicMode, holdMusic } from './sfx.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays, stbLogo } from './stan.js';
 import { stanVoice, voicePref, setVoicePref, voiceDownloaded } from './stanvoice.js';
 import { stanReply, STAN_HELLO } from './stanchat.js';
@@ -492,7 +493,8 @@ const loadStanSay = () => (stanSayMod ||= import('./stansay.js').catch(() => nul
 function stanMood() { try { const dl = deadlineFor(nzToday()).at; const now = Date.now(); return now > dl && now < dl + 5 * 3600e3 && (app.todayRuns || []).some((r) => (r.done || 0) > 0) ? 'rough' : 'fine'; } catch { return 'fine'; } }
 function stanPlay(keys) {
   if (!stanOn() || !stanTalks() || !keys.length) return;
-  loadStanSay().then((m) => m?.playStanKeys(keys.filter((k) => STAN_LINES[k]), app.store)).catch(() => {});
+  // On an iPhone set to it, the music is held while he talks and handed back after (decision 0051).
+  loadStanSay().then((m) => { if (!m) return; const done = holdMusic(); return m.playStanKeys(keys.filter((k) => STAN_LINES[k]), app.store).finally(done); }).catch(() => {});
 }
 function stanMoment(moment, { force = false, mood, before = [] } = {}) {
   try {
@@ -506,7 +508,7 @@ function stanMoment(moment, { force = false, mood, before = [] } = {}) {
   } catch { return null; }
 }
 // Sound can only start after a tap; and once the app has settled, fetch any clips this phone doesn't hold yet.
-document.addEventListener('pointerdown', () => { if (stanOn() && stanTalks()) loadStanSay().then((m) => m?.unlockStanAudio()); }, { passive: true });
+document.addEventListener('pointerdown', () => { unlockSfx(); if (stanOn() && stanTalks()) loadStanSay().then((m) => m?.unlockStanAudio()); }, { passive: true });
 setTimeout(() => { if (stanOn() && app.store && navigator.onLine !== false) loadStanSay().then((m) => m?.syncStanClips(app.store)).catch(() => {}); }, 6000);
 
 // ---- The end-of-shift summary (decision 0044) ----
@@ -1068,6 +1070,8 @@ function openSettings(fileInput) {
       stanOn() ? choiceRow('Stan talks', [['on', 'Out loud'], ['off', 'Quiet']], stanTalks() ? 'on' : 'off', (v) => { try { localStorage.setItem('stb-stan-talk', v); } catch { /* private mode */ } if (v === 'on') { loadStanSay().then((m) => { m?.unlockStanAudio(); m?.syncStanClips(app.store); }); setTimeout(() => stanPlay(['word.okidoo']), 400); } }) : null,
       stanOn() ? choiceRow('Voice', [['stan', 'Stan\u2019s'], ['phone', 'Phone\u2019s']], voicePref(), (v) => { setVoicePref(v); close(); openSettings(fileInput); if (v === 'stan') loadStanVoice({ ask: false }); }) : null,
       stanOn() ? voiceStatus() : null,
+      choiceRow('Run sounds', [['on', 'On'], ['off', 'Off']], sfxOn() ? 'on' : 'off', (v) => { setSfx(v === 'on'); if (v === 'on') { unlockSfx(); playSfx('tick'); } }),
+      stanOn() && canDuck() ? choiceRow('Music while Stan talks', [['mix', 'Keeps playing'], ['solo', 'Pauses']], musicMode(), (v) => setMusicMode(v)) : null,
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); playSplash({ sound: true }); } })),
     (close) => h('div', { class: 'menu-group' },
       menuItem('Play the opening', () => { close(); playSplash({ sound: soundOn() }); }, { hint: 'It plays each time you open the app' }),
@@ -1666,6 +1670,7 @@ async function viewRun(ids) {
     let all = [];
     try { all = await app.store.listRuns(); } catch { /* offline: go by what's open */ }
     const finished = (id) => (here.includes(id) ? runDoneHere(id) : runComplete(all.find((r) => r.id === id) || {}));
+    playSfx(onDuty() && mine.length && mine.every(finished) ? 'allDone' : 'runDone');
     const at = mine.indexOf(runId);
     const next = [...mine.slice(at + 1), ...mine.slice(0, Math.max(at, 0))].find((id) => id !== runId && !finished(id));
     if (next) {
@@ -1748,10 +1753,14 @@ async function viewRun(ids) {
     S.flash = done ? flashKey : null;
     app.store.addEvents(evs, !fresh);
     if (navigator.vibrate) navigator.vibrate(done ? 15 : [10, 40, 10]);
+    if (done) { S.tickStep = nextTickStep(S.tickStep, Date.now()); playSfx('tick', { step: S.tickStep.step }); } else playSfx('untick');
     const wasNext = body.querySelector('.tile.next')?.getAttribute('data-key') === flashKey;
     S.last = done ? { lines, label, flashKey } : (S.last?.flashKey === flashKey ? null : S.last);
     render();
     if (done && wasNext) goNext(false); // ticked the next stop: bring the new one into view
+    // The stop after this one isn't a plain paper in the box (two papers, a stop or restart, a complaint; not the everyday notes, which a third of tiles carry): say so before
+    // the thumb gets there on autopilot (decision 0051).
+    if (done) { const nx = body.querySelector('.tile.next'); if (nx?.dataset.heads && S.headsFor !== nx.dataset.key) { S.headsFor = nx.dataset.key; nx.classList.add('heads-up'); setTimeout(() => playSfx('headsup'), 220); if (navigator.vibrate) setTimeout(() => navigator.vibrate([20, 60, 20]), 220); } }
     if (!fresh) {
       const fix = await geo.fixFor(now);
       const patch = fix ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc, fix_age_ms: Math.max(0, now - fix.t) } : {};
@@ -1774,6 +1783,7 @@ async function viewRun(ids) {
     }));
     S.events.push(...evs);
     app.store.addEvents(evs, false);
+    playSfx('problem'); if (navigator.vibrate) navigator.vibrate([40, 80, 40, 80, 40]);
     S.last = { ...last, problem: outcome === 'futile' ? 'Not delivered' : outcome === 'short' ? `Short ${qty}/${qtyOf(last.lines)}` : null };
     if (outcome === 'delivered') S.last.problem = null;
     render();
@@ -2191,6 +2201,7 @@ async function viewRun(ids) {
       'data-addr': l.address_key,
       'data-label': addrText(l),
       'data-fixed': opts.fixed ? '1' : null,
+      'data-heads': !done && (l.qty > 1 || l.bankNote || flags.some((f) => ['stop', 'resume', 'start', 'complaint'].includes(f.type))) ? '1' : null,
       onclick: () => { if (drag.suppressClick) return; tap(l); },
     },
     stripe,

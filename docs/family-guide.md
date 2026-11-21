@@ -64,6 +64,15 @@ Drivers only. Both questions have a **Skip** button, so they never hold you up.
 - On Sundays there's a second row for the Sunday Star-Times.
 - **The odometer:** the same two sheets ask for the big kilometres number on the dash. Type it in if you can; leave it blank if you can't. It's how we know how far the morning really was.
 
+### Sounds on a run
+- **Tick:** one soft note. Each tick is a step higher than the last, and it starts low again after a break, so a street of ticks sounds like you're getting somewhere.
+- **Untick:** two notes going down.
+- **Couldn't deliver or short:** two low notes and a longer buzz, so you know it wasn't an ordinary tick.
+- **Heads up:** three quick high notes, two short buzzes and the next tile's edge flashes. It means **the next stop is not the usual**: two papers, a stop or a restart, a complaint, or a bank to check. Have a look before you tap.
+- **Run done:** a short happy tune (a longer one when it's your last run).
+- Too much? **⚙ Settings → Run sounds → Off**. The buzzes and the flash stay.
+- **iPhone only, to try:** **⚙ Settings → Music while Stan talks → Pauses** asks the phone to hold your music while Stan says his line. If Stan goes silent with it on, switch it back to **Keeps playing** and tell Mike.
+
 ### Stan talks
 Stan now speaks at the big moments: when you go on duty (he'll say good morning by name), when you leave the depot, when a run or the whole morning is done, when there's a note for you, and a few more. The words are always on the screen too. He says different things on different days, and he doesn't comment on everything.
 - **Too chatty, or the house is asleep?** Tap the cog, then **Stan talks → Quiet**. His words still show.

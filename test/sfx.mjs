@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { SFX, sfxNotes, TICK_SCALE, nextTickStep, TICK_PAUSE_MS } from '../js/sfx.js';
+let failed = 0;
+const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
+const len = (notes) => Math.max(...notes.map(([ms, , d]) => ms / 1000 + d));
+t('every sound is a few quiet notes, and none runs past a second', () => { for (const k of Object.keys(SFX)) { const n = sfxNotes(k); assert.ok(n.length >= 1 && n.length <= 5, k); assert.ok(len(n) <= 1, k); for (const [, f, d, v] of n) { assert.ok(f >= 200 && f <= 1600, k); assert.ok(d > 0 && v <= 0.08, k); } } });
+t('a tick is one short note, so it never gets in the way of the next tick', () => { const n = sfxNotes('tick'); assert.equal(n.length, 1); assert.ok(len(n) <= 0.15); });
+t('ticks climb a five-note scale and come round again', () => { const f = (s) => sfxNotes('tick', s)[0][1]; assert.ok(f(1) > f(0) && f(4) > f(3)); assert.equal(f(5), f(0)); assert.equal(new Set([0, 1, 2, 3, 4].map(f)).size, TICK_SCALE.length); });
+t('a pause starts the scale again: one tick after another climbs, a tick after a drive starts at the bottom', () => { const a = nextTickStep(null, 1000); assert.equal(a.step, 0); const b = nextTickStep(a, 6000); assert.equal(b.step, 1); assert.equal(nextTickStep(b, 6000 + TICK_PAUSE_MS + 1).step, 0); });
+t('a problem at a stop sounds nothing like a tick: lower, and twice', () => { const p = sfxNotes('problem'); const k = sfxNotes('tick', 4); assert.equal(p.length, 2); assert.ok(Math.max(...p.map((n) => n[1])) < Math.min(...[0, 1, 2, 3, 4].map((s) => sfxNotes('tick', s)[0][1])) / 2); assert.notEqual(p[0][4], k[0][4]); });
+t('a sound nobody has made is silence, not an error', () => assert.deepEqual(sfxNotes('nope'), []));
+console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
