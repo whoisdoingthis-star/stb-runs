@@ -29,7 +29,7 @@ SEED = """([me, helpers, dayOffset, driver]) => {
 
 with sync_playwright() as p:
     b = p.chromium.launch()
-    ctx = b.new_context(**p.devices['Pixel 7'])
+    ctx = b.new_context(**p.devices['Pixel 7'], permissions=['geolocation'], geolocation={'latitude': -36.8935, 'longitude': 174.9310})
     page = ctx.new_page()
     page.add_init_script("globalThis.__stbStanLog = [];")   # what Stan was asked to say out loud
     errors = []
@@ -88,15 +88,18 @@ with sync_playwright() as p:
     page.locator('.leave-btn').click(); page.wait_for_timeout(800)
     sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
     spares = lambda: page.evaluate("JSON.parse(localStorage.getItem('stb.spares') || '[]')")
-    check('leaving the depot asks for spares and the odometer first: no Skip, and the run has not started', 'Spares on board?' in sheet and page.locator('.step-row').count() == 1 and 'Herald' in sheet and 'Skip' not in sheet and 'Not leaving yet' in sheet and 'go to someone' not in sheet and page.locator('.odo-input').count() == 1 and len(duty()) == 1, sheet + json.dumps(duty()))
+    check('leaving the depot asks for spares and the odometer first: no Skip, and the run has not started', 'Spares on board?' in sheet and page.locator('.step-row').count() == 2 and page.locator('.step-row.good .step-n').inner_text() == '?' and 'damaged or poor' in sheet and 'Skip' not in sheet and 'Not leaving yet' in sheet and 'go to someone' not in sheet and page.locator('.odo-input').count() == 1 and len(duty()) == 1, sheet + json.dumps(duty()))
     page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(300)
     check('without the odometer it will not save, and says why', page.locator('.sheet').count() == 1 and 'Enter the number on the odometer first' in page.inner_text('.odo-err') and len(duty()) == 1 and len(spares()) == 0)
     page.locator('.sheet button', has_text='Not leaving yet').click(); page.wait_for_timeout(500)
     check('Not leaving yet: still on duty at the depot, nothing started', len(duty()) == 1 and page.locator('.leave-btn').count() == 1 and 'Still at the depot' in page.inner_text('#toast'), page.inner_text('#toast'))
     page.evaluate("globalThis.__stbStanLog.length = 0"); page.locator('.leave-btn').click(); page.wait_for_timeout(600)
     page.fill('.odo-input', '84,512')
-    for _ in range(3): page.locator('.step-btn', has_text='+').click()
-    page.locator('.step-btn', has_text='−').click()
+    page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(300)
+    check('the spares must be counted too: a blank count is not a zero', 'Count the Herald spares first' in page.inner_text('.odo-err') and len(spares()) == 0, page.inner_text('.odo-err'))
+    for _ in range(3): page.locator('.step-row.good .step-btn', has_text='+').click()
+    page.locator('.step-row.good .step-btn', has_text='−').click()
+    for _ in range(2): page.locator('.step-row.dmg .step-btn', has_text='+').click()
     if SHOTS: page.screenshot(path=f'{SHOTS}/spares-start.png')
     page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     said = [x for x in page.evaluate("globalThis.__stbStanLog") if x[0] not in ('odo.ask', 'odo.1', 'odo.2')]; toast = page.inner_text('#toast')
@@ -107,7 +110,7 @@ with sync_playwright() as p:
     d = duty()
     check('Leaving the depot now starts the run', len(d) == 2 and d[1]['state'] == 'on_run' and 'On the run' in page.inner_text('.duty-card') and page.locator('.leave-btn').count() == 0, json.dumps(d))
     sp = spares()
-    check('the start count is saved for today under my name', len(sp) == 1 and sp[0]['moment'] == 'start' and sp[0]['counts'] == {'NZH': 2} and sp[0]['given'] == [] and sp[0]['odometer_km'] == 84512 and sp[0]['user_name'] == 'Me', json.dumps(sp))
+    check('the start count is saved for today under my name', len(sp) == 1 and sp[0]['moment'] == 'start' and sp[0]['counts'] == {'NZH': 2} and sp[0]['damaged'] == {'NZH': 2} and sp[0]['given'] == [] and sp[0]['odometer_km'] == 84512 and sp[0]['user_name'] == 'Me', json.dumps(sp))
     page.locator('.duty-card button', has_text='Off duty').click(); page.wait_for_timeout(300)
     ho = page.inner_text('.sheet')
     check('off duty with stops still to do is a hand-over: who is finishing, or why you can’t carry on', 'Stops still to do' in ho and 'still has' in ho and page.locator('.handover-btn').count() >= 1 and 'Car trouble' in ho and page.locator('.sheet button', has_text='Off duty').count() == 0, ho)
@@ -115,15 +118,15 @@ with sync_playwright() as p:
     check('the hand-over is on the record', duty()[-1]['state'] == 'off_duty' and duty()[-1].get('handover_to') == 'Lenny', json.dumps(duty()[-1]))
     sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
     check('going off duty asks how many are left and who any went to, with the regulars as buttons', duty()[-1]['state'] == 'off_duty' and 'Spares left?' in sheet and 'Did any spares go to someone?' in sheet.replace('DID ANY SPARES GO TO SOMEONE?', 'Did any spares go to someone?') and 'Aunty Pat' in sheet and 'Someone else…' in sheet, sheet)
-    page.locator('.step-row', has_text='Herald').locator('.step-btn', has_text='+').click()
+    page.locator('.step-row.good', has_text='Herald').locator('.step-btn', has_text='+').click()
     page.locator('.step-row', has_text='Aunty Pat').locator('.step-btn', has_text='+').click()
     page.locator('.who-other').click(); page.fill('.who-add input', 'Mr Lee'); page.locator('.who-add button').click(); page.wait_for_timeout(200)
     if SHOTS: page.screenshot(path=f'{SHOTS}/spares-end.png')
     page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(300)
     check('the end odometer is needed too, and can’t be lower than this morning’s', page.locator('.sheet').count() == 1 and 'Skip' not in page.inner_text('.sheet') and 'Enter the number' in page.inner_text('.odo-err'))
-    page.fill('.odo-input', '84000'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(300)
+    page.fill('.odo-input', '84000'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(300)
     check('a lower number than the start is questioned', 'lower than this morning’s 84512' in page.inner_text('.odo-err'), page.inner_text('.odo-err'))
-    page.fill('.odo-input', '84531'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(700)
+    page.fill('.odo-input', '84531'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(700)
     sp = spares()
     check('the end count is saved with who the spares went to, and a new name is remembered', len(sp) == 2 and sp[1]['moment'] == 'end' and sp[1]['odometer_km'] == 84531 and sp[1]['counts'] == {'NZH': 1} and sp[1]['given'] == [{'to': 'Aunty Pat', 'n': 1}, {'to': 'Mr Lee', 'n': 1}] and 'Mr Lee' in page.evaluate("JSON.parse(localStorage.getItem('stb.sparepeople'))"), json.dumps(sp))
     check('the typed name is kept as a helper for next time', any(c['name'] == 'seira' and c['crew'] == 'helper' for c in page.evaluate("JSON.parse(localStorage.getItem('stb.crew'))")))
@@ -135,7 +138,7 @@ with sync_playwright() as p:
     check('going on duty, Stan asks his question out loud', any(k[-1] in ('duty.who', 'crew.who', 'word.okidoo') for k in page.evaluate("globalThis.__stbStanLog")), json.dumps(page.evaluate("globalThis.__stbStanLog")))
     page.locator('.sheet button', has_text='Prepping at the depot').click(); page.wait_for_timeout(500)
     page.evaluate("globalThis.__stbStanLog.length = 0"); page.locator('.leave-btn').click(); page.wait_for_timeout(700)
-    page.fill('.odo-input', '84600'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
+    page.fill('.odo-input', '84600'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     again = [x for x in page.evaluate("globalThis.__stbStanLog") if x[0] in LEAVE]
     check('the same moment gets a different line the next time', len(again) >= 1 and again[0][0] in LEAVE and again[0][0] != first_line, json.dumps(again))
     # sound off: the words still show, nothing is played. Stan off: the plain message.
@@ -144,7 +147,7 @@ with sync_playwright() as p:
     page.locator('.sheet button', has_text='Got it').click(); page.locator('.duty-btn').click(); page.wait_for_timeout(300)
     page.locator('.sheet button', has_text='Prepping at the depot').click(); page.wait_for_timeout(500)
     page.evaluate("globalThis.__stbStanLog.length = 0"); page.locator('.leave-btn').click(); page.wait_for_timeout(700)
-    page.fill('.odo-input', '84600'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
+    page.fill('.odo-input', '84600'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     check('with Stan set to Quiet, his words still show but nothing is played', len(page.evaluate("globalThis.__stbStanLog")) == 0 and any(v in page.inner_text('#toast') for v in LEAVE.values()), page.inner_text('#toast'))
     page.evaluate("localStorage.removeItem('stb-stan-talk')")
 
@@ -159,7 +162,7 @@ with sync_playwright() as p:
     page.locator('.who-btn', has_text='Just me').click(); page.wait_for_timeout(100)
     page.locator('.sheet button', has_text='Prepped: starting the run').click(); page.wait_for_timeout(600)
     check('prepped and starting asks for spares and the odometer before the run starts', 'Spares on board?' in page.inner_text('.sheet') and len(duty()) == 1)
-    page.fill('.odo-input', '84700'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
+    page.fill('.odo-input', '84700'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     check('saved, and the sheet is gone', page.locator('.sheet').count() == 0)
     d = duty(); check('Just me, already prepped: on duty with no helpers, and straight on the run', len(d) == 2 and d[0]['state'] == 'on_duty' and d[0].get('helpers') == [] and d[1]['state'] == 'on_run' and d[1]['device_time'] > d[0]['device_time'] and 'On the run' in page.inner_text('.duty-card'), json.dumps(d))
 

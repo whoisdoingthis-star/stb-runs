@@ -225,6 +225,10 @@ Rules attached to exactly one group, operating location, service location or add
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.
 
+## Spares and damaged papers (Mike, 22 Nov 2026)
+- **A spare is an extra paper that can be used to deliver.** Extras that are damaged or have a quality problem are put aside; they are counted separately and are never part of the spare count, before or after.
+- **Drivers must count spares** at the start and end (a counted zero is fine, a blank is not), and **must have location on** before starting a run. [Decision 0058](decisions/0058-location-and-counted-spares.md).
+
 ## Duty hard lines (Mike, 22 Nov 2026)
 - **A driver can't start a run, or tick a stop on today's runs, until they are on duty and the start odometer is entered.** This replaces "ticking is never blocked" for drivers; helpers are never locked.
 - **The last delivery puts the crew off duty**: the person who ticked it and, through the database, the driver's helpers. The driver must then enter the end odometer and spares.

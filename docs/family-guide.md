@@ -59,7 +59,9 @@ Tap **Got it**. The plan stays on the Runs page in a yellow box; tap it to see i
 
 ### Spare papers
 Drivers only. The spare counts can be rough, but **the odometer must go in** both times (Mike, 22 Nov): there is no Skip any more.
-- **When you leave the depot,** Stan asks **Spares on board?** Tap **+** for each spare paper you have (a rough count is fine), then **Save**.
+- **What's a spare?** An extra paper **good enough to deliver**. Extras that are **damaged or poor quality** get put aside: count those on the second line, **damaged or poor**, not as spares.
+- **When you leave the depot,** Stan asks **Spares on board?** The count starts as **?** and has to be answered: tap **+** for each good spare, or **−** if there are none. Add any damaged ones on their line, type the odometer, then **Save**.
+- **Location has to be on.** If your phone isn't letting the app use location, you can't start the run: the app shows how to switch it on and has a **check again** button. No signal or a slow GPS is fine; only *off* stops you.
 - **When you go off duty,** Stan asks **Spares left?** and whether any went to someone. Tap **+** next to their name, or **Someone else…** to add a name. Then **Save**.
 - On Sundays there's a second row for the Sunday Star-Times.
 - **The odometer:** the same two sheets ask for the big kilometres number on the dash. It's how we know how far the morning really was.

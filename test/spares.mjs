@@ -8,7 +8,7 @@ t('papers needed adds the retail copies to their paper and leaves magazines out'
 t('the Herald is always asked about; the Sunday Star-Times only when it is on the sheets', () => { assert.deepEqual(papersToday(weekday), ['NZH']); assert.deepEqual(papersToday(sunday), ['NZH', 'SST']); assert.deepEqual(papersToday([]), ['NZH']); });
 t('a spare count is tidied before it is saved', () => {
   const r = spareRow({ date: '2026-11-20', moment: 'end', counts: { NZH: '3', SST: -2, XX: 9 }, given: [{ to: ' A friend ', n: 1 }, { to: '', n: 2 }, { to: 'Nobody', n: 0 }], now: Date.parse('2026-11-19T17:31:00Z') });
-  assert.deepEqual(r, { delivery_date: '2026-11-20', moment: 'end', counts: { NZH: 3, SST: 0 }, given: [{ to: 'A friend', n: 1 }], odometer_km: null, device_time: '2026-11-19T17:31:00.000Z' });
+  assert.deepEqual(r, { delivery_date: '2026-11-20', moment: 'end', counts: { NZH: 3, SST: 0 }, damaged: {}, given: [{ to: 'A friend', n: 1 }], odometer_km: null, device_time: '2026-11-19T17:31:00.000Z' });
   assert.deepEqual(spareRow({ date: '2026-11-20', moment: 'start', counts: { NZH: 4 }, given: [{ to: 'A friend', n: 1 }] }).given, []);
 });
 const rows = [
@@ -17,7 +17,13 @@ const rows = [
   { delivery_date: '2026-11-20', user_name: 'Lisa', moment: 'end', counts: { NZH: 3 }, given: [{ to: 'A friend', n: 1 }], device_time: '2026-11-19T17:31:00Z' },
   { delivery_date: '2026-11-20', user_name: 'Mike', moment: 'end', counts: { NZH: 1 }, given: [], device_time: '2026-11-19T17:10:00Z' },
   { delivery_date: '2026-11-19', user_name: 'Lisa', moment: 'end', counts: { NZH: 9 }, given: [], device_time: '2026-11-18T17:10:00Z' }];
-t('a day’s spares take each driver’s latest answer and add the drivers together', () => assert.deepEqual(spareDay(rows, '2026-11-20'), { start: { NZH: 4 }, end: { NZH: 4 }, given: [{ to: 'A friend', n: 1 }], by: ['Lisa', 'Mike'] }));
+t('a day’s spares take each driver’s latest answer and add the drivers together', () => assert.deepEqual(spareDay(rows, '2026-11-20'), { start: { NZH: 4 }, end: { NZH: 4 }, damaged: { start: {}, end: {} }, given: [{ to: 'A friend', n: 1 }], by: ['Lisa', 'Mike'] }));
+t('damaged or poor papers are kept apart from spares: never added to the count, and said on their own', () => {
+  const r = spareRow({ date: '2026-11-22', moment: 'start', counts: { NZH: 3 }, damaged: { NZH: 2, SST: 0, XX: 5 } }); assert.deepEqual(r.counts, { NZH: 3 }); assert.deepEqual(r.damaged, { NZH: 2 });
+  const day = spareDay([{ ...r, user_name: 'Mike' }, { ...spareRow({ date: '2026-11-22', moment: 'end', counts: { NZH: 1 }, damaged: { NZH: 2 }, now: Date.now() + 1000 }), user_name: 'Mike' }], '2026-11-22');
+  assert.deepEqual(day.start, { NZH: 3 }); assert.deepEqual(day.damaged, { start: { NZH: 2 }, end: { NZH: 2 } });
+  const text = spareText(day); assert.match(text, /Herald: 3 at the start, 1 left/); assert.match(text, /2 Herald damaged or poor, set aside/);
+});
 t('an odometer reading is kept as whole kilometres, and nonsense is left out', () => { assert.equal(spareRow({ date: 'd', moment: 'start', counts: {}, odometer: '84,512' }).odometer_km, 84512); assert.equal(spareRow({ date: 'd', moment: 'start', counts: {}, odometer: '' }).odometer_km, null); assert.equal(spareRow({ date: 'd', moment: 'start', counts: {}, odometer: 'abc' }).odometer_km, null); assert.equal(spareRow({ date: 'd', moment: 'end', counts: {}, odometer: 84547.6 }).odometer_km, 84548); });
 t('a driver’s odometer for the day is their latest reading at the start and at the end', () => assert.deepEqual(odometerDay([{ delivery_date: 'd', user_name: 'Lisa', moment: 'start', odometer_km: 100, device_time: '2026-11-19T13:00:00Z' }, { delivery_date: 'd', user_name: 'Lisa', moment: 'start', odometer_km: 84512, device_time: '2026-11-19T13:05:00Z' }, { delivery_date: 'd', user_name: 'Lisa', moment: 'end', odometer_km: 84547, device_time: '2026-11-19T17:00:00Z' }, { delivery_date: 'd', user_name: 'Mike', moment: 'end', odometer_km: 5, device_time: '2026-11-19T17:00:00Z' }], 'd', 'Lisa'), { start: 84512, end: 84547 }));
 t('no answers, no spares line', () => { assert.equal(spareDay(rows, '2026-11-21'), null); assert.equal(spareText(null), null); });

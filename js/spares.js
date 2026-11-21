@@ -18,11 +18,13 @@ export function papersToday(runs) {
   return ['NZH', ...Object.keys(PAPERS).filter((p) => p !== 'NZH' && need[p] > 0)];
 }
 /** A tidy row to save. counts: { NZH: 3 } · given: [{ to: 'A friend', n: 1 }]. */
-export function spareRow({ date, moment, counts, given = [], odometer = null, now = Date.now() }) {
-  const c = {}; for (const [k, v] of Object.entries(counts || {})) if (PAPERS[k]) c[k] = Math.max(0, Math.min(999, Math.round(Number(v) || 0)));
+export function spareRow({ date, moment, counts, damaged = {}, given = [], odometer = null, now = Date.now() }) {
+  const tidy = (o) => { const c = {}; for (const [k, v] of Object.entries(o || {})) if (PAPERS[k]) c[k] = Math.max(0, Math.min(999, Math.round(Number(v) || 0))); return c; };
+  // counts = spares good enough to deliver; damaged = extras put aside for damage or poor quality, never counted as spares (Mike, 22 Nov 2026)
+  const c = tidy(counts); const d = Object.fromEntries(Object.entries(tidy(damaged)).filter(([, v]) => v > 0));
   const g = (given || []).map((x) => ({ to: String(x.to || '').trim().slice(0, 30), n: Math.max(0, Math.min(99, Math.round(Number(x.n) || 0))) })).filter((x) => x.to && x.n > 0);
   const odo = Math.round(Number(String(odometer ?? '').replace(/[^0-9.]/g, '')));
-  return { delivery_date: date, moment: moment === 'start' ? 'start' : 'end', counts: c, given: moment === 'start' ? [] : g, odometer_km: odometer != null && odometer !== '' && odo > 0 && odo < 2000000 ? odo : null, device_time: new Date(now).toISOString() };
+  return { delivery_date: date, moment: moment === 'start' ? 'start' : 'end', counts: c, damaged: d, given: moment === 'start' ? [] : g, odometer_km: odometer != null && odometer !== '' && odo > 0 && odo < 2000000 ? odo : null, device_time: new Date(now).toISOString() };
 }
 /**
  * One day's spares across every driver: each driver's latest start and latest end count, added up.
@@ -33,8 +35,9 @@ export function spareDay(rows, date) {
   if (!mine.length) return null;
   const latest = new Map(); for (const r of mine) latest.set(`${r.user_name}|${r.moment}`, r);
   const sum = (moment) => { const rs = [...latest.values()].filter((r) => r.moment === moment); if (!rs.length) return null; const o = {}; for (const r of rs) for (const [k, v] of Object.entries(r.counts || {})) o[k] = (o[k] || 0) + v; return o; };
+  const sumD = (moment) => { const o = {}; for (const r of latest.values()) if (r.moment === moment) for (const [k, v] of Object.entries(r.damaged || {})) o[k] = (o[k] || 0) + v; return o; };
   const given = new Map(); for (const r of latest.values()) if (r.moment === 'end') for (const g of r.given || []) given.set(g.to, (given.get(g.to) || 0) + g.n);
-  return { start: sum('start'), end: sum('end'), given: [...given.entries()].map(([to, n]) => ({ to, n })), by: [...new Set(mine.map((r) => r.user_name))] };
+  return { start: sum('start'), end: sum('end'), damaged: { start: sumD('start'), end: sumD('end') }, given: [...given.entries()].map(([to, n]) => ({ to, n })), by: [...new Set(mine.map((r) => r.user_name))] };
 }
 /** The day's spares in a sentence, or null. */
 export function spareText(day) {
@@ -42,7 +45,9 @@ export function spareText(day) {
   const pubs = [...new Set([...Object.keys(day.start || {}), ...Object.keys(day.end || {})])].sort((a, b) => (a === 'NZH' ? -1 : b === 'NZH' ? 1 : a.localeCompare(b)));
   const parts = pubs.map((p) => `${PAPERS[p] || p}: ${[day.start?.[p] != null ? `${day.start[p]} at the start` : null, day.end?.[p] != null ? `${day.end[p]} left` : null].filter(Boolean).join(', ')}`);
   const gave = day.given.length ? `${day.given.map((g) => `${g.n} to ${g.to}`).join(', ')}` : null;
-  return [...parts, gave].filter(Boolean).join(' · ') || null;
+  // damaged or poor papers are their own line: the most seen at either count, since the same ones are usually still aboard at the end
+  const dm = Object.keys(PAPERS).map((p) => [p, Math.max(day.damaged?.start?.[p] || 0, day.damaged?.end?.[p] || 0)]).filter(([, n]) => n > 0).map(([p, n]) => `${n} ${PAPERS[p]} damaged or poor, set aside`);
+  return [...parts, gave, ...dm].filter(Boolean).join(' · ') || null;
 }
 /** The morning in lines for the notice board: each run's finish against the deadline. runs need route, done/total (or complete), finishedAt (ms | null). */
 export function morningLines(runs, deadlineAt, clock) {

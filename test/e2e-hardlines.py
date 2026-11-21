@@ -24,7 +24,7 @@ SEED = """([me, helpers, dayOffset, driver]) => {
 }"""
 TODAY = "new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date())"
 with sync_playwright() as p:
-    b = p.chromium.launch(); ctx = b.new_context(**p.devices['Pixel 7']); page = ctx.new_page()
+    b = p.chromium.launch(); ctx = b.new_context(**p.devices['Pixel 7'], permissions=['geolocation'], geolocation={'latitude': -36.8935, 'longitude': 174.9310}); page = ctx.new_page()
     errors = []; page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto('http://localhost:8765/'); page.wait_for_selector('#pdf', state='attached'); page.wait_for_selector('.splash', state='detached', timeout=4000)
     page.set_input_files('#pdf', PDF); page.wait_for_selector('text=Check the sheet', timeout=20000); page.locator('.stickybar button').click(); page.wait_for_selector('.tile')
@@ -52,7 +52,16 @@ with sync_playwright() as p:
     page.locator('.tile').first.click(); page.wait_for_timeout(700)
     sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
     check('on duty but no odometer yet: a tap asks for the odometer, and still doesn’t tick', done() == 0 and 'odometer' in sheet.lower() and 'Skip' not in sheet, sheet[:200])
-    page.fill('.odo-input', '90100'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(1000)
+    page.locator('.sheet button', has_text='Not leaving yet').click(); page.wait_for_timeout(500)
+    # ---- location switched off for the app (decision 0058) ----
+    page.evaluate("globalThis.__stbLocation = 'no'")
+    page.locator('.tile').first.click(); page.wait_for_timeout(700)
+    sheet = page.inner_text('.sheet') if page.locator('.sheet').count() else ''
+    check('with location off, a driver can’t start: the app says how to turn it on, for iPhone and Android', done() == 0 and 'Turn on location first' in sheet and 'iPhone' in sheet.replace('IPHONE', 'iPhone') and 'Permissions' in sheet and page.locator('.odo-input').count() == 0, sheet[:300])
+    page.evaluate("globalThis.__stbLocation = 'yes'")
+    page.locator('.sheet button', has_text='check again').click(); page.wait_for_timeout(700)
+    check('once it is on, Check again carries straight on to the odometer', page.locator('.sheet .odo-input').count() == 1 and duty()[-1]['state'] == 'on_duty')
+    page.fill('.odo-input', '90100'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(1000)
     check('with the odometer in, the run is under way', duty()[-1]['state'] == 'on_run', json.dumps(duty()[-1]))
     page.locator('.tile').first.click(); page.wait_for_timeout(400)
     check('and now the stop ticks', done() == 1)
@@ -69,7 +78,7 @@ with sync_playwright() as p:
     page.locator('.sheet [aria-label=Close]').click(); page.wait_for_timeout(600)
     home(); page.wait_for_timeout(800)
     check('closed without the odometer, it comes back on the Runs page', page.locator('.sheet .odo-input').count() == 1 and 'Spares left?' in page.inner_text('.sheet'))
-    page.fill('.odo-input', '90112'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(2500)
+    page.fill('.odo-input', '90112'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(2500)
     sp = page.evaluate("JSON.parse(localStorage.getItem('stb.spares') || '[]')")
     check('once entered it is saved, and it doesn’t ask again', sp[-1]['moment'] == 'end' and sp[-1]['odometer_km'] == 90112 and page.locator('.sheet .odo-input').count() == 0, json.dumps(sp[-1]))
     home(); page.wait_for_timeout(600)

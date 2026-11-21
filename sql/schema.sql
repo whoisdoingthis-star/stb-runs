@@ -1216,3 +1216,7 @@ begin
 end $$;
 drop trigger if exists duty_off_helpers on public.duty_events;
 create trigger duty_off_helpers after insert on public.duty_events for each row execute function public.duty_off_helpers();
+
+-- ---- Spares that can be delivered, and papers put aside (Mike, 22 Nov 2026; docs/decisions/0058-location-and-counted-spares.md) ----
+-- counts = spares good enough to deliver. damaged = extras put aside for damage or poor quality: { "NZH": 2 }. Never added to counts.
+alter table public.spare_counts add column if not exists damaged jsonb not null default '{}'::jsonb;

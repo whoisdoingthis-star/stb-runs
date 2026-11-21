@@ -5,6 +5,10 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Better data in, for drivers** (Mike, 22 Nov). See [decision 0058](docs/decisions/0058-location-and-counted-spares.md).
+  - **Location must be on** before you can start a run. If it's off, the app shows how to turn it on (iPhone and Samsung) and a **check again** button.
+  - **Spares have to be counted.** The count starts as **?**: tap **+** for each spare, or **−** if there are none.
+  - **A spare is a paper you could deliver.** Damaged or poor-quality extras go on their own line, **damaged or poor**, and are not counted as spares.
 - **Three hard lines for drivers** (Mike, 22 Nov). See [decision 0057](docs/decisions/0057-duty-hard-lines.md).
   - **Odometer first.** You can't start a run, or tick a stop on today's runs, until you're on duty and the odometer is in. The Skip button is gone. If you tap a stop too early, the app tells you and takes you straight to what's needed.
   - **The last delivery ends your shift.** When your last stop is ticked you're put off duty by itself, and so are your helpers. The driver is then asked for the end odometer and spares; it keeps coming back until it's entered.

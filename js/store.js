@@ -773,7 +773,7 @@ export class SupabaseStore extends Base {
     try {
       await this.flushSpares();
       const from = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(Date.now() - 14 * 864e5));
-      const { data, error } = await this.sb.from('spare_counts').select('id, delivery_date, user_name, moment, counts, given, odometer_km, device_time').gte('delivery_date', from).order('device_time').limit(500);
+      const { data, error } = await this.sb.from('spare_counts').select('id, delivery_date, user_name, moment, counts, damaged, given, odometer_km, device_time').gte('delivery_date', from).order('device_time').limit(500);
       if (error) throw error;
       return data;
     } catch { return super.loadSpares(); }

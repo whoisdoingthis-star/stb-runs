@@ -474,10 +474,37 @@ const odoGet = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'n
 const odoSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify({ date: nzToday(), name: app.me?.name, ...v })); } catch { /* private mode */ } };
 /** A driver's start odometer for today is in. */
 const startOdoIn = () => !!odoGet('stb.odo.start');
-/** A driver may tick today's stops only once on duty with the start odometer entered. Helpers and anyone else: always. */
-const tickLocked = () => amDriver() && !(onDuty() && startOdoIn());
+/** A driver may tick today's stops only once on duty with the start odometer entered, and with the phone allowing location (decision 0058). Helpers and anyone else: always. */
+const tickLocked = () => amDriver() && (!(onDuty() && startOdoIn()) || app.locDenied === true);
+/**
+ * Is the phone letting the app use location? 'yes' | 'no' | 'unknown'. If it hasn't been asked yet, this asks (the phone's
+ * own question). Only a clear refusal is 'no': no signal, a slow fix or an old phone never count against the driver.
+ */
+async function locationAllowed() {
+  const done = (v) => { app.locDenied = v === 'no'; return v; };
+  try {
+    if (globalThis.__stbLocation) return done(globalThis.__stbLocation);
+    if (!('geolocation' in navigator)) return done('unknown');
+    let st = null; try { st = (await navigator.permissions?.query({ name: 'geolocation' }))?.state; } catch { /* older phones */ }
+    if (st === 'granted') return done('yes'); if (st === 'denied') return done('no');
+    return done(await new Promise((ok) => navigator.geolocation.getCurrentPosition(() => ok('yes'), (e) => ok(e && e.code === 1 ? 'no' : 'yes'), { timeout: 10000, maximumAge: 60000 })));
+  } catch { return done('unknown'); }
+}
+/** Location is off for the app: say how to turn it on, and offer to check again. */
+function needLocation(retry) {
+  if (document.querySelector('.sheet')) return;
+  const close = openSheet('Turn on location first',
+    h('p', null, 'Drivers need location on before starting a run. Each tick is saved with where it was made: that’s the proof of delivery, the kilometres and the route.'),
+    h('div', { class: 'stan-card-h' }, 'iPhone'),
+    h('p', { class: 'small' }, 'Settings → Privacy & Security → Location Services: on. Then in the same list, Safari Websites → While Using the App.'),
+    h('div', { class: 'stan-card-h' }, 'Samsung / Android'),
+    h('p', { class: 'small' }, 'Hold your finger on the Send The Boy icon → App info (ⓘ) → Permissions → Location → Allow only while using the app. Also swipe down from the top and check Location is on.'),
+    h('button', { class: 'btn primary big', style: 'margin-top:10px', onclick: () => { close(); retry?.(); } }, 'I’ve turned it on: check again'),
+    h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
+}
 /** Leaving the depot: the odometer first, and only then is the run under way. Returns whether they left. */
 async function leaveDepot(todayRuns, rerender) {
+  if (amDriver() && (await locationAllowed()) === 'no') { needLocation(() => leaveDepot(todayRuns, rerender)); rerender?.(); return false; }
   if (!(await askSpares('start', todayRuns, { must: true }))) { toast('Still at the depot. Enter the odometer when you’re ready to go.'); rerender?.(); return false; }
   const first = myRuns().map((id) => (todayRuns || []).find((r) => r.id === id)).find((r) => r && !runComplete(r));
   noteDuty('on_run', { run_id: first?.id }, await quietFix());
@@ -555,6 +582,7 @@ function stanMoment(moment, { force = false, mood, before = [] } = {}) {
   } catch { return null; }
 }
 // Sound can only start after a tap; and once the app has settled, fetch any clips this phone doesn't hold yet.
+try { navigator.permissions?.query({ name: 'geolocation' }).then((st) => { const set = () => { if (st.state !== 'prompt') app.locDenied = st.state === 'denied'; }; set(); st.onchange = set; }).catch(() => {}); } catch { /* older phones: checked when leaving the depot */ }
 document.addEventListener('pointerdown', () => { unlockSfx(); if (stanOn() && stanTalks()) loadStanSay().then((m) => m?.unlockStanAudio()); }, { passive: true });
 setTimeout(() => { if (stanOn() && app.store && navigator.onLine !== false) loadStanSay().then((m) => m?.syncStanClips(app.store)).catch(() => {}); }, 6000);
 
@@ -674,10 +702,13 @@ async function askSpares(moment, todayRuns = [], { must = false } = {}) {
   try {
     if (!amDriver()) return true;
     const { papersToday, spareRow, PAPERS } = await import('./spares.js');
-    const papers = papersToday(todayRuns); const counts = Object.fromEntries(papers.map((p) => [p, 0])); const given = new Map();
+    const papers = papersToday(todayRuns); const given = new Map();
+    // Spares are extras good enough to deliver. Damaged or poor ones are put aside and counted on their own (Mike, 22 Nov 2026).
+    // When the count is required it starts unanswered ("?"): a zero has to be a counted zero.
+    const counts = Object.fromEntries(papers.map((p) => [p, must ? null : 0])); const damaged = Object.fromEntries(papers.map((p) => [p, 0]));
     const people = moment === 'end' ? [...(await app.store.sparePeople().catch(() => []))] : [];
-    const stepper = (get, set, label) => { const n = h('b', { class: 'step-n' }, String(get())); const bump = (d) => { set(Math.max(0, get() + d)); n.textContent = String(get()); };
-      return h('div', { class: 'step-row' }, h('span', { class: 'step-label' }, label), h('button', { class: 'btn step-btn', 'aria-label': `One fewer ${label}`, onclick: () => bump(-1) }, '−'), n, h('button', { class: 'btn step-btn', 'aria-label': `One more ${label}`, onclick: () => bump(1) }, '+')); };
+    const stepper = (get, set, label, cls = '') => { const show = () => (get() == null ? '?' : String(get())); const n = h('b', { class: 'step-n' }, show()); const bump = (d) => { set(get() == null ? Math.max(0, d) : Math.max(0, get() + d)); n.textContent = show(); };
+      return h('div', { class: `step-row ${cls}`.trim() }, h('span', { class: 'step-label' }, label), h('button', { class: 'btn step-btn', 'aria-label': `One fewer ${label}`, onclick: () => bump(-1) }, '−'), n, h('button', { class: 'btn step-btn', 'aria-label': `One more ${label}`, onclick: () => bump(1) }, '+')); };
     const peopleBox = h('div');
     const drawPeople = () => peopleBox.replaceChildren(...people.map((name) => stepper(() => given.get(name) || 0, (v) => given.set(name, v), name)),
       h('button', { class: 'btn who-btn who-other', onclick: (e) => {
@@ -695,16 +726,18 @@ async function askSpares(moment, todayRuns = [], { must = false } = {}) {
       if (!must) return null;
       if (!Number.isFinite(km) || km <= 0) return 'Enter the number on the odometer first.';
       if (moment === 'end' && startKm && km < startKm) return `That’s lower than this morning’s ${startKm}. Check the number.`;
+      const blank = papers.find((p) => counts[p] == null); if (blank) return `Count the ${PAPERS[blank]} spares first. Tap − if there are none.`;
       return null; };
     const close = openSheet(moment === 'start' ? 'Spares on board?' : 'Spares left?',
-      h('p', { class: 'muted' }, moment === 'start' ? 'How many more papers do you have than the sheets need? A rough count is fine.' : 'How many spare papers are left over?'),
-      ...papers.map((p) => stepper(() => counts[p], (v) => { counts[p] = v; }, PAPERS[p])),
+      h('p', { class: 'muted' }, moment === 'start' ? 'How many more papers do you have than the sheets need?' : 'How many spare papers are left over?'),
+      ...papers.flatMap((p) => [stepper(() => counts[p], (v) => { counts[p] = v; }, `${PAPERS[p]}: good spares`, 'good'), stepper(() => damaged[p], (v) => { damaged[p] = v; }, `${PAPERS[p]}: damaged or poor`, 'dmg')]),
+      h('p', { class: 'small muted', style: 'margin:4px 0 0' }, `Good spares are extras you could deliver. Damaged or poor-quality ones are put aside: count them on their own line, not as spares.${must ? ' Tap − if there are none.' : ''}`),
       moment === 'end' ? h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Did any spares go to someone?') : null,
       moment === 'end' ? peopleBox : null,
       h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, moment === 'start' ? 'What’s on the odometer?' : 'And the odometer now?'),
       h('p', { class: 'small muted', style: 'margin:2px 0 6px' }, must ? (moment === 'start' ? 'The big kilometres number on the dash. You need it in before you can start the run.' : 'The big kilometres number on the dash. It’s needed to finish your shift.') : 'The big kilometres number on the dash. Leave it blank if you’d rather not.'),
       odo, err,
-      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { const why = bad(); if (why) { err.textContent = why; err.hidden = false; odo.focus(); return; } saved = true; if (must) odoSet(moment === 'start' ? 'stb.odo.start' : 'stb.odo.end', { km: parseInt(String(odo.value).replace(/\D/g, ''), 10) }); close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, odometer: odo.value, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
+      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { const why = bad(); if (why) { err.textContent = why; err.hidden = false; odo.focus(); return; } saved = true; if (must) odoSet(moment === 'start' ? 'stb.odo.start' : 'stb.odo.end', { km: parseInt(String(odo.value).replace(/\D/g, ''), 10) }); close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, damaged, odometer: odo.value, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
       must ? (moment === 'start' ? h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not leaving yet') : null) : h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Skip'));
     const sheetEl = [...document.querySelectorAll('.sheet')].pop();
     return await new Promise((ok) => { const iv = setInterval(() => { if (!sheetEl?.isConnected) { clearInterval(iv); ok(saved); } }, 150); });
@@ -1839,6 +1872,7 @@ async function viewRun(ids) {
   // the way through is on the same screen.
   function lockedTick() {
     if (document.querySelector('.sheet')) return;
+    if (app.locDenied === true && onDuty() && startOdoIn()) return locationAllowed().then((v) => { if (v === 'no') needLocation(() => locationAllowed().then((w) => { if (w !== 'no') toast('Location is on. Carry on.'); })); });   // switched off part-way through
     if (!onDuty()) { const close = openSheet('Go on duty first', h('p', null, 'Drivers go on duty and enter the odometer before the first stop. It only takes a moment.'), h('button', { class: 'btn primary big', onclick: () => { close(); location.hash = '#/'; } }, 'Go to On duty'), h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet')); return; }
     app.store.listRuns().catch(() => []).then((all) => leaveDepot(all.filter((r) => r.delivery_date === nzToday()), () => {}));
   }

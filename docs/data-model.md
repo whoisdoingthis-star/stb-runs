@@ -74,4 +74,6 @@ Write the change into `sql/schema.sql` in re-runnable form, run it in the Supaba
 
 **Pinned rules (20 Nov 2026):** `notices.pinned` marks a standing rule: no end date, listed first on the board.
 
+**Damaged papers (22 Nov 2026, [decision 0058](decisions/0058-location-and-counted-spares.md)):** `spare_counts.counts` is spares good enough to deliver; `spare_counts.damaged` (`{ "NZH": 2 }`) is extras put aside for damage or poor quality, never added to `counts`. Rows before this date have `{}` and their `counts` may include damaged papers.
+
 **Odometer (21 Nov 2026):** `spare_counts.odometer_km` is the driver's odometer reading given with the spare count: `start` when leaving the depot, `end` when going off duty. Optional.

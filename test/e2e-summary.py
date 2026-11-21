@@ -28,7 +28,7 @@ SEED = """([todayMin, skip]) => {
 
 with sync_playwright() as p:
     b = p.chromium.launch()
-    ctx = b.new_context(**p.devices['Pixel 7'])
+    ctx = b.new_context(**p.devices['Pixel 7'], permissions=['geolocation'], geolocation={'latitude': -36.8935, 'longitude': 174.9310})
     page = ctx.new_page()
     # a stand-in for the mapping service: the straight line through the points, a quarter longer
     page.add_init_script("""globalThis.__stbFakeThrough = (pts) => { window.__throughCalls = (window.__throughCalls || 0) + 1; if (window.__noMap) return null; let m = 0; for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i]; m += Math.hypot((b.lat - a.lat) * 111320, (b.lng - a.lng) * 111320 * Math.cos(a.lat * Math.PI / 180)); } return m * 1.25; };""")

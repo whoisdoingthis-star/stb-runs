@@ -23,7 +23,7 @@ SEED = """([me, helpers, dayOffset, driver]) => {
   return routes;
 }"""
 with sync_playwright() as p:
-    b = p.chromium.launch(); ctx = b.new_context(**p.devices['Pixel 7']); page = ctx.new_page()
+    b = p.chromium.launch(); ctx = b.new_context(**p.devices['Pixel 7'], permissions=['geolocation'], geolocation={'latitude': -36.8935, 'longitude': 174.9310}); page = ctx.new_page()
     errors = []; page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto('http://localhost:8765/'); page.wait_for_selector('#pdf', state='attached'); page.wait_for_selector('.splash', state='detached', timeout=4000)
     page.set_input_files('#pdf', PDF); page.wait_for_selector('text=Check the sheet', timeout=20000); page.locator('.stickybar button').click(); page.wait_for_selector('.tile')
@@ -57,7 +57,7 @@ with sync_playwright() as p:
 
     # ---- on the run ----
     page.locator('.leave-btn').click(); page.wait_for_timeout(700)
-    page.fill('.odo-input', '84512'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
+    page.fill('.odo-input', '84512'); page.evaluate("document.querySelectorAll('.sheet .step-row.good').forEach((r) => { if (r.querySelector('.step-n').textContent === '?') r.querySelector('.step-btn').click(); })"); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     hero = page.inner_text('.hero-now') if page.locator('.hero-now').count() else ''
     check('on the run, the top card is the run I am on', 'run 1 of ' + str(len(order)) in hero.lower() and order[0] in hero and 'Start ' + order[0] in hero, hero)
     check('nothing is said about the plan before the first tick, so Stan’s plan line is still there', page.locator('.hero-pace').count() == 0 and page.locator('.plan-card').is_visible())
