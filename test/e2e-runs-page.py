@@ -56,9 +56,8 @@ with sync_playwright() as p:
     if SHOTS: page.screenshot(path=f'{SHOTS}/runs-2-depot.png', full_page=True)
 
     # ---- on the run ----
-    page.locator('.leave-btn').click(); page.wait_for_timeout(900)
-    for _ in range(3):
-        if page.locator('.sheet').count(): page.locator('.sheet button', has_text='Skip').first.click(); page.wait_for_timeout(400)
+    page.locator('.leave-btn').click(); page.wait_for_timeout(700)
+    page.fill('.odo-input', '84512'); page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     hero = page.inner_text('.hero-now') if page.locator('.hero-now').count() else ''
     check('on the run, the top card is the run I am on', 'run 1 of ' + str(len(order)) in hero.lower() and order[0] in hero and 'Start ' + order[0] in hero, hero)
     check('nothing is said about the plan before the first tick, so Stan’s plan line is still there', page.locator('.hero-pace').count() == 0 and page.locator('.plan-card').is_visible())

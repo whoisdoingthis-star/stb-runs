@@ -58,11 +58,16 @@ Tap **Got it**. The plan stays on the Runs page in a yellow box; tap it to see i
 **Helpers:** tap **On duty**, then tap **who's driving**. That's it.
 
 ### Spare papers
-Drivers only. Both questions have a **Skip** button, so they never hold you up.
+Drivers only. The spare counts can be rough, but **the odometer must go in** both times (Mike, 22 Nov): there is no Skip any more.
 - **When you leave the depot,** Stan asks **Spares on board?** Tap **+** for each spare paper you have (a rough count is fine), then **Save**.
 - **When you go off duty,** Stan asks **Spares left?** and whether any went to someone. Tap **+** next to their name, or **Someone else…** to add a name. Then **Save**.
 - On Sundays there's a second row for the Sunday Star-Times.
-- **The odometer:** the same two sheets ask for the big kilometres number on the dash. Type it in if you can; leave it blank if you can't. It's how we know how far the morning really was.
+- **The odometer:** the same two sheets ask for the big kilometres number on the dash. It's how we know how far the morning really was.
+
+**The three rules for drivers** (helpers aren't affected):
+1. **Odometer first.** You can't start a run or tick a stop on today's runs until you're on duty and the odometer is in. Tap a stop too early and the app tells you, and takes you to what's needed.
+2. **Your last delivery ends your shift.** When your last stop is ticked, you're put off duty by itself, and so are your helpers. You're then asked for the odometer and spares. If you close it, it comes back until it's done. The number can't be lower than the morning's.
+3. **No going off duty with stops still to do.** If you tap **Off duty** early, you must say **who is finishing them** (tap their name) or **why you can't carry on**. If you and someone else are sharing a run in two cars, the first to finish either hands over to the other, or stays on duty until the run's last stop is ticked.
 
 ### Stan walks your run
 At the top of a run there's a little street with **Stan and his newspaper satchel**. Each time you tick a stop, the street moves along and he tosses a paper. By the end of the run he's walked the whole street. He only moves when you tick, and you can't tap him. Don't want him there? **⚙ Settings → Walking Stan → Hide**.

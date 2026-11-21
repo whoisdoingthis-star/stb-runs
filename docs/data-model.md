@@ -68,6 +68,8 @@ Write the change into `sql/schema.sql` in re-runnable form, run it in the Supaba
 
 **Drivers and helpers (19 Nov 2026):** `members.crew` is `driver` or `helper` (default `driver`), separate from `role` (access). `duty_events.helpers` is the list of helpers' names a driver gave when going on duty (empty when on their own; null when not asked, as for a helper's own shift).
 
+**Duty hard lines (22 Nov 2026, [decision 0057](decisions/0057-duty-hard-lines.md)):** `duty_events.handover_to` (who is finishing the stops) and `duty_events.reason` (`unwell`, `car`, `other`) are set on an `off_duty` made while stops were still to do. The trigger `duty_off_helpers` adds an `off_duty` (`source = auto`, same time) for a driver's helpers whenever the driver's `off_duty` is added: the helpers named on the driver's latest `on_duty`, and anyone whose latest `on_duty` names that driver; a helper who has since gone on duty with another driver is left alone.
+
 **Who's driving (19 Nov 2026):** `duty_events.driver` is the driver a helper named when going on duty. Read crews with `shiftCrews` in `js/shifts.js`: the driver's `helpers` wins over a helper's `driver`.
 
 **Pinned rules (20 Nov 2026):** `notices.pinned` marks a standing rule: no end date, listed first on the board.

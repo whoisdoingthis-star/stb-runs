@@ -60,6 +60,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0054 | [Everyone's moves make their own order; the usual order changes only on purpose](0054-own-order-for-everyone.md) | 2026-11-21 | Accepted |
 | 0055 | [Stan checks a run's addresses before it's driven](0055-stans-address-check.md) | 2026-11-21 | Accepted |
 | 0056 | [The opening: Stan runs in with his satchel and jumps, "Stan-tastic!"](0056-opening-run-and-jump.md) | 2026-11-21 | Accepted |
+| 0057 | [Duty hard lines: odometer before the first stop, the last delivery ends the shift, and no walking off a run](0057-duty-hard-lines.md) | 2026-11-22 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
 

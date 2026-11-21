@@ -1180,3 +1180,39 @@ create policy run_km_change on public.run_km for update to authenticated using (
 -- ---- The route as delivered (Mike, 21 Nov 2026; docs/decisions/0046-route-as-delivered.md) ----
 -- The road the map says was driven between a run's ticks: one line per vehicle, each a list of [lat, lng].
 alter table public.run_km add column if not exists trace jsonb;
+
+-- ---- Duty hard lines (Mike, 22 Nov 2026; docs/decisions/0057-duty-hard-lines.md) ----
+-- Going off duty with stops still to do is a hand-over: who is finishing them, or why the driver can't carry on.
+alter table public.duty_events add column if not exists handover_to text;
+alter table public.duty_events add column if not exists reason text;
+-- When a driver goes off duty, so do their helpers: the ones the driver named when going on duty, and anyone who said
+-- they were helping that driver. A helper who has since gone on duty with someone else is left alone. Rows are only added.
+create or replace function public.duty_off_helpers() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  since timestamptz := new.device_time - interval '20 hours';
+  h record;
+begin
+  if new.state <> 'off_duty' or pg_trigger_depth() > 1 then return new; end if;
+  for h in
+    with named as (
+      select unnest(coalesce(d.helpers, '{}')) as name
+      from (select helpers from public.duty_events where user_id = new.user_id and state = 'on_duty' and device_time >= since and device_time <= new.device_time order by device_time desc limit 1) d
+    ), latest as (
+      select distinct on (e.user_id) e.user_id, e.user_name, e.state, e.device_time
+      from public.duty_events e where e.device_time >= since and e.user_id <> new.user_id order by e.user_id, e.device_time desc
+    ), last_on as (
+      select distinct on (e.user_id) e.user_id, e.driver
+      from public.duty_events e where e.device_time >= since and e.state = 'on_duty' and e.user_id <> new.user_id order by e.user_id, e.device_time desc
+    )
+    select l.user_id, l.user_name from latest l left join last_on o on o.user_id = l.user_id
+    where l.state <> 'off_duty' and l.device_time <= new.device_time
+      and ((l.user_name in (select name from named) and (o.driver is null or o.driver = new.user_name)) or o.driver = new.user_name)
+  loop
+    insert into public.duty_events (id, user_id, user_name, state, source, device_time)
+    values (gen_random_uuid(), h.user_id, h.user_name, 'off_duty', 'auto', new.device_time);
+  end loop;
+  return new;
+end $$;
+drop trigger if exists duty_off_helpers on public.duty_events;
+create trigger duty_off_helpers after insert on public.duty_events for each row execute function public.duty_off_helpers();

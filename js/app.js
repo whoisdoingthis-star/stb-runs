@@ -464,6 +464,34 @@ async function playStanGame() {
   const { openStanGame } = await import('./stangame.js');
   openStanGame({ store: app.store, me: app.me, sound: (f) => { if (soundOn()) chimes([[0, f]]); } });
 }
+// ---- Duty hard lines (Mike, 22 Nov 2026; decision 0057) ----
+/** Am I a driver? From the crew list, or what this phone last knew if the list isn't loaded (opened straight onto a run). */
+function amDriver() {
+  if (app.crew) return app.crew.some((c) => c.name === app.me?.name && c.crew === 'driver');
+  try { const r = JSON.parse(localStorage.getItem('stb.myrole') || 'null'); return !!r && r.name === app.me?.name && !!r.driver; } catch { return false; }
+}
+const odoGet = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v && v.date === nzToday() && v.name === app.me?.name ? v : null; } catch { return null; } };
+const odoSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify({ date: nzToday(), name: app.me?.name, ...v })); } catch { /* private mode */ } };
+/** A driver's start odometer for today is in. */
+const startOdoIn = () => !!odoGet('stb.odo.start');
+/** A driver may tick today's stops only once on duty with the start odometer entered. Helpers and anyone else: always. */
+const tickLocked = () => amDriver() && !(onDuty() && startOdoIn());
+/** Leaving the depot: the odometer first, and only then is the run under way. Returns whether they left. */
+async function leaveDepot(todayRuns, rerender) {
+  if (!(await askSpares('start', todayRuns, { must: true }))) { toast('Still at the depot. Enter the odometer when you’re ready to go.'); rerender?.(); return false; }
+  const first = myRuns().map((id) => (todayRuns || []).find((r) => r.id === id)).find((r) => r && !runComplete(r));
+  noteDuty('on_run', { run_id: first?.id }, await quietFix());
+  toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); rerender?.(); return true;
+}
+/** After the last delivery (or a hand-over): the driver's end odometer and spares, which keep coming back until entered; then the morning's card. */
+let endAsking = false;
+async function endOfShift(todayRuns) {
+  if (endAsking) return; endAsking = true;
+  try {
+    if (amDriver()) { odoSet('stb.odo.endDue', {}); if (await askSpares('end', todayRuns || [], { must: true })) odoSet('stb.odo.endDue', null); else return; }
+    await new Promise((ok) => setTimeout(ok, 300)); await showSummary(todayRuns || []); document.dispatchEvent(new Event('stb-summary'));
+  } finally { endAsking = false; }
+}
 /** Note a duty change, with where we are if we know (no new GPS prompt). */
 function noteDuty(state, extra = {}, fix) {
   const f = fix && Date.now() - fix.t < 120000 ? { lat: fix.lat, lng: fix.lng, accuracy_m: fix.acc } : {};
@@ -480,10 +508,25 @@ async function quietFix() {
 }
 function goOffDuty(after) {
   const start = shiftStart(app.store.myDuty());
-  const close = openSheet('Go off duty?',
-    h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
-    h('button', { class: 'btn primary big', onclick: () => { noteDuty('off_duty'); close(); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); stanMoment('duty.off'); after?.(); (async () => { await askSpares('end', app.todayRuns || []); await new Promise((ok) => setTimeout(ok, 300)); await showSummary(app.todayRuns || []); document.dispatchEvent(new Event('stb-summary')); })(); } }, 'Off duty'),
-    h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
+  const runs = app.todayRuns || []; const left = myRuns().map((id) => runs.find((r) => r.id === id)).filter((r) => r && !runComplete(r));
+  const off = (extra = {}) => { noteDuty('off_duty', extra); toast(`Off duty.${start ? ` Shift ${clock(Date.now() - start)}.` : ''} Thanks!`, null, { stan: 'wave' }); stanMoment('duty.off'); after?.(); endOfShift(runs); };
+  if (!left.length) {
+    const close = openSheet('Go off duty?',
+      h('p', { class: 'muted' }, start ? `Your shift so far: ${clock(Date.now() - start)} (hours:minutes).` : ''),
+      h('button', { class: 'btn primary big', onclick: () => { close(); off(); } }, 'Off duty'),
+      h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet'));
+    return;
+  }
+  // Stops still to do: going off duty now is a hand-over (decision 0057). Say who is finishing them, or why you can't.
+  const todo = left.map((r) => { const n = Math.max(0, (r.summary?.lines || 0) - (r.done || 0)); return `${shortRoute(r.route)} still has ${n} stop${n === 1 ? '' : 's'}`; }).join(', and ');
+  const others = (app.crew || []).filter((c) => !c.extra && c.name !== app.me.name).map((c) => c.name);
+  const close = openSheet('Stops still to do',
+    h('p', null, `${todo}. You can only go off duty now if someone else is finishing them, or you can’t carry on.`),
+    h('div', { class: 'stan-card-h' }, 'Who is finishing them?'),
+    h('div', { class: 'who-row' }, others.map((n) => h('button', { class: 'btn big who-btn handover-btn', onclick: () => { close(); off({ handover_to: n }); } }, n))),
+    h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Or: I can’t carry on'),
+    h('div', { class: 'who-row' }, [['unwell', 'I’m unwell'], ['car', 'Car trouble'], ['other', 'Something else']].map(([k, label]) => h('button', { class: 'btn big who-btn', onclick: () => { close(); off({ reason: k }); } }, label))),
+    h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: () => close() }, 'Not yet: keep delivering'));
 }
 // ---- Stan's recorded voice (decisions 0043, 0047) ----
 // stanMoment('run.done') picks his line for that moment (or none: he doesn't always speak), plays it if sound is on,
@@ -627,9 +670,9 @@ function summarySlot() {
 }
 // ---- Spare papers (decision 0042) ----
 /** Asks a driver how many spares are on board (start) or left (end), and at the end who any went to. Never blocks: Skip is always there. */
-async function askSpares(moment, todayRuns = []) {
+async function askSpares(moment, todayRuns = [], { must = false } = {}) {
   try {
-    if (!(app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')) return;
+    if (!amDriver()) return true;
     const { papersToday, spareRow, PAPERS } = await import('./spares.js');
     const papers = papersToday(todayRuns); const counts = Object.fromEntries(papers.map((p) => [p, 0])); const given = new Map();
     const people = moment === 'end' ? [...(await app.store.sparePeople().catch(() => []))] : [];
@@ -646,17 +689,26 @@ async function askSpares(moment, todayRuns = []) {
     if (moment === 'end') drawPeople();
     const odo = h('input', { type: 'text', inputmode: 'numeric', maxlength: 9, class: 'odo-input', placeholder: 'e.g. 84512', 'aria-label': 'Odometer reading in kilometres' });
     stanMoment(moment === 'start' ? 'odometer' : 'spares');
+    let saved = false; const err = h('p', { class: 'odo-err', role: 'alert', hidden: true });
+    const startKm = odoGet('stb.odo.start')?.km;
+    const bad = () => { const km = parseInt(String(odo.value).replace(/\D/g, ''), 10);
+      if (!must) return null;
+      if (!Number.isFinite(km) || km <= 0) return 'Enter the number on the odometer first.';
+      if (moment === 'end' && startKm && km < startKm) return `That’s lower than this morning’s ${startKm}. Check the number.`;
+      return null; };
     const close = openSheet(moment === 'start' ? 'Spares on board?' : 'Spares left?',
       h('p', { class: 'muted' }, moment === 'start' ? 'How many more papers do you have than the sheets need? A rough count is fine.' : 'How many spare papers are left over?'),
       ...papers.map((p) => stepper(() => counts[p], (v) => { counts[p] = v; }, PAPERS[p])),
       moment === 'end' ? h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Did any spares go to someone?') : null,
       moment === 'end' ? peopleBox : null,
       h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, moment === 'start' ? 'What’s on the odometer?' : 'And the odometer now?'),
-      h('p', { class: 'small muted', style: 'margin:2px 0 6px' }, 'The big kilometres number on the dash. Leave it blank if you’d rather not.'),
-      odo,
-      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, odometer: odo.value, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
-      h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Skip'));
-  } catch { /* never in the way of going on or off duty */ }
+      h('p', { class: 'small muted', style: 'margin:2px 0 6px' }, must ? (moment === 'start' ? 'The big kilometres number on the dash. You need it in before you can start the run.' : 'The big kilometres number on the dash. It’s needed to finish your shift.') : 'The big kilometres number on the dash. Leave it blank if you’d rather not.'),
+      odo, err,
+      h('button', { class: 'btn primary big', style: 'margin-top:14px', onclick: async () => { const why = bad(); if (why) { err.textContent = why; err.hidden = false; odo.focus(); return; } saved = true; if (must) odoSet(moment === 'start' ? 'stb.odo.start' : 'stb.odo.end', { km: parseInt(String(odo.value).replace(/\D/g, ''), 10) }); close(); try { await app.store.saveSpares(spareRow({ date: nzToday(), moment, counts, odometer: odo.value, given: [...given.entries()].map(([to, n]) => ({ to, n })) })); toast('Spares noted. Thanks!', null, { stan: 'wave' }); } catch { toast('Couldn’t save the spares.'); } } }, 'Save'),
+      must ? (moment === 'start' ? h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not leaving yet') : null) : h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Skip'));
+    const sheetEl = [...document.querySelectorAll('.sheet')].pop();
+    return await new Promise((ok) => { const iv = setInterval(() => { if (!sheetEl?.isConnected) { clearInterval(iv); ok(saved); } }, 150); });
+  } catch { return true; /* if the question itself can't be shown, it must not trap anyone */ }
 }
 // ---- The notice board (decision 0041) ----
 const noticeWhen = (iso) => new Date(iso).toLocaleString('en-NZ', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
@@ -761,9 +813,8 @@ function startShift(rerender, todayRuns = []) {
     const helpers = alone ? [] : names().filter((n) => picked.has(n));
     const t = Date.now(); const f = await fix;
     noteDuty('on_duty', { helpers, device_time: new Date(t).toISOString() }, f);
-    if (prepped) { const first = myRuns().map((id) => todayRuns.find((r) => r.id === id)).find((r) => r && !runComplete(r)); noteDuty('on_run', { run_id: first?.id, device_time: new Date(t + 1).toISOString() }, f); toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); }
     rerender();
-    if (prepped) askSpares('start', todayRuns);
+    if (prepped) leaveDepot(todayRuns, rerender);
   };
   const draw = () => {
     const ok = alone || picked.size > 0;
@@ -818,7 +869,8 @@ function planSlot(redrawDuty) {
   const loaded = (async () => {
     try {
       const [mod, plans, crew] = await Promise.all([import('./dayplan.js'), app.store.loadDayPlans(), app.store.crewList().catch(() => [])]);
-      app.crew = crew; app.planClock = mod.clockTime; app.planPace = mod.paceAgainstPlan;
+      app.crew = crew; try { localStorage.setItem('stb.myrole', JSON.stringify({ name: app.me?.name, driver: crew.some((c) => c.name === app.me?.name && c.crew === 'driver') })); } catch { /* private mode */ }
+      app.planClock = mod.clockTime; app.planPace = mod.paceAgainstPlan;
       const row = plans.find((p) => mod.myPart(p.plan, app.me.name));
       return row ? { row, part: mod.myPart(row.plan, app.me.name) } : null;
     } catch { return null; }
@@ -900,7 +952,7 @@ function dutyCard(todayRuns, rerender) {
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
     st.state === 'on_duty' && (app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')
-      ? h('button', { class: 'btn primary big leave-btn', onclick: async () => { const first = mine.find((r) => !runComplete(r)); noteDuty('on_run', { run_id: first?.id }, await quietFix()); toast(stanMoment('depot.leave', { force: true }) || 'On the run. Drive safe!', null, { stan: 'wave' }); rerender(); askSpares('start', todayRuns); } }, 'Leaving the depot now') : null,
+      ? h('button', { class: 'btn primary big leave-btn', onclick: () => leaveDepot(todayRuns, rerender) }, 'Leaving the depot now') : null,
     hero, trail, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
   card._timer = setInterval(() => { timer.textContent = clock(Date.now() - start); }, 10000);
   return card;
@@ -951,11 +1003,17 @@ async function viewHome() {
   document.addEventListener('stb-summary', onSummary);
   const drawDuty = (runs) => {
     // Left on duty after the morning's runs were all closed? End the shift at the time the last run closed (decision 0038).
-    const off = autoOffAt(app.store.myDuty(), runs);
+    // The last delivery ends the shift (decision 0057): when every one of my runs is done (or all of today's, if I picked none).
+    const mineToday = myRuns().map((id) => runs.find((r) => r.id === id && r.delivery_date === nzToday())).filter(Boolean);
+    const off = autoOffAt(app.store.myDuty(), mineToday.length ? mineToday : runs);
     if (off) {
       noteDuty('off_duty', { source: 'auto', device_time: new Date(off).toISOString() });
-      toast(`All of today\u2019s runs are finished, so I\u2019ve put you off duty from ${new Date(off).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}.`, null, { stan: 'wave' });
+      toast(`${mineToday.length ? 'Your runs are' : 'All of today\u2019s runs are'} finished, so I\u2019ve put you off duty from ${new Date(off).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}.`, null, { stan: 'wave' });
+      if (amDriver()) odoSet('stb.odo.endDue', {});
     }
+    if (amDriver() && odoGet('stb.odo.endDue') && !onDuty() && !document.querySelector('.sheet')) endOfShift(runs.filter((r) => r.delivery_date === nzToday()));
+    // A helper goes off duty with their driver: the server does it; this phone catches up when it's next opened.
+    if (onDuty() && !amDriver()) app.store.myServerDuty?.().then((ev) => { const last = app.store.myDuty().at(-1); if (ev && ev.state === 'off_duty' && onDuty() && (!last || Date.parse(ev.device_time) >= Date.parse(last.device_time))) { app.store.adoptDuty(ev); toast(`Your driver has finished, so you\u2019re off duty from ${new Date(ev.device_time).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}.`, null, { stan: 'wave' }); drawDuty(runs); } }).catch(() => {});
     if (dutyEl?._timer) clearInterval(dutyEl._timer);
     const today = nzToday();
     dutyEl = dutyCard(runs.filter((r) => r.delivery_date === today), () => renderList());
@@ -1760,8 +1818,13 @@ async function viewRun(ids) {
       }
       return;
     }
-    if (onDuty() && (!mine.length || mine.every(finished))) {
-      toast(`✓ ${name} done. That’s all your runs. ${stanMoment('all.done', { force: true }) || 'Stan-tastic!'}`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
+    if (onDuty() && mine.length && mine.every(finished)) {
+      // The last delivery puts the crew off duty (decision 0057): me now, my helpers by the server, and a driver is asked for the end odometer.
+      noteDuty('off_duty', { source: 'auto' }, geo.last);
+      toast(`✓ ${name} done. That’s all your runs, so you’re off duty. ${stanMoment('all.done', { force: true }) || 'Stan-tastic!'}`, null, { stan: 'hop' });
+      setTimeout(() => endOfShift(all.filter((r) => r.delivery_date === nzToday())), 900);
+    } else if (onDuty() && !mine.length) {
+      toast(`✓ ${name} done. ${stanMoment('all.done', { force: true }) || 'Stan-tastic!'}`, { label: 'Off duty', fn: () => goOffDuty() }, { stan: 'hop' });
     } else toast(`✓ ${name} done. ${stanMoment('run.done', { force: true }) || 'Stan-tastic!'}`, null, { stan: 'hop' });
   }
   const updateSync = (n = app.store.pendingCount()) => {
@@ -1772,6 +1835,13 @@ async function viewRun(ids) {
   updateSync();
   const offSync = app.store.onSync(updateSync);
 
+  // A driver can't tick today's stops until they're on duty and the start odometer is in (decision 0057). Never a dead end:
+  // the way through is on the same screen.
+  function lockedTick() {
+    if (document.querySelector('.sheet')) return;
+    if (!onDuty()) { const close = openSheet('Go on duty first', h('p', null, 'Drivers go on duty and enter the odometer before the first stop. It only takes a moment.'), h('button', { class: 'btn primary big', onclick: () => { close(); location.hash = '#/'; } }, 'Go to On duty'), h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => close() }, 'Not yet')); return; }
+    app.store.listRuns().catch(() => []).then((all) => leaveDepot(all.filter((r) => r.delivery_date === nzToday()), () => {}));
+  }
   // One tap = one tile, or a whole bundle (e.g. Run 8 reception). A bundle
   // records an entry for every paper in it, same time and GPS, so the audit
   // keeps each obligation while the driver makes one handover.
@@ -1797,6 +1867,7 @@ async function viewRun(ids) {
     const st = status();
     const done = opts.redo || !lines.every((l) => st[`${l.run_id}::${l.line_key}`]?.done);
     const now = Date.now();
+    if (done && date === nzToday() && tickLocked()) return lockedTick();
     if (!done && !opts.sure) {
       const cur = lines.map((l) => st[`${l.run_id}::${l.line_key}`]).filter(Boolean);
       const newest = Math.max(...cur.map((c) => Date.parse(c.device_time) || 0));

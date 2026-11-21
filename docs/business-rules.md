@@ -225,6 +225,12 @@ Rules attached to exactly one group, operating location, service location or add
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.
 
+## Duty hard lines (Mike, 22 Nov 2026)
+- **A driver can't start a run, or tick a stop on today's runs, until they are on duty and the start odometer is entered.** This replaces "ticking is never blocked" for drivers; helpers are never locked.
+- **The last delivery puts the crew off duty**: the person who ticked it and, through the database, the driver's helpers. The driver must then enter the end odometer and spares.
+- **Going off duty with stops still to do is only allowed as a hand-over**: who is finishing them, or why the driver can't carry on. It is recorded and shown on Dispatch.
+- [Decision 0057](decisions/0057-duty-hard-lines.md).
+
 ## A clean morning (agreed with Mike, 21 Nov 2026)
 A crew's morning is clean when no run was ticked in one go afterwards, and at least 90% of the ticks that can be checked were made within 60 m of where that address is usually ticked. Time plays no part, and a stop recorded as couldn't-deliver doesn't count against it. One morning a week (Monday to Sunday) that isn't clean is let go. See [decision 0053](decisions/0053-clean-mornings.md).
 

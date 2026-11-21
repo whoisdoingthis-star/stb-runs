@@ -202,7 +202,7 @@ class Base {
 const HOLD_MS = 10000;
 export const IDEA_COLUMNS = ['id', 'user_name', 'text', 'topic', 'screen', 'app_version', 'device_time'];
 const nzDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
-export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m', 'helpers', 'driver'];
+export const DUTY_COLUMNS = ['id', 'user_name', 'state', 'run_id', 'source', 'device_time', 'lat', 'lng', 'accuracy_m', 'helpers', 'driver', 'handover_to', 'reason'];
 export const EVENT_COLUMNS = ['id', 'run_id', 'line_key', 'address_key', 'route', 'done', 'user_name', 'device_time', 'lat', 'lng', 'accuracy_m', 'fix_age_ms', 'device', 'outcome', 'reason', 'qty_delivered', 'method'];
 
 // ---------------------------------------------------------------------------
@@ -272,6 +272,10 @@ export class LocalStore extends Base {
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
+  /** My latest duty change as the server has it (a helper is put off duty there when their driver finishes). Demo: nothing to learn. */
+  async myServerDuty() { return null; }
+  /** Take on a duty change the server made for me, without sending it back. */
+  adoptDuty(ev) { LS.set('stb.duty', [...this.myDuty(), { id: ev.id, user_name: ev.user_name, state: ev.state, source: ev.source || 'auto', device_time: ev.device_time }]); }
   /** Who was with whom: the on-duty events that carry helpers or a driver. Demo mode only has this phone's. */
   async loadCrewEvents() { return this.myDuty().filter((e) => Array.isArray(e.helpers) || e.driver).map((e) => ({ ...e, user_name: e.user_name || this.me?.name || 'Me' })); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
@@ -797,6 +801,11 @@ export class SupabaseStore extends Base {
       const ids = new Set(data.map((e) => e.id));
       return [...data.filter((e) => Array.isArray(e.helpers) || e.driver), ...mine.filter((e) => !ids.has(e.id))];   // with anything of mine not sent yet
     } catch { return mine; }
+  }
+  async myServerDuty() {
+    const { data, error } = await this.sb.from('duty_events').select('id, user_name, state, source, device_time').eq('user_name', this.me.name).gte('device_time', new Date(Date.now() - 20 * 3600e3).toISOString()).order('device_time', { ascending: false }).limit(1);
+    if (error) throw error;
+    return data?.[0] || null;
   }
   async loadDuty(from, to) {
     try {

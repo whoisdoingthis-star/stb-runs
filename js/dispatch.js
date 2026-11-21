@@ -406,6 +406,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
           ` ${hm(x.start)}–${x.open ? 'now' : hm(x.end)} · ${clock(x.totals.shift)}`,
           (() => { const cs = shiftCrews(D.duty); const mineC = cs.find((c) => c.driver === p); const helping = cs.find((c) => c.helpers.includes(p));
             return mineC ? h('span', { class: 'small muted' }, mineC.helpers.length ? ` · with ${mineC.helpers.join(' and ')}` : ' · on their own') : helping ? h('span', { class: 'small muted' }, ` · helping ${helping.driver}`) : null; })(),
+          (() => { const ho = [...D.duty].reverse().find((e) => e.user_name === p && e.state === 'off_duty' && (e.handover_to || e.reason)); return ho ? h('span', { class: 'small', style: 'font-weight:700' }, ho.handover_to ? ` · handed the rest to ${ho.handover_to}` : ` · stopped early: ${{ unwell: 'unwell', car: 'car trouble', other: 'something else' }[ho.reason] || ho.reason}`) : null; })(),
           x.forgot ? h('span', { class: 'small warn' }, ' · didn’t tap Off duty (ends at the last tick)') : null,
           x.open ? h('span', { class: 'dz-duty-now' }, ` · ${DUTY_LABEL[now.state]}${now.run_id ? `: ${name(now.run_id)}` : ''}`) : null,
           duty.length ? null : h('span', { class: 'small muted' }, ' · didn’t tap On duty (from first to last tick)')),

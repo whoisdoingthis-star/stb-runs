@@ -104,7 +104,7 @@ with sync_playwright() as p:
     page.locator('.duty-btn').click(); page.wait_for_timeout(700)
     check('going on duty hides the Your morning button', page.locator('.summary-slot button').count() == 0 and page.locator('.duty-card.on').count() == 1)
     page.locator('.duty-card button', has_text='Off duty').click(); page.wait_for_timeout(300)
-    page.locator('.sheet button', has_text='Off duty').click(); page.wait_for_timeout(2500)
+    (page.locator('.sheet button', has_text='Something else') if 'Stops still to do' in page.inner_text('.sheet') else page.locator('.sheet button', has_text='Off duty')).first.click(); page.wait_for_timeout(2500)
     s = sheet()
     check('going off duty brings up the morning', 'Your morning' in s, s[:200])
     check('a slower morning says so plainly and kindly', 'min slower than your usual for Run' in s and 'min against 100' in s and 'Slower than usual today. That’s fine. Safe is good.' in s, s)

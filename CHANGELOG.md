@@ -5,6 +5,11 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Three hard lines for drivers** (Mike, 22 Nov). See [decision 0057](docs/decisions/0057-duty-hard-lines.md).
+  - **Odometer first.** You can't start a run, or tick a stop on today's runs, until you're on duty and the odometer is in. The Skip button is gone. If you tap a stop too early, the app tells you and takes you straight to what's needed.
+  - **The last delivery ends your shift.** When your last stop is ticked you're put off duty by itself, and so are your helpers. The driver is then asked for the end odometer and spares; it keeps coming back until it's entered.
+  - **No going off duty with stops left**, unless you say who is finishing them or why you can't carry on (unwell, car trouble). Dispatch shows it.
+  - Helpers are never locked and are never asked for the odometer.
 - **A new opening** (Mike, 21 Nov): Stan now **runs in** with his newspaper satchel, each little footstep a soft note, then **jumps and pumps his fist: "Stan-tastic!"** He says it out loud when the phone allows sound (after you've touched the screen, such as after signing in or from **Settings → Play the opening**); otherwise the word shows under him. Tap to skip, as before. See [decision 0056](docs/decisions/0056-opening-run-and-jump.md).
 - **Stan checks the addresses before you start** (Mike, 21 Nov): when you open a run that hasn't been started, Stan may show a yellow card above the stops. *"3 Hartles Place is 5 stops away from the rest of Hartles Place. Put it before 7 Hartles Place?"* Tap **Move it** or **Leave it**. For Mike and Lisa he also asks when a unit and number look the wrong way round on the sheet (Cook Street **5/7** is really **unit 7 at number 5**); say **Yes** and everyone's tile reads the right way, with what the sheet says in small print. See [decision 0055](docs/decisions/0055-stans-address-check.md).
 - **Your order is yours** (Mike, 21 Nov): when *anyone* moves tiles now, Mike and Lisa included, it saves as their own order and nobody else's run changes. To change the usual order for everyone, Mike or Lisa taps **⋯ → Make my order the usual order…**. See [decision 0054](docs/decisions/0054-own-order-for-everyone.md).

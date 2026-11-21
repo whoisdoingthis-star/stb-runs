@@ -116,7 +116,10 @@ with sync_playwright() as p:
     check('big text: the card still fits the screen', page.evaluate("document.querySelector('.duty-card').scrollWidth <= document.querySelector('.duty-card').clientWidth + 1"))
     if SHOTS: page.locator('.duty-card').screenshot(path=f'{SHOTS}/duty-big.png')
     page.click('.duty-actions >> text=Off duty'); page.wait_for_selector('.sheet')
-    page.locator('.sheet').get_by_role('button', name='Off duty', exact=True).click(); page.wait_for_selector('.duty-card.off')
+    check('with stops still to do, Off duty asks who is finishing them or why you can’t carry on', 'Stops still to do' in page.inner_text('.sheet'))
+    page.locator('.sheet button', has_text='Something else').click(); page.wait_for_selector('.duty-card.off')
+    for _ in range(3):
+        if page.locator('.sheet').count(): page.locator('.sheet [aria-label=Close]').first.click(); page.wait_for_timeout(500)
     check('after the first shift Stan steps back from the duty card', page.locator('.duty-card .stan').count() == 0)
     check('Off duty ends the shift', duty()[-1]['state'] == 'off_duty' and page.locator('.duty-btn').is_visible())
     check('no page errors', not errors, errors)
