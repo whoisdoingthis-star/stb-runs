@@ -16,6 +16,9 @@ The pages are in four sections:
 
 **On a phone** the four sections are buttons along the bottom of the screen. Tap one and its pages show as a row of buttons at the top (Overview is called **Now** there, to save room). A section opens on the page you last used in it. The little numbers on **Proof** and **Set-up** are open complaints and addresses not yet tied to a location. Tables show as cards, one per row, so you only ever scroll up and down. Pop-ups open from the bottom, and the **✕** to close them stays at the top.
 
+## Who has read what's new
+**Set-up → People** has a **What's new** column: **✓ Up to date**, or how many of Stan's change cards that person still has to read. The cards themselves are written with each change (see [decision 0059](decisions/0059-whats-new.md)).
+
 ## Overview (the landing page)
 
 On a laptop the Overview has two columns: the day's work on the left (**Sheets**, **Progress**, **Items to collect**, **Delivery score**) and what needs a look on the right (**Needs attention**, **Complaints on this sheet**, **Recent photos**). On a narrow screen the right-hand column comes first.

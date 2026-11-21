@@ -1066,3 +1066,12 @@ html.big .home-mini { grid-template-columns: 1fr; }
 
 /* ===== Duty hard lines (decision 0057) ===== */
 .odo-err { color: var(--bad); font-weight: 700; margin: 6px 0 0; }
+
+/* ===== What's new (decision 0059) ===== */
+.news-top { display: flex; align-items: center; gap: 12px; }
+.news-k { font-size: 13px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; } .news-who { font-size: 14px; color: var(--muted); }
+.news-title { font-size: 24px; line-height: 1.2; margin: 12px 0 8px; }
+.news-what { font-size: 18px; line-height: 1.5; margin: 0 0 10px; }
+.news-why { font-size: 16px; line-height: 1.45; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.news-acts { display: flex; gap: 8px; margin-top: 16px; } .news-acts .btn { flex: 1; }
+.upd-cell.warn-text { font-weight: 700; }

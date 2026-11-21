@@ -1220,3 +1220,19 @@ create trigger duty_off_helpers after insert on public.duty_events for each row 
 -- ---- Spares that can be delivered, and papers put aside (Mike, 22 Nov 2026; docs/decisions/0058-location-and-counted-spares.md) ----
 -- counts = spares good enough to deliver. damaged = extras put aside for damage or poor quality: { "NZH": 2 }. Never added to counts.
 alter table public.spare_counts add column if not exists damaged jsonb not null default '{}'::jsonb;
+
+-- ---- What's new: who has seen which card (Mike, 22 Nov 2026; docs/decisions/0059-whats-new.md) ----
+-- The cards themselves are in js/whatsnew.js. This only remembers that a person tapped through one, so it doesn't
+-- pop up again on another phone, and so Dispatch can see who is up to date. Rows are only added.
+create table if not exists public.update_seen (
+  update_id text not null,
+  user_name text not null,
+  user_id   uuid not null default auth.uid(),
+  seen_at   timestamptz not null default now(),
+  primary key (update_id, user_name)
+);
+alter table public.update_seen enable row level security;
+drop policy if exists update_seen_read on public.update_seen;
+create policy update_seen_read on public.update_seen for select to authenticated using (public.is_member());
+drop policy if exists update_seen_add on public.update_seen;
+create policy update_seen_add on public.update_seen for insert to authenticated with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());

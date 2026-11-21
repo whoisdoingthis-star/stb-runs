@@ -464,6 +464,36 @@ async function playStanGame() {
   const { openStanGame } = await import('./stangame.js');
   openStanGame({ store: app.store, me: app.me, sound: (f) => { if (soundOn()) chimes([[0, f]]); } });
 }
+// ---- What's new (decision 0059): Stan walks each person through the changes they haven't seen, with why ----
+const whenNoSheet = () => new Promise((ok) => { const go = () => (document.querySelector('.sheet') ? setTimeout(go, 300) : ok()); go(); });
+/** Show the cards. force: everything recent, seen or not (from Settings). Resolves when it is closed. Never while on duty, and not by itself in demo mode. */
+async function showWhatsNew({ force = false } = {}) {
+  try {
+    if (!force && (onDuty() || (app.store.mode !== 'shared' && !globalThis.__stbNews))) return;
+    const { unseenFor, updatesFor, rolesOf, whoText } = await import('./whatsnew.js');
+    const roles = rolesOf({ driver: amDriver(), dispatcher: app.me?.role === 'dispatcher' });
+    const cards = force ? updatesFor(roles).slice(0, 30) : unseenFor(roles, await app.store.updatesSeen(), nzToday());
+    if (!cards.length) { if (force) toast('Nothing new just now.'); return; }
+    await whenNoSheet();
+    let at = 0; const seen = new Set(); const box = h('div', { class: 'news' });
+    const day = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
+    const mark = () => { const ids = [...seen]; if (ids.length && !force) app.store.markUpdatesSeen(ids).catch(() => {}); };
+    const draw = () => { const u = cards[at]; seen.add(u.id);
+      box.replaceChildren(
+        h('div', { class: 'news-top' }, stanOn() ? stan({ pose: at === cards.length - 1 ? 'wave' : 'point', size: 54 }) : null, h('div', null, h('div', { class: 'news-k' }, `${at + 1} of ${cards.length} · ${day(u.date)}`), h('div', { class: 'news-who' }, `For: ${whoText(u)}`))),
+        h('h3', { class: 'news-title' }, u.title),
+        h('p', { class: 'news-what' }, u.what),
+        h('p', { class: 'news-why' }, h('b', null, 'Why: '), u.why),
+        h('div', { class: 'news-acts' },
+          at > 0 ? h('button', { class: 'btn big', onclick: () => { at -= 1; draw(); } }, 'Back') : null,
+          at < cards.length - 1 ? h('button', { class: 'btn primary big', onclick: () => { at += 1; draw(); } }, 'Next') : h('button', { class: 'btn primary big', onclick: () => close() }, 'Got it'))); };
+    const close = openSheet(force ? 'What’s new' : 'What’s new since last time', box);
+    draw();
+    const sheetEl = [...document.querySelectorAll('.sheet')].pop();
+    await new Promise((ok) => { const iv = setInterval(() => { if (!sheetEl?.isConnected) { clearInterval(iv); ok(); } }, 200); });
+    mark();   // the ones they got to; any they didn't reach come back next time
+  } catch { /* never in the way */ }
+}
 // ---- Duty hard lines (Mike, 22 Nov 2026; decision 0057) ----
 /** Am I a driver? From the crew list, or what this phone last knew if the list isn't loaded (opened straight onto a run). */
 function amDriver() {
@@ -1077,7 +1107,7 @@ async function viewHome() {
     app.todayRuns = runs.filter((r) => r.delivery_date === nzToday());
     drawDuty(runs);
     const todays = runs.filter((r) => r.delivery_date === nzToday()); lastRuns = todays; summaryEl._update(todays);
-    planEl._update(runs).finally(() => { if (app.plan?.today && list.isConnected) { drawDuty(runs); paint(); } if (!noticesAsked) { noticesAsked = true; noticeEl._update(); } if (!summaryAsked) { summaryAsked = true; setTimeout(async () => { if (await showSummary(todays, { settled: true })) summaryEl._update(todays); }, 1500); } });
+    planEl._update(runs).finally(() => { if (app.plan?.today && list.isConnected) { drawDuty(runs); paint(); } if (!noticesAsked) { noticesAsked = true; whenNoSheet().then(() => showWhatsNew()).then(() => noticeEl._update()); } if (!summaryAsked) { summaryAsked = true; setTimeout(async () => { if (await showSummary(todays, { settled: true })) summaryEl._update(todays); }, 1500); } });
     if (!runs.length) {
       list.replaceChildren(h('div', { class: 'empty' },
         boredStan(stanSays(app.store.mode === 'shared' ? 'No runs yet. They load themselves from RouteSmart each evening after 7pm.' : 'No runs on this phone yet.', { pose: 'wave' })),
@@ -1197,6 +1227,7 @@ function openSettings(fileInput) {
       stanOn() && canDuck() ? choiceRow('Music while Stan talks', [['mix', 'Keeps playing'], ['solo', 'Pauses']], musicMode(), (v) => setMusicMode(v)) : null,
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); openingNow(true); } })),
     (close) => h('div', { class: 'menu-group' },
+      menuItem('What’s new', () => { close(); showWhatsNew({ force: true }); }, { hint: 'What has changed in the app lately, and why' }),
       menuItem('Play the opening', () => { close(); openingNow(); }, { hint: 'It plays each time you open the app' }),
       app.store.mode === 'shared' ? menuItem('Get Runs from RouteSmart…', () => { close(); openRefetch(); }, { hint: 'Fetches the latest sheets for a day. Use it if a change is phoned in' }) : null,
       menuItem('Upload a run sheet (PDF)…', () => { close(); fileInput?.click(); }, { hint: 'A sheet you downloaded yourself' }),

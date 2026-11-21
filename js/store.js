@@ -197,6 +197,13 @@ class Base {
   async loadSpares() { return LS.get('stb.spares', []); }
   async sparePeople() { return LS.get('stb.sparepeople', []); }
   async addSparePerson(name) { const list = LS.get('stb.sparepeople', []); if (!list.some((n) => n.toLowerCase() === name.toLowerCase())) LS.set('stb.sparepeople', [...list, name]); }
+  /** What's new (decision 0059): the cards this person has tapped through. */
+  async updatesSeen() { return LS.get('stb.updateseen', []); }
+  async markUpdatesSeen(ids) { LS.set('stb.updateseen', [...new Set([...LS.get('stb.updateseen', []), ...ids])]); }
+  /** My latest duty change as the server has it (a helper is put off duty there when their driver finishes). Demo: nothing to learn. */
+  async myServerDuty() { return null; }
+  /** Take on a duty change the server made for me, without sending it back. */
+  adoptDuty(ev) { LS.set('stb.duty', [...this.myDuty(), { id: ev.id, user_name: ev.user_name, state: ev.state, source: ev.source || 'auto', device_time: ev.device_time }]); }
 }
 
 const HOLD_MS = 10000;
@@ -272,10 +279,6 @@ export class LocalStore extends Base {
   async loadIdeas() { return this.myIdeas().map((e) => ({ status: 'new', ...e })); }
   async reviewIdea() { /* demo mode: nothing to review */ }
   async loadDuty() { return this.myDuty(); }
-  /** My latest duty change as the server has it (a helper is put off duty there when their driver finishes). Demo: nothing to learn. */
-  async myServerDuty() { return null; }
-  /** Take on a duty change the server made for me, without sending it back. */
-  adoptDuty(ev) { LS.set('stb.duty', [...this.myDuty(), { id: ev.id, user_name: ev.user_name, state: ev.state, source: ev.source || 'auto', device_time: ev.device_time }]); }
   /** Who was with whom: the on-duty events that carry helpers or a driver. Demo mode only has this phone's. */
   async loadCrewEvents() { return this.myDuty().filter((e) => Array.isArray(e.helpers) || e.driver).map((e) => ({ ...e, user_name: e.user_name || this.me?.name || 'Me' })); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
@@ -801,6 +804,21 @@ export class SupabaseStore extends Base {
       const ids = new Set(data.map((e) => e.id));
       return [...data.filter((e) => Array.isArray(e.helpers) || e.driver), ...mine.filter((e) => !ids.has(e.id))];   // with anything of mine not sent yet
     } catch { return mine; }
+  }
+  async updatesSeen() {
+    const mine = await super.updatesSeen();
+    try {
+      const waiting = LS.get('stb.updateseenpending', []);
+      if (waiting.length) { const { error } = await this.sb.from('update_seen').upsert(waiting.map((id) => ({ update_id: id, user_name: this.me.name })), { onConflict: 'update_id,user_name', ignoreDuplicates: true }); if (!error) LS.set('stb.updateseenpending', []); }
+      const { data, error } = await this.sb.from('update_seen').select('update_id').eq('user_name', this.me.name).limit(500);
+      if (error) throw error;
+      const all = [...new Set([...mine, ...data.map((r) => r.update_id)])]; LS.set('stb.updateseen', all); return all;   // seen on another phone counts
+    } catch { return mine; }
+  }
+  async markUpdatesSeen(ids) {
+    await super.markUpdatesSeen(ids);   // so it never pops up twice on this phone, signal or not
+    try { const { error } = await this.sb.from('update_seen').upsert(ids.map((id) => ({ update_id: id, user_name: this.me.name })), { onConflict: 'update_id,user_name', ignoreDuplicates: true }); if (error) throw error; }
+    catch { LS.set('stb.updateseenpending', [...new Set([...LS.get('stb.updateseenpending', []), ...ids])]); }
   }
   async myServerDuty() {
     const { data, error } = await this.sb.from('duty_events').select('id, user_name, state, source, device_time').eq('user_name', this.me.name).gte('device_time', new Date(Date.now() - 20 * 3600e3).toISOString()).order('device_time', { ascending: false }).limit(1);

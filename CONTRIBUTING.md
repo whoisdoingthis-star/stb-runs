@@ -39,6 +39,13 @@ checked automatically like the code. These rules apply to every change, whoever
 7. **Ship a version bump.** Any change to files the phones load means bumping
    `VERSION` in `sw.js`, so phones pick up the new copy.
 
+8. **Tell the family what changed, and why.** If a change alters what anyone sees,
+   does or must follow, add a card to the top of `js/whatsnew.js` in the same commit:
+   who it is for, what changed (as you'd say it to Mum), and one line of why. Stan
+   shows it to each person the next time they open the app
+   ([decision 0059](docs/decisions/0059-whats-new.md)). A card's `id` never changes
+   once published. Fixes nobody would notice don't need one.
+
 ## What the checks enforce
 
 `npm run check` locally, and [CI](.github/workflows/ci.yml) on every push and pull request:
@@ -68,6 +75,7 @@ lets it through. Use it rarely.
 - [ ] Database changes are in `sql/schema.sql` and `docs/data-model.md`
 - [ ] New business rules or decisions are written down
 - [ ] `VERSION` in `sw.js` bumped if phone files changed
+- [ ] A *What's new* card in `js/whatsnew.js` if anyone will see, do or have to follow something different
 - [ ] Nothing secret or personal in the diff
 
 ## Releasing

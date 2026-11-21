@@ -5,6 +5,8 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Stan tells you what's new** (Lisa's and Mike's idea, 22 Nov): when the app changes, the next time you open it Stan shows a short card for each change that matters to you: what changed, and **why**. Tap **Next** through them and **Got it**. Read them again from **⚙ Settings → What's new**. Mike and Lisa can see on **Dispatch → People** who is up to date. See [decision 0059](docs/decisions/0059-whats-new.md).
+- Fixed: a helper's phone now really does catch up when their driver's last delivery puts them off duty.
 - **Better data in, for drivers** (Mike, 22 Nov). See [decision 0058](docs/decisions/0058-location-and-counted-spares.md).
   - **Location must be on** before you can start a run. If it's off, the app shows how to turn it on (iPhone and Samsung) and a **check again** button.
   - **Spares have to be counted.** The count starts as **?**: tap **+** for each spare, or **−** if there are none.

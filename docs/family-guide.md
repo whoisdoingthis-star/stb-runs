@@ -111,6 +111,11 @@ At the bottom of the **Your morning** card is a count: **clean mornings in a row
 - **The family this week** shows how many of everyone's mornings were clean, with no names.
 - Before your next shift, a small line under **On duty** shows where you're up to.
 
+### What's new
+When something in the app changes, **Stan tells you the next time you open it**: a short card for each change, saying **what changed** and **why**. Tap **Next** to go through them and **Got it** at the end. You only get the ones that matter to you (helpers don't get drivers' rules). It never pops up while you're on duty. Want to read them again? **⚙ Settings → What's new**.
+
+**One to know now:** if someone else delivered a run (like Gagan on Run 8 at the weekend), **don't tick it**. Mike or Lisa closes it on the dispatch board (**Runs & sheets → Close run…**), which records who really did it.
+
 ### The notice board
 The **📌 Notice board** button on the Runs page is for telling the family something: "papers will be late", "the gate code has changed".
 - **To leave a note:** Notice board → **Leave a note**. Type it, choose **Everyone** or the people it's for, choose **For 3 days** or **Until I remove it**, then **Post it**.

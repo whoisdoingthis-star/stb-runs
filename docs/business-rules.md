@@ -225,6 +225,9 @@ Rules attached to exactly one group, operating location, service location or add
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.
 
+## Runs done by someone outside the app (Mike, 22 Nov 2026)
+A run delivered by someone who doesn't use the app (Gagan does Run 8 on Saturdays and Sundays) is **not ticked** by anyone else. A dispatcher closes it from the dispatch board with the name of the person who did it. A tick means "I put this paper in this box".
+
 ## Spares and damaged papers (Mike, 22 Nov 2026)
 - **A spare is an extra paper that can be used to deliver.** Extras that are damaged or have a quality problem are put aside; they are counted separately and are never part of the spare count, before or after.
 - **Drivers must count spares** at the start and end (a counted zero is fine, a blank is not), and **must have location on** before starting a run. [Decision 0058](decisions/0058-location-and-counted-spares.md).
