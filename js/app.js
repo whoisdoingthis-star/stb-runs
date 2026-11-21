@@ -707,7 +707,7 @@ async function askSpares(moment, todayRuns = [], { must = false } = {}) {
     // When the count is required it starts unanswered ("?"): a zero has to be a counted zero.
     const counts = Object.fromEntries(papers.map((p) => [p, must ? null : 0])); const damaged = Object.fromEntries(papers.map((p) => [p, 0]));
     const people = moment === 'end' ? [...(await app.store.sparePeople().catch(() => []))] : [];
-    const stepper = (get, set, label, cls = '') => { const show = () => (get() == null ? '?' : String(get())); const n = h('b', { class: 'step-n' }, show()); const bump = (d) => { set(get() == null ? Math.max(0, d) : Math.max(0, get() + d)); n.textContent = show(); };
+    const stepper = (get, set, label, cls = '') => { const show = () => (get() == null ? '?' : String(get())); const n = h('b', { class: 'step-n' }, show()); const bump = (d) => { set(get() == null ? Math.max(0, d) : Math.max(0, get() + d)); n.textContent = show(); try { err.hidden = true; } catch { /* not drawn yet */ } };
       return h('div', { class: `step-row ${cls}`.trim() }, h('span', { class: 'step-label' }, label), h('button', { class: 'btn step-btn', 'aria-label': `One fewer ${label}`, onclick: () => bump(-1) }, '−'), n, h('button', { class: 'btn step-btn', 'aria-label': `One more ${label}`, onclick: () => bump(1) }, '+')); };
     const peopleBox = h('div');
     const drawPeople = () => peopleBox.replaceChildren(...people.map((name) => stepper(() => given.get(name) || 0, (v) => given.set(name, v), name)),
@@ -722,6 +722,7 @@ async function askSpares(moment, todayRuns = [], { must = false } = {}) {
     stanMoment(moment === 'start' ? 'odometer' : 'spares');
     let saved = false; const err = h('p', { class: 'odo-err', role: 'alert', hidden: true });
     const startKm = odoGet('stb.odo.start')?.km;
+    odo.addEventListener('input', () => { err.hidden = true; });
     const bad = () => { const km = parseInt(String(odo.value).replace(/\D/g, ''), 10);
       if (!must) return null;
       if (!Number.isFinite(km) || km <= 0) return 'Enter the number on the odometer first.';

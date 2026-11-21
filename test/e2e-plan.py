@@ -100,6 +100,7 @@ with sync_playwright() as p:
     for _ in range(3): page.locator('.step-row.good .step-btn', has_text='+').click()
     page.locator('.step-row.good .step-btn', has_text='−').click()
     for _ in range(2): page.locator('.step-row.dmg .step-btn', has_text='+').click()
+    check('the message goes once the count is answered', not page.locator('.odo-err').is_visible())
     if SHOTS: page.screenshot(path=f'{SHOTS}/spares-start.png')
     page.locator('.sheet button', has_text='Save').click(); page.wait_for_timeout(900)
     said = [x for x in page.evaluate("globalThis.__stbStanLog") if x[0] not in ('odo.ask', 'odo.1', 'odo.2')]; toast = page.inner_text('#toast')
