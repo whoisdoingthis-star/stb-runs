@@ -5,6 +5,9 @@ the same repository as the code, changes in the same commit as the code, and is
 checked automatically like the code. These rules apply to every change, whoever
 (or whatever) makes it: Mike, a developer, or Claude.
 
+## The principles behind the rules
+The nine design principles every change is judged by are in [decision 0062](docs/decisions/0062-design-principles.md). Read them once; the rules below are how they are enforced day to day.
+
 ## The rules
 
 1. **Docs change with the code, in the same commit.** If a change alters what

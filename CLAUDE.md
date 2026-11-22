@@ -1,6 +1,6 @@
 # Notes for Claude (and any other AI assistant) working in this repository
 
-Follow [CONTRIBUTING.md](CONTRIBUTING.md). In short, every change you make must, in the same commit:
+Follow [CONTRIBUTING.md](CONTRIBUTING.md), and the design principles in [docs/decisions/0062-design-principles.md](docs/decisions/0062-design-principles.md). In short, every change you make must, in the same commit:
 
 1. Update the matching page(s) in `docs/`. If anything on screen changed, update `docs/family-guide.md` in plain words.
 2. Add a line to `CHANGELOG.md` under *Unreleased*.
