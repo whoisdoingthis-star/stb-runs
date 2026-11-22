@@ -68,6 +68,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0062 | [The design principles, said out loud](0062-design-principles.md) | 2026-11-22 | Accepted |
 | 0063 | [Fix it twice: a miss changes the standard](0063-lessons-loop.md) | 2026-11-22 | Accepted |
 | 0064 | [How Stan will optimise: time, learned from ticks, proven before used](0064-optimisation-approach.md) | 2026-11-23 | Accepted |
+| 0065 | [Voice builds: asked for on a call, built by one Claude, reviewed by another](0065-voice-builds.md) | 2026-11-23 | Accepted |
 | 0065 | [Stan's School and Sandbox Stan: training that can't go out of date](0065-stans-school.md) | 2026-11-23 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.

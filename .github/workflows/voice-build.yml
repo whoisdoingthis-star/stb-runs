@@ -1,0 +1,126 @@
+# Voice builds (docs/decisions/0065-voice-builds.md): Mike asks for a change on a voice call, it is written to a queue
+# in the database, and this job picks it up. One Claude builds it, the checks run, a second Claude reviews it cold,
+# and only then is it published. The agents get no database key, on purpose: they can change the code and nothing else.
+# Nothing is built between 1 am and 8 am New Zealand time, when the runs are on.
+name: Voice builds
+on:
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run now even during the quiet hours (1 am to 8 am NZ)'
+        type: boolean
+        default: false
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: voice-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Is anything waiting?
+        id: next
+        run: node tools/build-queue.mjs next
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HAS_AGENT_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          FORCE: ${{ inputs.force }}
+
+      - name: Get ready
+        if: steps.next.outputs.has == 'true'
+        run: |
+          npm install --no-audit --no-fund
+          git config user.name "Stan's builder"
+          git config user.email "noreply@anthropic.com"
+
+      # The builder: can read and edit the repository, run the checks and commit. It cannot push and has no database key.
+      - name: Build it
+        id: build
+        if: steps.next.outputs.has == 'true'
+        continue-on-error: true
+        run: |
+          npx -y @anthropic-ai/claude-code -p "Read tools/voice-build/builder.md and do exactly what it says." \
+            --max-turns 150 --permission-mode acceptEdits \
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(npm run check),Bash(npm run check:push),Bash(npm test),Bash(node test/*),Bash(node tools/check-docs.mjs*),Bash(git add:*),Bash(git commit:*),Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(ls:*)"
+          if [ -f voice-build-hold.md ]; then echo "held=true" >> "$GITHUB_OUTPUT"; fi
+          if [ "$(git rev-list --count origin/main..HEAD)" -gt 0 ] && [ ! -f voice-build-hold.md ]; then echo "built=true" >> "$GITHUB_OUTPUT"; fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # The checks are run here, not taken on the builder's word.
+      - name: Check it
+        id: checks
+        if: steps.build.outputs.built == 'true'
+        continue-on-error: true
+        run: |
+          git stash --include-untracked --quiet || true
+          npm run check
+          node tools/check-docs.mjs --diff origin/main HEAD
+          git stash pop --quiet || true
+
+      # The reviewer: a second Claude that has not seen the work being done. It can read, and write its verdict. Nothing else.
+      - name: Review it
+        id: review
+        if: steps.build.outputs.built == 'true' && steps.checks.outcome == 'success'
+        continue-on-error: true
+        run: |
+          before=$(git rev-parse HEAD)
+          npx -y @anthropic-ai/claude-code -p "Read tools/voice-build/reviewer.md and do exactly what it says." \
+            --max-turns 40 \
+            --allowedTools "Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status)"
+          if [ "$(git rev-parse HEAD)" != "$before" ] || [ -n "$(git status --porcelain)" ]; then echo "The reviewer changed something. Holding."; echo "verdict=hold" >> "$GITHUB_OUTPUT"; exit 0; fi
+          verdict=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('voice-build-review.json','utf8')).verdict==='publish'?'publish':'hold')}catch{console.log('hold')}")
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      - name: Publish it
+        id: publish
+        if: steps.review.outputs.verdict == 'publish'
+        run: |
+          git pull --rebase --quiet origin main
+          npm run check
+          git push origin HEAD:main
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          gh workflow run record-stan.yml || true   # a push from this job doesn't start other jobs by itself
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Held or failed: the work is kept on a branch so it can be picked up, and nothing reaches the phones.
+      - name: Keep held work on a branch
+        id: branch
+        if: always() && steps.build.outputs.built == 'true' && steps.publish.outputs.published != 'true'
+        run: |
+          b="voice-build/${{ steps.next.outputs.id }}"
+          git push origin "HEAD:refs/heads/$b" && echo "name=$b" >> "$GITHUB_OUTPUT"
+
+      - name: Say how it went
+        if: always() && steps.next.outputs.has == 'true'
+        run: node tools/build-queue.mjs finish
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REQUEST_ID: ${{ steps.next.outputs.id }}
+          BUILT: ${{ steps.build.outputs.built }}
+          CHECKS: ${{ steps.checks.outcome }}
+          PUBLISHED: ${{ steps.publish.outputs.published }}
+          COMMIT_SHA: ${{ steps.publish.outputs.sha }}
+          BRANCH: ${{ steps.branch.outputs.name }}

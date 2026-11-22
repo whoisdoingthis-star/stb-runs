@@ -3,3 +3,5 @@ build/
 test/*.png
 fetcher/node_modules/
 fetcher/out/
+voice-build-*.md
+voice-build-review.json

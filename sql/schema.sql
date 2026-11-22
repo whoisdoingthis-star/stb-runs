@@ -1270,3 +1270,25 @@ create table if not exists public.training_emails (
   primary key (email, update_id)
 );
 alter table public.training_emails enable row level security;
+
+-- ---- Voice builds: the queue (Mike, 23 Nov 2026; docs/decisions/0065-voice-builds.md) ----
+-- A change Mike asks for on a voice call is added here; a job on GitHub picks it up, builds, checks, reviews and
+-- publishes it, and writes back how it went. Only the server may add or change rows; dispatchers may read them.
+create table if not exists public.build_requests (
+  id           uuid primary key default gen_random_uuid(),
+  request      text not null check (char_length(request) between 10 and 6000),
+  requested_by text not null default 'Mike',
+  status       text not null default 'queued' check (status in ('queued', 'running', 'done', 'held', 'failed')),
+  created_at   timestamptz not null default now(),
+  started_at   timestamptz,
+  finished_at  timestamptz,
+  summary      text,          -- what was built, or why not, in words to read out
+  held_reason  text,          -- why it was held or failed
+  commit_sha   text,          -- the published commit, when it was published
+  branch       text,          -- where held work was kept
+  run_url      text           -- the job on GitHub
+);
+comment on table public.build_requests is 'Voice builds queue (decision 0065). To ask for a build: insert into build_requests (request) values (''what Mike asked for, in his words, with enough context to build from''). Read status, summary and held_reason to report back. Never add a request that changes live records or spends money: those need Mike in the chat.';
+alter table public.build_requests enable row level security;
+drop policy if exists build_requests_read on public.build_requests;
+create policy build_requests_read on public.build_requests for select to authenticated using (public.is_dispatcher());
