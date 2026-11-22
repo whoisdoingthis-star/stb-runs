@@ -76,6 +76,9 @@ Open a run's **Map**. If the run has been measured, an **orange line** shows the
 ### Kilometres per run (on Insights)
 Under the headline numbers. For the dates chosen it shows each run's kilometres: the middle morning, and the shortest and longest. A **~** means a rough figure. Press **Work out … along the roads** to have the map measure the runs that haven't been done yet; it takes several minutes for a month, so leave the page open. Watch the middle morning when the order of a run is changed: if the new order really is shorter, it comes down.
 
+## Stan's report card
+**Insights → Stan's report card** shows whether Stan is good enough at predicting how long a morning takes to be trusted with suggesting a quicker order. Each run-morning in the dates you chose is predicted from the *other* days and compared with what it took. **Typical miss** is the headline (the target is 5%); the table gives a line per run, and **Every morning tested** shows each one. Until it says *Good enough*, Stan suggests no change of order ([decision 0066](decisions/0066-predictor-report-card.md)).
+
 ## Day plan
 For when you know who is working tomorrow (or today).
 1. Pick the **delivery day**. Its run sheets need to be loaded (they arrive from RouteSmart after 7pm).

@@ -862,6 +862,35 @@ export async function viewDispatch(ctx, tab = 'overview') {
       }
       INS.kmBusy = null; paint();
     };
+    // Stan's report card (decisions 0064, 0066): how well the time model predicts past mornings from the other days.
+    // Worked out here from the ticks already loaded; the headline is kept in settings so progress can be followed.
+    const predictorBlock = () => {
+      if (!INS.rows) return null;
+      if (INS.pred?.rows === INS.rows) return INS.pred.box;   // worked out once per load, not on every redraw
+      const box = h('div', { class: 'dz-card predictor' }, h('h3', null, 'Stan’s report card'), h('p', { class: 'muted' }, 'Working it out…'));
+      Promise.all([import('./timemodel.js'), import('./village.js')]).then(([tm, vg]) => {
+        const r = tm.reportCard(runMornings(INS.rows.runs, INS.rows.ticks, D.deadlines || DEFAULT_DEADLINES), { skip: (route) => !!vg.layoutFor(route) });
+        const run = (route) => `Run ${+(/(\d+)$/.exec(route)?.[1] || 0) || route}`;
+        if (!r.n) { box.replaceChildren(h('h3', null, 'Stan’s report card'), h('p', { class: 'muted' }, 'Not enough ticked mornings in these dates to test Stan’s time predictions.')); return; }
+        box.replaceChildren(
+          h('h3', null, 'Stan’s report card'),
+          h('p', null, 'Before Stan suggests a quicker order, he has to show he can predict how long a morning takes. Each run-morning in these dates is predicted from the ', h('b', null, 'other'), ' days and compared with what it really took.'),
+          h('div', { class: 'ins-sum' },
+            h('div', null, h('b', null, r.n), ' run-mornings tested'),
+            h('div', { class: r.pass ? '' : 'act' }, h('b', null, `${r.typicalMissPct}%`), ` typical miss (target ${tm.TARGET_PCT}%)`),
+            h('div', null, h('b', null, `${r.within5}%`), ' within 5%'), h('div', null, h('b', null, `${r.within10}%`), ' within 10%'), h('div', null, h('b', null, `${r.within20}%`), ' within 20%')),
+          h('p', { class: r.pass ? 'ok-text' : 'warn-text', style: 'font-weight:700' }, r.pass ? 'Good enough: Stan’s predictions can be trusted for comparing orders.' : `Not good enough yet${r.n < tm.MIN_MORNINGS ? ` (needs at least ${tm.MIN_MORNINGS} mornings)` : ''}. Stan is not suggesting any change of order.`),
+          h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' }, h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Mornings'), h('th', null, 'Typical miss'))),
+            h('tbody', null, r.byRun.map((b) => h('tr', null, h('td', null, h('b', null, run(b.route))), h('td', null, String(b.n)), h('td', null, `${b.typicalMissPct}%`)))))),
+          h('details', null, h('summary', null, 'Every morning tested'), h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' }, h('thead', null, h('tr', null, h('th', null, 'Day'), h('th', null, 'Run'), h('th', null, 'Crew'), h('th', null, 'Took'), h('th', null, 'Predicted'), h('th', null, 'Out by'), h('th', null, 'Legs seen before'))),
+            h('tbody', null, r.rows.map((x) => h('tr', null, h('td', null, x.date.slice(5)), h('td', null, run(x.route)), h('td', null, x.kind), h('td', null, `${x.actualMin} min`), h('td', null, `${x.predictedMin} min`), h('td', null, `${x.errPct > 0 ? '+' : ''}${x.errPct}%`), h('td', null, `${x.coverage}%`))))))),
+          h('p', { class: 'small muted' }, 'A leg is the time from one tick to the next in the same car. Its cost is what it usually took on other mornings, or its distance if it hasn’t been driven that way; the total is scaled by how that crew usually compares. Run 8 is left out: its order is fixed by the buildings.'));
+        const head = { at: new Date().toISOString(), from: INS.from, to: INS.to, n: r.n, typicalMissPct: r.typicalMissPct, biasPct: r.biasPct, within5: r.within5, within10: r.within10, within20: r.within20, byRun: r.byRun, pass: r.pass };
+        app.store.setSetting('predictor_report', head, by()).catch(() => {});
+      }).catch((e) => box.replaceChildren(h('h3', null, 'Stan’s report card'), h('p', { class: 'bad' }, `Couldn’t work it out: ${e.message}`)));
+      INS.pred = { rows: INS.rows, box };
+      return box;
+    };
     const kmBlock = () => {
       if (!INS.rows || !INS.km) return null;
       const med = (xs) => { const v = [...xs].sort((a, b) => a - b); const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
@@ -921,6 +950,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         INS.error ? h('p', { class: 'bad' }, `Couldn’t work it out: ${INS.error}`) : null,
         !I ? null : banner(I),
         !I ? null : kmBlock(),
+        !I ? null : predictorBlock(),
         !I ? null : h('div', { class: 'ins-sum' }, h('div', null, h('b', null, I.days), ` delivery day${I.days === 1 ? '' : 's'}`), h('div', null, h('b', null, I.delivered.toLocaleString('en-NZ')), ' deliveries'),
           h('div', { class: 'act' }, h('b', null, I.counts.act), ' to do something about'), h('div', { class: 'watch' }, h('b', null, I.counts.watch), ' to keep an eye on'), h('div', { class: 'good' }, h('b', null, I.counts.good), ' working well')),
         I?.early ? h('p', { class: 'ins-early' }, h('b', null, 'Early findings. '), `There are ${I.days} delivery days in these dates. Patterns firm up after about ${EARLY_DAYS}; until then treat these as pointers, not verdicts.`) : null,

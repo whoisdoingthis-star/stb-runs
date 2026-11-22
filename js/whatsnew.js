@@ -14,6 +14,10 @@
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-23-report-card', date: '2026-11-23', for: ['dispatcher'], title: 'Stan’s report card, on Insights',
+    what: 'Insights now shows how well Stan can predict how long a morning takes: his typical miss, and how many mornings he got within 5, 10 and 20 per cent. He isn’t good enough yet, so he isn’t suggesting any change to the order of runs or stops.',
+    why: 'Stan has to prove he understands your mornings before he’s allowed to change them.',
+    say: "There's a report card for me on insights. It shows how well I can predict how long a morning takes. I'm not good enough yet. So I'm not suggesting any change to your order. I have to prove I understand your mornings before I change them." },
   { id: '2026-11-23-school', date: '2026-11-23', for: ['all'], title: 'Stan’s School and Sandbox Stan',
     what: 'There’s now a training site: ⚙ Settings → Stan’s School. Stan walks you through the app, course by course, and Sandbox Stan lets you practise on made-up runs. New changes also come by email at the end of the day. A new driver does the driver course and practice before their first run as a driver.',
     why: 'Videos go out of date the day the app changes. These are built from the app itself, so they’re always current.',

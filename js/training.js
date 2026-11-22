@@ -65,7 +65,7 @@ export const COURSES = {
       { id: 'hello', title: 'Hello, dispatcher', what: 'The dispatch board is where the morning is watched and the record is kept straight: runs, complaints, addresses, people and Stan’s voice.',
         why: 'Drivers make the record; dispatch makes sure it’s complete and answers questions about it.',
         say: "Hello, dispatcher. The dispatch board is where we watch the morning and keep the record straight. Runs, complaints, addresses, people, and my voice. Here's what's on it." },
-      '2026-11-21-dispatch-phone', '2026-11-13-dispatch-tools', '2026-11-17-insights',
+      '2026-11-21-dispatch-phone', '2026-11-13-dispatch-tools', '2026-11-17-insights', '2026-11-23-report-card',
       { id: 'close-run', title: 'Closing a run someone else did', what: 'On Runs & sheets, Close run… records who delivered a run outside the app, when it finished, and whether it was on the paper sheet. The drivers leave those stops unticked.',
         why: 'The record has to name whoever was really at the letterbox.',
         say: "When someone outside the app delivers a run, close it on the dispatch board. Runs and sheets, then close run. Choose who did it and when it finished. The drivers leave those stops alone." },

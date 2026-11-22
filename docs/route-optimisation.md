@@ -69,6 +69,9 @@ In the app, in plain JavaScript: nothing to install, works without signal once t
 6. **Crews:** who takes which run when there is more than one car.
 7. **The learning loop:** each morning's prediction error feeds the model.
 
+## 5a. Where it stands (23 Nov 2026)
+Steps 1 to 3 are built. **The gate at step 3 is not met**: on 55 run-mornings from 9–23 Nov the model's typical miss was about 20%, against a target of 5% ([decision 0066](decisions/0066-predictor-report-card.md)). Most of the miss is day-to-day swing that has nothing to do with the order of stops. Steps 4 to 7 wait. The open question, for Mike: keep the gate as it is and wait for more data, or test the part an order can actually change (the driving between stops and between runs).
+
 ## 6. What we don't know yet
 - **Solo mornings.** Who was in the car has only been recorded since 19 Nov, and no morning since has been logged as solo. The solo model starts from one-ticker mornings and is weak until real ones exist.
 - **Which side of the road.** Tick positions say where, not which side or which way the car faced. A reversed stretch may cost U-turns the model can't see until it has been driven that way.

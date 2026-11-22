@@ -1077,3 +1077,6 @@ html.big .home-mini { grid-template-columns: 1fr; }
 .upd-cell.warn-text { font-weight: 700; }
 .news-read { margin-top: 12px; width: 100%; min-height: 48px; }
 .dz-check { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+
+/* Stan's report card on Insights (decision 0066) */
+.predictor h3 { margin: 0 0 6px; } .predictor details { margin-top: 10px; } .predictor .ok-text { color: var(--done-ink, var(--ink)); }
