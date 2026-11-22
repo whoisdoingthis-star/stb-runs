@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { tickPath, tickTracks, runDistance, lineKm, thin, chunks, routeKm, routeTrack, simplify, doubledBack, bestKm, clockKm, ROAD_FACTOR } from '../js/runkm.js';
+import { tickPath, tickTracks, runDistance, lineKm, thin, chunks, routeKm, routeTrack, simplify, doubledBack, bestKm, clockKm, ROAD_FACTOR, runHops, hopsTotal, HOP_MAX_MIN } from '../js/runkm.js';
 let failed = 0; const later = [];
 const t = (name, fn) => { const run = async () => { try { await fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } }; later.push(run); };
 const tick = (i, lat, lng, extra = {}) => ({ done: true, lat, lng, accuracy_m: 8, device_time: new Date(Date.parse('2026-11-20T15:00:00Z') + i * 30000).toISOString(), ...extra });
@@ -37,5 +37,12 @@ t('the figure shown is routed when every run has one, otherwise stretched from t
   assert.deepEqual(bestKm([{ line_km: 8, road_km: 10.44 }, { line_km: 5, road_km: null }]), { km: +(10.44 + 5 * ROAD_FACTOR).toFixed(1), routed: false, runs: 2 }); assert.equal(bestKm([]), null);
 });
 t('kilometres on the clock need two readings that make sense', () => { assert.equal(clockKm(84512, 84547), 35); assert.equal(clockKm(84512, null), null); assert.equal(clockKm(84547, 84512), null); assert.equal(clockKm(100, 84512), null); });
+// ---- hops between runs ----
+const T0 = Date.parse('2026-11-22T15:00:00Z'); const hk = (run, min, lat, lng, who = 'Mike') => ({ run_id: run, done: true, lat, lng, accuracy_m: 8, user_name: who, address_key: `${run}@${min}`, device_time: new Date(T0 + min * 60000).toISOString() });
+const morning = [hk('r6', 0, -36.900, 174.930), hk('r6', 50, -36.905, 174.935), hk('r10', 54, -36.915, 174.935), hk('r10', 70, -36.916, 174.936), hk('r8', 80, -36.917, 174.937), hk('r8', 95, -36.917, 174.938), hk('r10', 110, -36.918, 174.939), hk('r11', 116, -36.920, 174.940), hk('r11', 130, -36.921, 174.941)];
+t('a hop is from the last tick of one run to the first tick of the next, with its time and straight-line distance', () => { const h = runHops(morning); assert.deepEqual(h.map((x) => `${x.from_run}>${x.to_run}`), ['r6>r10', 'r10>r11']); assert.equal(h[0].seconds, 240); assert.ok(h[0].line_m > 1050 && h[0].line_m < 1150); assert.equal(h[0].from.address_key, 'r6@50'); assert.equal(h[0].to.address_key, 'r10@54'); });
+t('a run done inside another has no hop of its own', () => assert.ok(!runHops(morning).some((x) => x.from_run === 'r8' || x.to_run === 'r8')));
+t('only the crew’s ticks count, a long gap isn’t a hop, and two cars on overlapping runs make none', () => { assert.equal(runHops([...morning, hk('r13', 20, -36.95, 174.95, 'Lisa'), hk('r13', 60, -36.96, 174.96, 'Lisa')], ['Mike']).length, 2); assert.equal(runHops([hk('a', 0, -36.9, 174.9), hk('b', HOP_MAX_MIN + 1, -36.91, 174.9)]).length, 0); assert.equal(runHops([hk('a', 0, -36.9, 174.9), hk('a', 30, -36.9, 174.91), hk('b', 20, -36.95, 174.9), hk('b', 40, -36.95, 174.91)]).length, 0); });
+t('the hops’ total is minutes between runs and kilometres along the roads, or a rough figure when the map can’t be reached', async () => { const road = await hopsTotal(runHops(morning), async () => ({ metres: 1500 })); assert.deepEqual(road, { n: 2, minutes: 10, km: 3, routed: true }); const rough = await hopsTotal(runHops(morning), async () => { throw new Error('offline'); }); assert.equal(rough.routed, false); assert.ok(rough.km > 1.5 && rough.km < 2.2); assert.equal(await hopsTotal([], null), null); });
 for (const run of later) await run();
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

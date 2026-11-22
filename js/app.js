@@ -657,7 +657,9 @@ async function shiftDistance(sum, ticks) {
     have.set(id, row); app.store.saveRunKm(row).catch(() => {});
   }
   const odo = sp.odometerDay(await app.store.loadSpares().catch(() => []), sum.date, sum.driver);
-  return { runs: k.bestKm(sum.runIds.map((id) => have.get(id)).filter(Boolean)), clock: k.clockKm(odo.start, odo.end) };
+  // The drives between runs (decision 0064): timed from the ticks, and measured along the roads when the map can be reached.
+  let between = null; try { between = await k.hopsTotal(k.runHops(ticks.filter((t) => sum.runIds.includes(t.run_id)), sum.crew?.length ? sum.crew : null), (pts) => app.store.routeThrough(pts)); } catch { between = null; }
+  return { runs: k.bestKm(sum.runIds.map((id) => have.get(id)).filter(Boolean)), clock: k.clockKm(odo.start, odo.end), between };
 }
 const nzDayOf = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date(iso));
 async function openSummary(sum) {
@@ -681,8 +683,9 @@ async function openSummary(sum) {
       h('div', null, h('span', null, 'Stops'), h('b', null, String(sum.shift.stops))),
       sum.shift.papers ? h('div', null, h('span', null, 'Papers'), h('b', null, String(sum.shift.papers))) : null,
       sum.distance?.runs ? h('div', null, h('span', null, sum.distance.runs.routed ? 'Km on the runs' : 'Km on the runs (roughly)'), h('b', null, `${sum.distance.runs.routed ? '' : '~'}${sum.distance.runs.km}`)) : null,
+      sum.distance?.between ? h('div', { class: 'sum-between' }, h('span', null, 'Between runs'), h('b', null, `${sum.distance.between.minutes} min · ${sum.distance.between.routed ? '' : '~'}${sum.distance.between.km} km`)) : null,
       sum.distance?.clock ? h('div', null, h('span', null, 'Km on the clock'), h('b', null, String(sum.distance.clock))) : null),
-    sum.distance?.runs || sum.distance?.clock ? h('p', { class: 'small muted', style: 'margin:6px 0 0' }, [sum.distance.runs ? `On the runs is worked out from where the ticks were made${sum.distance.runs.routed ? ', along the roads' : ' (the map wasn’t reachable, so it’s a rough figure)'}.` : null, sum.distance.clock ? 'On the clock is your odometer, from leaving the depot to going off duty.' : null].filter(Boolean).join(' ')) : null,
+    sum.distance?.runs || sum.distance?.clock || sum.distance?.between ? h('p', { class: 'small muted', style: 'margin:6px 0 0' }, [sum.distance.runs ? `On the runs is worked out from where the ticks were made${sum.distance.runs.routed ? ', along the roads' : ' (the map wasn’t reachable, so it’s a rough figure)'}.` : null, sum.distance.between ? 'Between runs is the driving from the last stop of one run to the first stop of the next.' : null, sum.distance.clock ? 'On the clock is your odometer, from leaving the depot to going off duty.' : null].filter(Boolean).join(' ')) : null,
     h('div', { class: 'stan-card-h', style: 'margin-top:14px' }, 'Pace'),
     h('p', { class: `sum-pace ${sum.pace.word}` }, paceText(sum.pace, sum.inherited ? `${sum.driver}’s` : 'your')),
     graph,

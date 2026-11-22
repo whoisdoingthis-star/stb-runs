@@ -16,6 +16,7 @@
 | [Setup](setup.md) | Building it from nothing, and local development |
 | [Runbook](runbook.md) | Fixing problems and routine jobs |
 | [Decisions](decisions/README.md) | Why things are the way they are |
+| [Route optimisation](route-optimisation.md) | What kind of routing problem ours is, what the research says, and how Stan will solve it |
 | [Lessons](lessons.md) | What went wrong, what let it through, and what changed so it can't again |
 
 How these pages are kept current: [CONTRIBUTING](../CONTRIBUTING.md).

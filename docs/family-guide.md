@@ -100,6 +100,9 @@ When you go off duty, Stan shows you how the morning went (if you forget, he sho
 
 Tap **Done**. The **📈 Your morning** button on the Runs page shows it again that day.
 
+### Between runs
+The **Your morning** card has a line **Between runs**, like *14 min · 3.2 km*: the driving from the last stop of one run to the first stop of the next. Stan is learning from it how to line the runs up so there's less of it.
+
 ### Clean mornings
 At the bottom of the **Your morning** card is a count: **clean mornings in a row**.
 

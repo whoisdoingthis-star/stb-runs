@@ -225,6 +225,12 @@ Rules attached to exactly one group, operating location, service location or add
 - There must always be at least one active dispatcher. Switching someone off locks them out immediately; their history stays.
 - New people get a temporary password from a dispatcher, in person, and can change it in the app.
 
+## Optimising the order of runs and stops (Mike, 22 Nov 2026)
+- Stan optimises for **time**, for the **runs the driver has selected**, taking into account who is driving, helpers and the number of drivers, and checks himself against the ticks.
+- The drive between two runs is never the leading measure: a run must not be made longer to shorten it.
+- Plan on about 45 minutes of depot prep for a single driver.
+- [Decision 0064](decisions/0064-optimisation-approach.md).
+
 ## Runs done by someone outside the app (Mike, 22 Nov 2026)
 A run delivered by someone who doesn't use the app (Gagan does Run 8 on Saturdays and Sundays) is **not ticked** by anyone else. A dispatcher closes it from the dispatch board with the name of the person who did it. A tick means "I put this paper in this box".
 

@@ -12,6 +12,10 @@
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-23-between-runs', date: '2026-11-23', for: ['driver', 'helper'], title: 'Between runs, on Your morning',
+    what: 'Your morning card now shows Between runs: the minutes and kilometres spent driving from the last stop of one run to the first stop of the next.',
+    why: 'It’s the first thing Stan is measuring so he can work out the quickest order for your runs. Time is what he’ll go by, not distance.',
+    say: "Your morning card has a new line. Between runs. It's the minutes and kilometres spent driving from the last stop of one run to the first stop of the next. I'm measuring it so I can learn the quickest order for your runs." },
   { id: '2026-11-22-whatsnew', date: '2026-11-22', for: ['all'], title: 'Stan tells you what’s new',
     what: 'When something in the app changes, Stan shows you a short card like this one the next time you open it: what changed, and why. Tap 🔊 and Stan reads it to you. You can go through them again any time from ⚙ Settings → What’s new.',
     why: 'So nobody has to find out about a change by accident, or from someone else.',

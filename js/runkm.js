@@ -133,3 +133,42 @@ export function clockKm(start, end) {
   const d = end - start;
   return d > 0 && d < 600 ? d : null;
 }
+
+// ---- The drives between runs (decision 0064): the first measured piece of what a morning's order costs ----
+export const HOP_MAX_MIN = 45;     // longer than this between two runs and it wasn't one drive (a break, back to the depot, another day)
+/**
+ * A crew's hops: from the last tick of one run to the first tick of the next, in the order the runs were done.
+ * A run done inside another (its ticks fall between the other's first and last) has no hop of its own.
+ * ticks: delivered ticks for the morning, any runs. who: only these people's ticks (the crew), or everyone's.
+ * Returns [{ from_run, to_run, from: { lat, lng, address_key }, to: {…}, seconds, line_m }].
+ */
+export function runHops(ticks = [], who = null) {
+  const mine = ticks.filter((t) => t.done && t.lat != null && (t.accuracy_m ?? 0) <= 50 && (!who || who.includes(t.user_name)));
+  const byRun = new Map();
+  for (const t of mine) { const at = Date.parse(t.device_time); const r = byRun.get(t.run_id) || { run_id: t.run_id, first: null, last: null };
+    if (!r.first || at < r.first.at) r.first = { at, lat: t.lat, lng: t.lng, address_key: t.address_key };
+    if (!r.last || at > r.last.at) r.last = { at, lat: t.lat, lng: t.lng, address_key: t.address_key };
+    byRun.set(t.run_id, r); }
+  const runs = [...byRun.values()].sort((a, b) => a.first.at - b.first.at);
+  const outer = runs.filter((r) => !runs.some((o) => o !== r && o.first.at < r.first.at && o.last.at > r.last.at));   // drop runs nested inside another
+  const hops = [];
+  for (let i = 1; i < outer.length; i++) {
+    const a = outer[i - 1]; const b = outer[i]; const seconds = Math.round((b.first.at - a.last.at) / 1000);
+    if (seconds <= 0 || seconds > HOP_MAX_MIN * 60) continue;   // overlapping runs (two cars) or not one drive
+    const pt = ({ lat, lng, address_key }) => ({ lat, lng, address_key });
+    hops.push({ from_run: a.run_id, to_run: b.run_id, from: pt(a.last), to: pt(b.first), seconds, line_m: Math.round(metres(a.last, b.first)) });
+  }
+  return hops;
+}
+/** The hops' total: minutes driven between runs, and kilometres along the roads where the map can be reached (else straight lines × ROAD_FACTOR). */
+export async function hopsTotal(hops = [], through) {
+  if (!hops.length) return null;
+  let m = 0; let routed = true;
+  for (const hp of hops) {
+    let road = null;
+    try { const r = through ? await through([[hp.from.lng, hp.from.lat], [hp.to.lng, hp.to.lat]]) : null; if (r && Number.isFinite(r.metres)) road = r.metres; } catch { road = null; }
+    if (road == null) { routed = false; road = hp.line_m * ROAD_FACTOR; }
+    hp.road_m = Math.round(road); m += road;
+  }
+  return { n: hops.length, minutes: Math.round(hops.reduce((s, hp) => s + hp.seconds, 0) / 60), km: +(m / 1000).toFixed(1), routed };
+}
