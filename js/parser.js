@@ -367,7 +367,7 @@ function splitKeyAddress(address, streets) {
   return m ? { number: m[1], street: m[2] } : { number: '', street: up };
 }
 
-function finishRoute(r, kr) {
+function finishRoute(r, kr, same = null) {
   delete r._state;
   const checks = [];
   const warnings = [];
@@ -380,14 +380,17 @@ function finishRoute(r, kr) {
   const byAddress = new Map();
   const kept = [];
   for (const ln of r.lines) {
-    ln.addressKey = addressKey(r.route, ln.street, ln.number);
+    const ownKey = addressKey(r.route, ln.street, ln.number);
+    // The same letterbox keyed two ways on the sheet, once a dispatcher has said so (decision 0068): one tile, under the plainer key.
+    const into = same?.[ownKey]?.into; ln.addressKey = into || ownKey;
     const src = { seq: ln.seq, page: ln.page, pub: ln.pub, qty: ln.qty, raw: ln.raw, ...(ln.note ? { note: ln.note } : {}) };
     let tile = byAddress.get(ln.addressKey);
     if (!tile) {
-      tile = { ...ln, parts: [], sources: [], note: '' };
+      tile = { ...ln, parts: [], sources: [], note: '', also: [], viaTwin: !!into };
       byAddress.set(ln.addressKey, tile);
       kept.push(tile);
     }
+    if (into) { if (!tile.also.includes(ln.number)) tile.also.push(ln.number); } else if (tile.viaTwin) { tile.number = ln.number; tile.viaTwin = false; }   // the tile carries the plainer number, wherever it comes on the sheet
     tile.sources.push(src);
     let part = tile.parts.find((pt) => pt.pub === ln.pub);
     if (!part) { part = { pub: ln.pub, qty: 0, lines: 0 }; tile.parts.push(part); }
@@ -416,6 +419,8 @@ function finishRoute(r, kr) {
   for (const ln of r.lines) {
     ln.lineKey = ln.addressKey;
     ln.flags = ln.unrouted ? [{ type: 'unrouted', text: 'Not routed: listed separately on the sheet, not in the delivery sequence' }] : [];
+    for (const a of ln.also || []) { ln.flags.push({ type: 'combined', text: `Also on the sheet as ${a.replace(/\s+/g, '')}: the same letterbox, shown as one tile` }); warnings.push(`${ln.number} ${ln.street}: also listed as ${a}, shown as one tile.`); }
+    delete ln.also; delete ln.viaTwin;
     for (const pt of ln.parts) {
       if (pt.lines < 2) continue;
       const adds = ln.sources.filter((x) => x.pub === pt.pub).map((x) => x.qty).join(' + ');
@@ -504,7 +509,8 @@ function finishRoute(r, kr) {
 }
 
 /** Parse all pages of one or more reports. Returns one entry per route. */
-export function parseReport(pages) {
+/** `same`: { address_key: { into: address_key } } for letterboxes a dispatcher has said are one (setting `address_same`). */
+export function parseReport(pages, { same = null } = {}) {
   const out = { routes: {}, keyReports: {}, problems: [] };
   let lastRoute = null;
   for (const page of pages) {
@@ -518,7 +524,7 @@ export function parseReport(pages) {
     else if (lastRoute && (has('Total Draw:') || has('TOTAL BY SERVICE:'))) parseTotalsOnlyPage(page, lastRoute);
     else out.problems.push(`Page ${page.number}: not a key report or delivery list, skipped`);
   }
-  const routes = Object.values(out.routes).map((r) => finishRoute(r, out.keyReports[r.route]));
+  const routes = Object.values(out.routes).map((r) => finishRoute(r, out.keyReports[r.route], same));
   for (const k of Object.keys(out.keyReports)) {
     if (!out.routes[k]) out.problems.push(`Key report for ${k} has no delivery list pages.`);
   }

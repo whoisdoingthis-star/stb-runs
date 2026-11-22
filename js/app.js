@@ -11,7 +11,7 @@ import { isRetailPub, basePub } from './parser.js';
 import { sha256Hex, runComplete, rebundle } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound, chimes } from './splash.js';
-import { findStrays, findSwaps } from './strays.js';
+import { findStrays, findSwaps, findTwins } from './strays.js';
 import { createStanWalk, walkOn, setWalk } from './stanwalk.js';
 import { playSfx, unlockSfx, sfxOn, setSfx, nextTickStep, canDuck, musicMode, setMusicMode, holdMusic } from './sfx.js';
 import { stan, stanState, stanTalk, stanOn, setStan, stanSays, stbLogo } from './stan.js';
@@ -1477,7 +1477,7 @@ async function loadFiles(files) {
       const bytes = new Uint8Array(await f.arrayBuffer());
       const hash = await sha256Hex(bytes.slice()).catch(() => null);
       const pages = await extractPages(lib, bytes);
-      const res = parseReport(pages);
+      const res = parseReport(pages, { same: await app.store.getSetting('address_same').catch(() => null) });
       res.routes.forEach((r) => { r.sourceHash = hash; });
       problems.push(...res.problems.map((p) => `${f.name}: ${p}`));
       for (const r of res.routes) results.push({ r, filename: f.name });
@@ -1616,7 +1616,10 @@ async function viewRun(ids) {
   app.store.loadDestinations([...new Set(data.flatMap((d) => d.lines.map((l) => l.address_key)))]).then((d) => { S.dest = d || {}; }).catch(() => {});
   for (const r of new Set(data.map((d) => d.run.route))) if (layoutFor(r)) S.codes[r] = await app.store.loadAccessCodes(r);
   const hasCustom = (d) => !!S.seq[d.run.route]?.keys?.length;
-  const orderedLines = (d) => (S.useCustom ? applySequence(d.lines, S.seq[d.run.route]?.keys) : d.lines);
+  // My own order doesn't know an address? It goes where the usual order has it (lesson L-013).
+  const usualKeys = (route) => (S.seq[route]?.mine ? app.store.sharedSequence?.(route)?.keys || null : null);
+  const orderedLines = (d) => (S.useCustom ? applySequence(d.lines, S.seq[d.run.route]?.keys, usualKeys(d.run.route)) : d.lines);
+  let same = {}; app.store.getSetting('address_same').then((v) => { same = v || {}; }).catch(() => {});
   const status = () => statusFrom(S.events);
   const label = data.map((d) => d.run.route).join(' + ');
   const date = data[0].run.delivery_date;
@@ -1650,7 +1653,8 @@ async function viewRun(ids) {
     for (const d of visibleData()) {
       if (layoutFor(d.run.route) || started(d)) continue;      // the village has its own fixed order; and once a run is under way Stan keeps quiet
       const route = d.run.route; const lines = orderedLines(d); const name = (k) => { const l = d.lines.find((x) => x.address_key === k); return l ? addrText(l) : k; };
-      for (const sx of findStrays(lines)) {
+      const placed = S.useCustom && S.seq[route]?.keys ? new Set(S.seq[route].keys) : null;
+      for (const sx of findStrays(lines, { unplaced: placed ? new Set(lines.filter((l) => !placed.has(l.address_key)).map((l) => l.address_key)) : null })) {
         const sig = `stray|${route}|${sx.key}|${sx.anchorKey}`; if (seen.has(sig)) continue;
         cards.push(h('div', { class: 'check-card' }, stanOn() ? stan({ pose: 'point', size: 40 }) : null, h('div', { class: 'check-body' },
           h('div', { class: 'check-say' }, `${name(sx.key)} is ${sx.gap} stops away from the rest of ${titleCase(sx.street)}. Put it ${sx.after ? 'after' : 'before'} ${name(sx.anchorKey)}?`),
@@ -1658,6 +1662,15 @@ async function viewRun(ids) {
             h('button', { class: 'btn small primary', onclick: () => { const before = S.seq[route] || null; const current = orderedLines(d).map((l) => l.address_key); const next = moveKeys(current, [sx.key], sx.anchorKey, sx.after); const merged = mergeOrder(before?.keys, next); const own = app.store.personalOrders || !!before?.mine;
               S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString(), mine: own }; S.useCustom = true; app.store.saveSequence(route, merged, app.me.name, { own }); render(); toast(`Moved ${name(sx.key)} next to ${name(sx.anchorKey)}${own ? ', in your own order' : ''}.`); } }, 'Move it'),
             h('button', { class: 'btn small', onclick: () => leave(sig) }, 'Leave it')))));
+      }
+      if (isBoss()) for (const tw of findTwins(d.lines)) {
+        const sig = `twin|${tw.key}|${tw.intoKey}`; if (seen.has(sig) || same[tw.key]) continue;
+        const a = fmtNumber(tw.intoNumber); const b = String(tw.number).replace(/\s+/g, '');
+        cards.push(h('div', { class: 'check-card' }, stanOn() ? stan({ pose: 'point', size: 40 }) : null, h('div', { class: 'check-body' },
+          h('div', { class: 'check-say' }, `${name(tw.intoKey)} is on the sheet twice: once as ${String(tw.intoNumber).replace(/\s+/g, '')} and once as ${b}. Is that one letterbox? If so, from the next sheet I’ll show one tile with both papers.`),
+          h('div', { class: 'check-acts' },
+            h('button', { class: 'btn small primary', onclick: async () => { try { const all = { ...((await app.store.getSetting('address_same')) || {}), [tw.key]: { into: tw.intoKey, by: app.me.name, at: new Date().toISOString() } }; await app.store.setSetting('address_same', all, app.me.name); same = all; drawCheck(); toast(`From the next sheet, ${a.main} ${titleCase(tw.street)}, ${a.sub} is one tile.`); } catch { toast('Couldn’t save that just now. Try again when there’s signal.'); } } }, 'Yes, one tile'),
+            h('button', { class: 'btn small', onclick: () => leave(sig) }, 'No, keep both')))));
       }
       if (isBoss()) for (const sw of findSwaps(d.lines)) {
         const sig = `swap|${sw.key}`; if (seen.has(sig) || labels[sw.key]) continue;
@@ -2213,7 +2226,7 @@ async function viewRun(ids) {
     const lines = d.lines.map((l) => ({ ...l, route: d.run.route }));
     if (layout) return { fixed: true, ...arrange(layout, lines) };
     const groups = [];
-    for (const l of applySequence(lines, S.useCustom ? S.seq[d.run.route]?.keys : null)) {
+    for (const l of applySequence(lines, S.useCustom ? S.seq[d.run.route]?.keys : null, S.useCustom ? usualKeys(d.run.route) : null)) {
       const last = groups[groups.length - 1];
       if (last && last.street === l.street) last.lines.push(l); else groups.push({ type: 'street', street: l.street, lines: [l] });
     }
@@ -2513,6 +2526,11 @@ async function viewRun(ids) {
           if (!confirm(`Make your order the usual order for ${runs.map((d) => shortRoute(d.run.route)).join(', ')}?\n\nEveryone who hasn’t made their own order will see it from their next run. People with their own order keep theirs.`)) return;
           try { for (const d of runs) await app.store.makeUsualOrder(d.run.route, S.seq[d.run.route].keys, app.me.name); toast('Done. Your order is now the usual one. Yours stays as it is.'); } catch { toast('Couldn’t save that just now. Try again when there’s signal.'); }
         }, { hint: 'For everyone who hasn’t made their own' }) : null,
+        Object.values(same).some((v) => visibleData().some((d) => d.lines.some((l) => l.address_key === v.into))) && isBoss() ? menuItem('Split a combined letterbox…', () => {
+          close();
+          const pairs = Object.entries(same).filter(([, v]) => visibleData().some((d) => d.lines.some((l) => l.address_key === v.into)));
+          const shut = openSheet('Combined letterboxes', h('p', { class: 'small muted' }, 'These two sheet addresses are shown as one tile. Tap one to show them separately again, from the next sheet.'), h('div', { class: 'menu-group' }, pairs.map(([k, v]) => menuItem(`${k.split('|').slice(1).reverse().join(' ')} → ${v.into.split('|')[2]}`, async () => { try { const all = { ...((await app.store.getSetting('address_same')) || {}) }; delete all[k]; await app.store.setSetting('address_same', all, app.me.name); same = all; shut(); toast('Two tiles again, from the next sheet.'); } catch { toast('Couldn’t save that just now.'); } }))));
+        }) : null,
         Object.keys(labels).some((k) => visibleData().some((d) => d.lines.some((l) => l.address_key === k && l.sheetNumber))) && isBoss() ? menuItem('Undo an address correction…', () => {
           close();
           const fixed = visibleData().flatMap((d) => d.lines.filter((l) => l.sheetNumber));

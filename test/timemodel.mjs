@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { carTracks, legsOf, homes, learn, legCost, reportCard, LEG_CAP_S, TARGET_PCT } from '../js/timemodel.js';
+import { carTracks, legsOf, homes, learn, legCost, reportCard, stopTimes, LEG_CAP_S, TARGET_PCT } from '../js/timemodel.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 const T0 = Date.parse('2026-11-09T14:00:00Z');
@@ -36,4 +36,13 @@ t('drives that swing from day to day fail the gate; a street with no drives is n
   assert.equal(r.pass, false); assert.ok(r.drive.typicalMissPct > TARGET_PCT); assert.equal(reportCard(steadyDays).drive.n, 0); assert.equal(reportCard(steadyDays).pass, false);
 });
 t('too few mornings never pass, and runs marked to skip or ticked in one go are left out', () => { assert.equal(reportCard(steadyDays.slice(0, 5)).pass, false); assert.equal(reportCard(steadyDays, { skip: () => true }).n, 0); assert.equal(reportCard(steadyDays.map((m) => ({ ...m, bulk: true }))).n, 0); });
+// Time at stops: the same legs, two drivers each alone. Lisa takes 6 s longer per leg on the first ten stops (street A), the same elsewhere.
+const two = (lisaExtra) => [...[0, 2, 4].map((d) => morning(d, 'Mike', steady)), ...[1, 3].map((d) => morning(d, 'Lisa', (i) => steady(i + 1) + lisaExtra(i), { order: [...Array(30).keys()].reverse() }))].map((m) => { m.list.forEach((x) => { const i = +x.address_key.split('|')[1]; x.address_key = `H|${i < 10 ? 'A STREET' : 'B ROAD'}|${i}`; }); return m; });
+t('time between stops is compared on the legs both have driven, whichever way round, street by street', () => {
+  const r = stopTimes(two((i) => (i <= 9 ? 6 : 0))); assert.equal(r.length, 1); const x = r[0]; assert.equal(x.a, 'Lisa'); assert.equal(x.b, 'Mike'); assert.equal(x.aMornings, 2); assert.equal(x.legs, 29);
+  assert.equal(x.streets[0].street, 'A STREET'); assert.equal(x.streets[0].diff, -60); assert.equal(x.streets.find((s) => s.street === 'B ROAD').diff, 0); assert.equal(x.aMin - x.bMin, 1);
+});
+t('one morning alone is not enough to compare, a morning with a helper is left out, and nothing is said about a run only one person drives', () => {
+  assert.equal(stopTimes(two(() => 0).slice(0, 4)).length, 0); assert.equal(stopTimes(two(() => 0).map((m) => (m.drivers[0] === 'Lisa' ? { ...m, drivers: ['Lisa', 'Zaph'] } : m))).length, 0); assert.equal(stopTimes(steadyDays).length, 0);
+});
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

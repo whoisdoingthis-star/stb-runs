@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { findStrays, findSwaps, numOf } from '../js/strays.js';
+import { findStrays, findSwaps, findTwins, numOf } from '../js/strays.js';
 import { moveKeys } from '../js/sequence.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
@@ -17,4 +17,11 @@ t('where past ticks say the two places are far apart, it is not a stray whatever
 const cook = L('COOK STREET', '5/ 7', '2/ 5', 9, 13, 35, '2/ 34');
 t('a unit and number keyed the wrong way round is spotted from its neighbour', () => { const s = findSwaps(cook); assert.equal(s.length, 1); assert.equal(s[0].key, 'H|COOK STREET|5/7'); assert.equal(s[0].suggest, '7/ 5'); });
 t('no suggestion when that number is a real house on the street, or nobody else has a unit there', () => { assert.deepEqual(findSwaps(L('COOK STREET', '5/ 7', '2/ 5', 7)), []); assert.deepEqual(findSwaps(L('COOK STREET', '5/ 7', 5, 9)), []); assert.deepEqual(findSwaps(L('COOK STREET', '2/ 34', 35, 42)), []); });
+// Run 6, 23 Nov 2026: 26 Marine Parade back on the sheet, dropped in beside Luplau Crescent, the rest of Marine Parade (44 to 82) done earlier.
+const mp = [...L('MARINE PARADE', 44, 54, '52A', 62, 82), ...L('SELWYN ROAD', 22, 73, 88), ...L('MARINE PARADE', 26), ...L('LUPLAU CRESCENT', 27)];
+t('an address the order has never placed is raised even when its number is far from the block’s; one a person placed there is not', () => { assert.equal(findStrays(mp).length, 0); const s = findStrays(mp, { unplaced: new Set(['H|MARINE PARADE|26']) }); assert.equal(s.length, 1); assert.equal(s[0].anchorKey, 'H|MARINE PARADE|44'); assert.equal(s[0].after, false); });
+// Run 6, 22 Nov 2026: 12 Selwyn Road, "4c/ 12" (NZH) and "APT 4C/ 12" (SST): one letterbox, two tiles.
+t('the same letterbox keyed two ways is found, and the plainer one keeps the tile', () => { const tw = findTwins([...L('SELWYN ROAD', '2D/ 12', '3F/ 12', '4c/ 12', 'APT 4C/ 12'), ...L('CLYDESDALE AVENUE', 'FLAT 2/ 36', '2/ 36')]);
+  assert.equal(tw.length, 2); assert.equal(tw[0].intoNumber, '4c/ 12'); assert.equal(tw[0].number, 'APT 4C/ 12'); assert.equal(tw[1].intoNumber, '2/ 36'); });
+t('different units, different houses and plain house numbers are never twins', () => assert.equal(findTwins([...L('SELWYN ROAD', '2D/ 12', '3F/ 12', '4C/ 14', '4C/ 12', 12, '12'), ...L('OTHER ROAD', '4C/ 12')]).length, 0));
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

@@ -7,6 +7,9 @@ t('no custom order = sheet order', () => assert.equal(keys(applySequence(L('a', 
 t('custom order applied', () => assert.equal(keys(applySequence(L('a', 'b', 'c'), ['c', 'a', 'b'])), 'c,a,b'));
 t('new address stays after its sheet neighbour', () => assert.equal(keys(applySequence(L('a', 'n', 'b', 'c'), ['c', 'a', 'b'])), 'c,a,n,b'));
 t('new address at top of sheet goes first', () => assert.equal(keys(applySequence(L('n', 'a', 'b'), ['b', 'a'])), 'n,b,a'));
+// Run 6, 23 Nov 2026: 26 Marine Parade came back on the sheet; Mike's own order was made while it was away.
+t('an address missing from my own order goes where the usual order has it, not beside its sheet neighbour', () => assert.equal(keys(applySequence(L('x', 'n', 'a', 'b'), ['a', 'b', 'x'], ['a', 'n', 'b', 'x'])), 'a,n,b,x'));
+t('…and first, if the usual order has it before everything I know; new to both still follows the sheet', () => { assert.equal(keys(applySequence(L('a', 'n', 'b'), ['b', 'a'], ['n', 'a', 'b'])), 'n,b,a'); assert.equal(keys(applySequence(L('a', 'n', 'b'), ['b', 'a'], ['a', 'b'])), 'b,a,n'); });
 t('move one before', () => assert.deepEqual(moveKeys(['a', 'b', 'c', 'd'], ['d'], 'b', false), ['a', 'd', 'b', 'c']));
 t('move one after', () => assert.deepEqual(moveKeys(['a', 'b', 'c', 'd'], ['a'], 'c', true), ['b', 'c', 'a', 'd']));
 t('move block keeps inner order', () => assert.deepEqual(moveKeys(['a', 'b', 'c', 'd', 'e'], ['d', 'e'], 'a', false), ['d', 'e', 'a', 'b', 'c']));

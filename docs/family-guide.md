@@ -213,6 +213,12 @@ To move something a long way, keep holding it and drag it towards the **top or b
 **Everyone has their own order.** When you move tiles, Mike and Lisa included, it's saved as **your own order** for that run and used every time *you* open it. Nobody else's run changes. The switch under the header then says **↕ My order** / **📄 Sheet order**. **⋯ → Use the usual order again** drops your own order. The **usual order** is what you see until you move something; Mike or Lisa can make theirs the usual one with **⋯ → Make my order the usual order…**.
 
 **Stan's check.** When you open a run that hasn't been started, Stan may show a yellow card above the stops, for example *"3 Hartles Place is 5 stops away from the rest of Hartles Place. Put it before 7 Hartles Place?"* **Move it** puts it with its street (in your own order). **Leave it** and he won't ask about that one again. Once you tick a stop the cards go away.
+**An address that comes back.** If an address drops off the sheet for a few days and returns, it goes where the usual order has it, even if your own order was made while it was away. If it still looks out of place, Stan asks.
+
+**One letterbox, two tiles.** Sometimes the sheet lists the same letterbox twice with different wording (*Unit 4c* and *APT 4C*). Stan asks Mike or Lisa whether it is one letterbox. If they say yes, from the next sheet it is one tile with both papers on it.
+
+**What *New* means.** The orange *New* tag is the newspaper's word: the sheet says the subscription starts, or starts again, today. It doesn't mean we've never delivered there.
+
 Run 8 keeps its fixed building order and can't be rearranged.
 
 ## Run 8 (Bruce McLaren Village)

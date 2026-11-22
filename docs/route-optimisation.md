@@ -77,7 +77,7 @@ Steps 1 to 3 are built. **The gate at step 3 is not met**, on either test:
 
 The time between two ticks is the drive plus whatever happened at the letterbox, and the second part is what swings. Ticks can't prove a saving of a minute or two a run. Steps 4 to 7 wait. The choices for Mike:
 
-1. **Stop here** and put the effort where the minutes are: the pauses and the time at stops.
+1. **Stop here** and put the effort where the minutes are: the pauses and the time at stops. **Chosen by Mike, 23 Nov 2026**: see [decision 0069](decisions/0069-time-between-stops.md).
 2. **Runs level only, proved by trying it**: Stan shows the dispatcher the order of runs with the least driving by the map, the family tries it for a couple of weeks, and the before and after are compared. No learning from ticks is claimed.
 3. **Measure the driving itself**: record the car's position while a run is open, which changes the rule that nothing is recorded between ticks, so it needs Mike and the drivers to agree.
 

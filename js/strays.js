@@ -20,9 +20,11 @@ const metres = (a, b) => { const r = Math.PI / 180; const x = (b.lng - a.lng) * 
 /**
  * lines: the run in the order it will be driven, [{ address_key, street, number }].
  * home: Map(address_key → { lat, lng }) where each address is usually ticked, if known.
+ * unplaced: Set of address keys the driver's order doesn't have (they were dropped in by a rule, not put there by a person):
+ *   for these the house number doesn't have to be close to the block's (26 Marine Parade beside 44–82, lesson L-013).
  * Returns [{ key, street, number, anchorKey, anchorNumber, after, gap }]: put `key` before/after `anchorKey`.
  */
-export function findStrays(lines = [], { home } = {}) {
+export function findStrays(lines = [], { home, unplaced } = {}) {
   const segs = [];   // runs of the same street, in order
   lines.forEach((l, i) => { const last = segs[segs.length - 1]; if (last && last.street === l.street) { last.to = i; last.items.push(l); } else segs.push({ street: l.street, from: i, to: i, items: [l] }); });
   const out = [];
@@ -38,7 +40,7 @@ export function findStrays(lines = [], { home } = {}) {
       const dist = ha && hb.length ? Math.min(...hb.map((p) => metres(ha, p))) : null;
       if (dist != null && dist > FAR_M) continue;                                        // a long road visited twice: leave it
       const byNumber = an >= Math.min(...nums) - NUMBER_REACH && an <= Math.max(...nums) + NUMBER_REACH;
-      if (!byNumber && !(dist != null && dist <= NEAR_M)) continue;
+      if (!byNumber && !(dist != null && dist <= NEAR_M) && !unplaced?.has(a.address_key)) continue;
       // beside the house with the nearest number, on the side that keeps the block running the way it runs
       const anchor = b.items.reduce((p, x) => (Math.abs((numOf(x.number).n ?? 1e9) - an) < Math.abs((numOf(p.number).n ?? 1e9) - an) ? x : p));
       const first = numOf(b.items[0].number).n; const last = numOf(b.items[b.items.length - 1].number).n; const rising = (last ?? 0) >= (first ?? 0);
@@ -66,6 +68,24 @@ export function findSwaps(lines = []) {
       if (!others.some((o) => o.n === u && o.unit != null)) continue;   // nobody else has a unit at number u: no reason to think so
       out.push({ key: l.address_key, street, number: l.number, suggest: `${n}/ ${u}` });
     }
+  }
+  return out;
+}
+
+const UNIT_WORDS = /\b(unit|apt|apartment|flat|shop|suite|villa|room|no)\b\.?/gi;
+/**
+ * The same letterbox keyed two ways on the sheet ("4c/ 12" and "APT 4C/ 12" Selwyn Road, 22 Nov 2026): same street, same
+ * house number, and the same unit once words like Apt and Flat are taken off. Returns [{ key, number, intoKey, intoNumber, street }]:
+ * `key` is the wordier one, to be shown inside `intoKey`'s tile.
+ */
+export function findTwins(lines = []) {
+  const out = []; const seen = new Map();
+  const part = (l) => { const m = /^(.+?)\/\s*(.+)$/.exec(String(l.number || '').trim()); if (!m) return null; const u = m[1].replace(UNIT_WORDS, '').replace(/[^a-z0-9]/gi, '').toUpperCase(); const b = m[2].replace(/\s+/g, '').toUpperCase(); return u ? `${l.street}|${b}|${u}` : null; };
+  for (const l of lines) {
+    const k = part(l); if (!k) continue; const first = seen.get(k);
+    if (!first) { seen.set(k, l); continue; } if (first.address_key === l.address_key) continue;
+    const [into, twin] = String(first.number).length <= String(l.number).length ? [first, l] : [l, first];
+    out.push({ key: twin.address_key, number: twin.number, intoKey: into.address_key, intoNumber: into.number, street: l.street });
   }
   return out;
 }

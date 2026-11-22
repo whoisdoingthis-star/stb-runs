@@ -111,3 +111,34 @@ export function reportCard(mornings, opts = {}) {
     byRun: routes.map((route) => { const rs = rows.filter((r) => r.route === route); return { route, n: rs.length, typicalMissPct: Math.round(median(rs.map((r) => Math.abs(r.errPct))) * 10) / 10 }; }),
     rows, drive, wholePass: rows.length >= MIN_MORNINGS && typical != null && typical <= TARGET_PCT, pass: drive.pass };   // the gate is the driving part (decision 0067)
 }
+
+export const MIN_SOLO = 2;           // a driver needs this many mornings alone on a run before their times are set beside another's
+export const MIN_SHARED = 8;         // …and the two need this many stop-to-stop legs in common
+/**
+ * Time between stops, the same legs driven by two people each on their own (decision 0068). Order and day-to-day swing
+ * cancel out, because it is the same piece of road for both. Per run, the two drivers with the most mornings alone;
+ * per street, each one's usual seconds over the legs both have driven at least twice.
+ * Returns [{ route, a, b, aMornings, bMornings, legs, aMin, bMin, streets: [{ street, legs, aSecs, bSecs, diff }] }] (diff = b − a, seconds).
+ * Facts for the dispatch board only; it says where two ways of delivering differ, not which is better.
+ */
+export function stopTimes(mornings = [], { skip = () => false } = {}) {
+  const home = homes(mornings.flatMap((m) => m.list)); const byRoute = new Map();
+  for (const m of mornings) {
+    if (m.bulk || skip(m.route) || (m.drivers?.length || 0) !== 1) continue;
+    const legs = legsOf(m.list, home); if (legs.length < MIN_LEGS) continue;
+    if (!byRoute.has(m.route)) byRoute.set(m.route, new Map()); const who = byRoute.get(m.route);
+    if (!who.has(m.drivers[0])) who.set(m.drivers[0], { n: 0, legs: new Map() }); const w = who.get(m.drivers[0]); w.n += 1;
+    for (const l of legs) { if (l.secs > LEG_CAP_S) continue; const k = l.from < l.to ? `${l.from}>${l.to}` : `${l.to}>${l.from}`; if (!w.legs.has(k)) w.legs.set(k, { street: String(l.to).split('|')[1] || '', secs: [] }); w.legs.get(k).secs.push(l.secs); }
+  }
+  const out = [];
+  for (const [route, who] of [...byRoute].sort((x, y) => x[0].localeCompare(y[0]))) {
+    const two = [...who].filter(([, w]) => w.n >= MIN_SOLO).sort((x, y) => y[1].n - x[1].n || x[0].localeCompare(y[0])).slice(0, 2).sort((x, y) => x[0].localeCompare(y[0]));
+    if (two.length < 2) continue; const [[a, A], [b, B]] = two; const streets = new Map(); let n = 0; let aT = 0; let bT = 0;
+    for (const [k, la] of A.legs) { const lb = B.legs.get(k); if (!lb || la.secs.length < 2 || lb.secs.length < 2) continue; const x = median(la.secs); const y = median(lb.secs);
+      const s = streets.get(la.street) || { street: la.street, legs: 0, aSecs: 0, bSecs: 0 }; s.legs += 1; s.aSecs += x; s.bSecs += y; streets.set(la.street, s); n += 1; aT += x; bT += y; }
+    if (n < MIN_SHARED) continue;
+    out.push({ route, a, b, aMornings: A.n, bMornings: B.n, legs: n, aMin: Math.round(aT / 6) / 10, bMin: Math.round(bT / 6) / 10,
+      streets: [...streets.values()].map((s) => ({ ...s, aSecs: Math.round(s.aSecs), bSecs: Math.round(s.bSecs), diff: Math.round(s.bSecs - s.aSecs) })).sort((x, y) => Math.abs(y.diff) - Math.abs(x.diff)) });
+  }
+  return out;
+}

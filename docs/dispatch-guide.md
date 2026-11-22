@@ -79,6 +79,12 @@ Under the headline numbers. For the dates chosen it shows each run's kilometres:
 ## Stan's report card
 **Insights → Stan's report card** shows whether Stan is good enough at predicting how long a morning takes to be trusted with suggesting a quicker order. Each run-morning in the dates you chose is predicted from the *other* days and compared with what it took. **Typical miss on the driving** is the headline (the target is 5%): the test is on the drives between stops, the only part an order can change ([decision 0067](decisions/0067-gate-on-the-driving.md)), with the whole morning underneath for comparison; the table gives a line per run, and **Every morning tested** shows each one. Until it says *Good enough*, Stan suggests no change of order ([decision 0066](decisions/0066-predictor-report-card.md)).
 
+## Time between stops
+**Insights → Time between stops** sets two drivers side by side on the same stop-to-stop legs, each driven alone, street by street, with the complaints on that street beside it. It shows where two ways of delivering differ, not which is better. With only a few mornings alone it is a pointer, not a finding. Only dispatchers see it ([decision 0069](decisions/0069-time-between-stops.md)).
+
+## One letterbox, two tiles
+When a run has the same letterbox keyed two ways, Stan shows you a card above the stops. **Yes, one tile** combines them from the next sheet; **No, keep both** and he won't ask again. **⋯ → Split a combined letterbox…** undoes it ([decision 0068](decisions/0068-returning-addresses-and-one-letterbox.md)).
+
 ## Day plan
 For when you know who is working tomorrow (or today).
 1. Pick the **delivery day**. Its run sheets need to be loaded (they arrive from RouteSmart after 7pm).

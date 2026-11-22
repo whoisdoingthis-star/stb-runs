@@ -14,6 +14,14 @@
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-23-comes-back', date: '2026-11-23', for: ['driver'], title: 'An address that comes back goes where it belongs',
+    what: 'When an address drops off the sheet for a few days and returns, it now goes where the usual order has it, even if you made your own order while it was away. If it still sits away from its street, Stan asks before the run. And the orange New tag is the newspaper’s word for a subscription that starts or restarts today, not a place we’ve never been.',
+    why: 'On Monday, 26 Marine Parade turned up beside Luplau Crescent and cost a drive back.',
+    say: "When an address drops off the sheet for a few days and comes back, it now goes where the usual order has it. Even if you made your own order while it was away. If it still looks out of place, I'll ask you before the run. And the orange new tag just means the subscription starts again today." },
+  { id: '2026-11-23-one-letterbox', date: '2026-11-23', for: ['dispatcher'], title: 'One letterbox, two tiles; and time between stops',
+    what: 'When the sheet lists the same letterbox twice in different words, like Unit 4c and APT 4C, Stan asks you whether to show one tile. Say yes and, from the next sheet, it is one tile with both papers. And Insights has a new block, Time between stops: the same legs, driven by two people each on their own, street by street.',
+    why: 'Two tiles for one letterbox is a paper waiting to be missed; and the minutes in a morning are at the stops, not in the order.',
+    say: "When the sheet lists the same letterbox twice in different words, I'll ask you if it's one letterbox. Say yes, and from the next sheet it's one tile with both papers. And insights has a new block, time between stops. It shows where two ways of delivering differ. Not which is better." },
   { id: '2026-11-23-report-card', date: '2026-11-23', for: ['dispatcher'], title: 'Stan’s report card, on Insights',
     what: 'Insights now shows how well Stan can predict how long a morning takes: his typical miss, and how many mornings he got within 5, 10 and 20 per cent. He isn’t good enough yet, so he isn’t suggesting any change to the order of runs or stops.',
     why: 'Stan has to prove he understands your mornings before he’s allowed to change them.',

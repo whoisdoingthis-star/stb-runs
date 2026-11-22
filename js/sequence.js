@@ -2,18 +2,24 @@
 //
 // The order is a list of address keys for the route. It carries forward: when
 // tomorrow's sheet for the same route is opened, addresses are shown in this
-// order. Addresses the list doesn't know yet (new starts) stay next to the
-// address they follow on the sheet.
+// order. An address the list doesn't know goes where the usual order has it
+// (someone's own order made while the address was off the sheet: 26 Marine
+// Parade, 23 Nov 2026, lesson L-013); one that is new to both stays next to
+// the address it follows on the sheet.
 
-/** Lines in custom order. `lines` must be in sheet order and carry address_key. */
-export function applySequence(lines, keys) {
+/** Lines in custom order. `lines` must be in sheet order and carry address_key. `usual` = the usual order's keys, if `keys` is someone's own. */
+export function applySequence(lines, keys, usual = null) {
   if (!keys || !keys.length) return lines;
   const pos = new Map(keys.map((k, i) => [k, i]));
+  // Where the usual order puts an address this order doesn't have: after the nearest address before it that both know.
+  const viaUsual = new Map();
+  if (usual?.length) { let last; for (const k of usual) { if (pos.has(k)) last = pos.get(k); else if (!viaUsual.has(k)) viaUsual.set(k, last === undefined ? -1 : last); } }
   let anchor = -1;
   const sortKeys = lines.map((l, i) => {
     const p = pos.get(l.address_key);
     if (p !== undefined) { anchor = p; return [p, 0, i]; }
-    return [anchor, 1, i]; // unknown: right after the previous known sheet address
+    if (viaUsual.has(l.address_key)) return [viaUsual.get(l.address_key), 1, i]; // its place in the usual order
+    return [anchor, 2, i]; // unknown to both: right after the previous known sheet address
   });
   return lines
     .map((l, i) => [sortKeys[i], l])

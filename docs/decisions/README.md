@@ -71,6 +71,8 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0065 | [Voice builds: asked for on a call, built by one Claude, reviewed by another](0065-voice-builds.md) | 2026-11-23 | Accepted |
 | 0066 | [Stan's time model and report card: built, and it does not pass the gate](0066-predictor-report-card.md) | 2026-11-23 | Accepted |
 | 0067 | [The gate tests the driving, and the driving doesn't pass either](0067-gate-on-the-driving.md) | 2026-11-23 | Accepted |
+| 0068 | [An address that comes back lands in its usual place, and one letterbox keyed two ways can be one tile](0068-returning-addresses-and-one-letterbox.md) | 2026-11-23 | Accepted |
+| 0069 | [Time between stops: the same legs, two drivers, side by side](0069-time-between-stops.md) | 2026-11-23 | Accepted |
 | 0065 | [Stan's School and Sandbox Stan: training that can't go out of date](0065-stans-school.md) | 2026-11-23 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.

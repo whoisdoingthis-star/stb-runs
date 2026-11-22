@@ -893,6 +893,31 @@ export async function viewDispatch(ctx, tab = 'overview') {
       INS.pred = { rows: INS.rows, box };
       return box;
     };
+    // Time between stops, the same legs by two drivers each on their own (decision 0068). Dispatch board only: facts, not scores.
+    const stopTimesBlock = () => {
+      if (!INS.rows) return null;
+      if (INS.stops?.rows === INS.rows) return INS.stops.box;
+      const box = h('div', { class: 'dz-card predictor' }, h('h3', null, 'Time between stops'), h('p', { class: 'muted' }, 'Working it out…'));
+      Promise.all([import('./timemodel.js'), import('./village.js')]).then(([tm, vg]) => {
+        const res = tm.stopTimes(runMornings(INS.rows.runs, INS.rows.ticks, D.deadlines || DEFAULT_DEADLINES), { skip: (route) => !!vg.layoutFor(route) });
+        const run = (route) => `Run ${+(/(\d+)$/.exec(route)?.[1] || 0) || route}`; const tc = (s) => String(s).toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+        const cBy = new Map(); for (const c of INS.rows.complaints || []) { const k = `${c.route}|${c.street}`; cBy.set(k, (cBy.get(k) || 0) + 1); }
+        const secs = (s) => (s >= 90 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`);
+        const intro = h('p', null, 'The same stop-to-stop legs, driven by two people each on their own, set side by side. Because it is the same piece of road for both, the order of the run and a slow day don’t come into it. ', h('b', null, 'It shows where two ways of delivering differ, not which is better'), ': a paper walked to the door takes longer than one thrown, and may be why a street has no complaints.');
+        if (!res.length) { box.replaceChildren(h('h3', null, 'Time between stops'), intro, h('p', { class: 'muted' }, `Nothing to compare in these dates yet. It needs two drivers who have each done the same run alone at least ${tm.MIN_SOLO} times.`)); return; }
+        box.replaceChildren(h('h3', null, 'Time between stops'), intro, ...res.map((x) => { const d = Math.round((x.bMin - x.aMin) * 10) / 10; const slow = d >= 0 ? x.b : x.a; const few = Math.min(x.aMornings, x.bMornings) < 4;
+          return h('div', null,
+            h('h4', { style: 'margin:14px 0 4px' }, `${run(x.route)}: ${x.a} and ${x.b}`),
+            h('p', null, `Over the ${x.legs} legs both have driven alone, ${x.a} usually takes ${x.aMin} minutes and ${x.b} ${x.bMin}`, Math.abs(d) < 0.5 ? ': no real difference.' : h('span', null, ': ', h('b', null, `${slow} about ${Math.abs(d)} minutes longer`), '.'), ` (${x.a}: ${x.aMornings} mornings alone, ${x.b}: ${x.bMornings}.)`),
+            few ? h('p', { class: 'warn-text small' }, 'Only a few mornings alone so far: treat this as a pointer, not a finding.') : null,
+            h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' }, h('thead', null, h('tr', null, h('th', null, 'Street'), h('th', null, 'Legs'), h('th', null, x.a), h('th', null, x.b), h('th', null, 'Difference'), h('th', null, 'Complaints'))),
+              h('tbody', null, x.streets.slice(0, 8).map((s) => h('tr', null, h('td', null, h('b', null, tc(s.street))), h('td', null, String(s.legs)), h('td', null, secs(s.aSecs)), h('td', null, secs(s.bSecs)), h('td', null, s.diff === 0 ? 'none' : `${s.diff > 0 ? x.b : x.a} +${secs(Math.abs(s.diff))}`), h('td', null, String(cBy.get(`${x.route}|${s.street}`) || 0))))))),
+            x.streets.length > 8 ? h('p', { class: 'small muted' }, `The ${x.streets.length - 8} other streets differ by less.`) : null); }),
+          h('p', { class: 'small muted' }, 'What to do with it: on the streets at the top, ask what each of you does differently there, and look at the complaints beside it before changing anything. Mornings with a helper are left out, and so are stops of more than ten minutes.'));
+      }).catch((e) => box.replaceChildren(h('h3', null, 'Time between stops'), h('p', { class: 'bad' }, `Couldn’t work it out: ${e.message}`)));
+      INS.stops = { rows: INS.rows, box };
+      return box;
+    };
     const kmBlock = () => {
       if (!INS.rows || !INS.km) return null;
       const med = (xs) => { const v = [...xs].sort((a, b) => a - b); const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
@@ -953,6 +978,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
         !I ? null : banner(I),
         !I ? null : kmBlock(),
         !I ? null : predictorBlock(),
+        !I ? null : stopTimesBlock(),
         !I ? null : h('div', { class: 'ins-sum' }, h('div', null, h('b', null, I.days), ` delivery day${I.days === 1 ? '' : 's'}`), h('div', null, h('b', null, I.delivered.toLocaleString('en-NZ')), ' deliveries'),
           h('div', { class: 'act' }, h('b', null, I.counts.act), ' to do something about'), h('div', { class: 'watch' }, h('b', null, I.counts.watch), ' to keep an eye on'), h('div', { class: 'good' }, h('b', null, I.counts.good), ' working well')),
         I?.early ? h('p', { class: 'ins-early' }, h('b', null, 'Early findings. '), `There are ${I.days} delivery days in these dates. Patterns firm up after about ${EARLY_DAYS}; until then treat these as pointers, not verdicts.`) : null,
