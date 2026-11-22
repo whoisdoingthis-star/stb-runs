@@ -49,6 +49,16 @@ The nine design principles every change is judged by are in [decision 0062](docs
    ([decision 0059](docs/decisions/0059-whats-new.md)). A card's `id` never changes
    once published. Fixes nobody would notice don't need one.
 
+9. **Fix it twice.** When something came out wrong or didn't do what was meant, the
+   fix isn't finished until it has changed whatever let it through: add a line to
+   [docs/lessons.md](docs/lessons.md) in the same commit, saying what let it through and
+   what changed in the standard. Prefer a check that would have caught it, then a
+   rule, then a note. A one-off that deserves no rule says `[no-lesson]` in the commit
+   message ([decision 0063](docs/decisions/0063-lessons-loop.md)).
+10. **Check the push, not only the files.** After committing, run `npm run check:push`
+    before pushing: it applies the commit-range rules (docs with code, version bump,
+    lessons with fixes) that GitHub will apply.
+
 ## What the checks enforce
 
 `npm run check` locally, and [CI](.github/workflows/ci.yml) on every push and pull request:
@@ -79,6 +89,8 @@ lets it through. Use it rarely.
 - [ ] New business rules or decisions are written down
 - [ ] `VERSION` in `sw.js` bumped if phone files changed
 - [ ] A *What's new* card in `js/whatsnew.js` if anyone will see, do or have to follow something different
+- [ ] If this fixes something that went wrong: a line in `docs/lessons.md`, and the check or rule it names
+- [ ] `npm run check:push` passes after committing
 - [ ] Nothing secret or personal in the diff
 
 ## Releasing

@@ -256,5 +256,13 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   const missing = [...new Set([...shared.matchAll(/super\.(\w+)\(/g)].map((m) => m[1]))].filter((m) => typeof parent[m] !== 'function');
   const own = [...new Set([...shared.matchAll(/this\.(my\w+)\(/g)].map((m) => m[1]))].filter((m) => typeof SupabaseStore.prototype[m] !== 'function');
   check('every fallback the shared store calls on its parent exists', missing.length === 0 && own.length === 0);
+  // Lesson L-011 (22 Nov 2026): the app called store methods that only the demo store had. Every call the app makes must exist live.
+  const { LocalStore } = await import('../js/store.js');
+  const appSrc = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const called = [...new Set([...appSrc.matchAll(/app\.store\.(\w+)\(/g)].map((m) => m[1]))];
+  const notLive = called.filter((m) => typeof SupabaseStore.prototype[m] !== 'function');
+  const LIVE_ONLY = ['changePassword'];   // only offered when signed in
+  const notDemo = called.filter((m) => typeof LocalStore.prototype[m] !== 'function' && !LIVE_ONLY.includes(m));
+  check(`every store method the app calls exists in the live app and in demo mode${notLive.length || notDemo.length ? ` (missing live: ${notLive.join(', ') || 'none'}; demo: ${notDemo.join(', ') || 'none'})` : ''}`, called.length > 40 && notLive.length === 0 && notDemo.length === 0);
   if (missing.length || own.length) console.log('  missing:', [...missing, ...own].join(', '));
 }

@@ -25,6 +25,18 @@ for (const f of tracked.filter((x) => x.endsWith('.md'))) {
   }
 }
 
+// 1b. Every decision record is in the index (lesson L-005: the index once stopped at 0019 while the records went on to 0047).
+{
+  const index = fs.readFileSync('docs/decisions/README.md', 'utf8');
+  for (const f of fs.readdirSync('docs/decisions').filter((x) => /^\d{4}-.*\.md$/.test(x))) if (!index.includes(`(${f})`)) fail(`docs/decisions/README.md: ${f} is not in the index`);
+}
+// 1c. Lessons are numbered once each and newest first (docs/lessons.md; decision 0063).
+{
+  const nums = [...fs.readFileSync('docs/lessons.md', 'utf8').matchAll(/^\| L-(\d{3}) \|/gm)].map((m) => Number(m[1]));
+  if (!nums.length) fail('docs/lessons.md: no lessons found');
+  nums.forEach((n, i) => { if (n !== nums.length - i) fail(`docs/lessons.md: lessons should run L-${String(nums.length).padStart(3, '0')} down to L-001 with none missing or repeated (found L-${String(n).padStart(3, '0')} in place ${i + 1})`); });
+}
+
 // 2. Every table in the schema is described in the data model page.
 const schema = fs.readFileSync('sql/schema.sql', 'utf8');
 const model = fs.readFileSync('docs/data-model.md', 'utf8');
@@ -87,6 +99,13 @@ if (di > 0) {
     if (!/^\+const VERSION/m.test(diff)) fail(`Version bump: phone files changed (${phone.join(', ')}) but VERSION in sw.js did not. Phones would keep the old copy.`);
   }
   if (changed.includes('sql/schema.sql') && !changed.includes('docs/data-model.md')) fail('sql/schema.sql changed but docs/data-model.md did not.');
+  // A fix is finished when it has changed the standard too (decision 0063): a commit that says it fixes something
+  // adds a lesson, or says [no-lesson] because it is a one-off.
+  const subjects = git(/^0+$/.test(base || '') ? `log -1 --format=%s ${head}` : `log --format=%s ${range}`).split('\n');
+  const fixes = subjects.filter((s) => /^(fix(ed|es)?\b|hotfix\b)|\bfix(ed|es)?:/i.test(s.trim()));
+  if (fixes.length && !changed.includes('docs/lessons.md') && !messages.includes('[no-lesson]')) {
+    fail(`Lessons: ${fixes.length === 1 ? 'a commit says' : 'commits say'} it fixes something ("${fixes[0].slice(0, 60)}") but docs/lessons.md did not change. Add the lesson (what let it through, what changed in the standard), or add [no-lesson] to the commit message for a one-off.`);
+  }
 }
 
 if (problems.length) {

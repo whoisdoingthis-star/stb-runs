@@ -8,7 +8,8 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md), and the design principles in [docs/de
 4. Record new business rules (`docs/business-rules.md`, `docs/run8-village.md`) with the date and who stated them, and record design decisions in `docs/decisions/`.
 5. Bump `VERSION` in `sw.js` when files the phones load change.
 6. Add a *What's new* card to the top of `js/whatsnew.js` when the change alters what anyone sees, does or must follow: who it is for, what changed, and one line of why, in plain words. Stan shows it to each person when they next open the app.
-7. Run `npm run check` before pushing. Do not push if it fails.
+7. When fixing something that came out wrong or wasn't what was meant, add a line to `docs/lessons.md` in the same commit (what let it through, what changed in the standard: a check first, then a rule, then a note), or put `[no-lesson]` in the commit message for a one-off. Read `docs/lessons.md` before starting work.
+8. Run `npm run check` before committing and `npm run check:push` after committing. Do not push if either fails.
 
 Never commit secrets, family email addresses, door codes or customer details: the repository is public.
 When running SQL by hand in Supabase, apply the same SQL to `sql/schema.sql` before pushing.
