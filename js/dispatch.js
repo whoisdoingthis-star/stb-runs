@@ -1554,6 +1554,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
         h('td', null, role),
         h('td', null, crewSel),
         h('td', { class: 'upd-cell', 'data-name': m.display_name, 'data-crew': m.crew || 'driver', 'data-role': m.role || '' }, '…'),
+        h('td', null, h('div', { class: 'trn-cell small', 'data-name': m.display_name, 'data-needs': (m.crew || 'driver') === 'driver' && m.needs_training ? '1' : '' }, '…'),
+          (m.crew || 'driver') === 'driver' ? h('label', { class: 'small dz-check' }, h('input', { type: 'checkbox', checked: m.needs_training ? true : null, onchange: (e) => act(async () => { const { error } = await sb.from('members').update({ needs_training: e.target.checked }).eq('email', m.email); if (error) throw error; }, e.target.checked ? `${m.display_name} does the driver course before driving.` : `${m.display_name} can drive without the course.`) }), ' Needs training') : null),
         h('td', null, m.active === false ? 'Off' : 'On'),
         h('td', null,
           h('button', { class: 'link small', onclick: () => {
@@ -1571,12 +1573,16 @@ export async function viewDispatch(ctx, tab = 'overview') {
     const pw = h('input', { type: 'text', placeholder: 'Temporary password (8+)', autocomplete: 'off' });
     return h('section', { class: 'dz-main' },
       h('table', { class: 'dz-table' },
-        h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Email'), h('th', null, 'Access'), h('th', null, 'On the run'), h('th', null, 'What’s new'), h('th', null, 'Active'), h('th', null, ''))),
+        h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Email'), h('th', null, 'Access'), h('th', null, 'On the run'), h('th', null, 'What’s new'), h('th', null, 'Training'), h('th', null, 'Active'), h('th', null, ''))),
         (() => { const body = h('tbody', null, rows);
           // Who has read Stan's "What's new" cards (decision 0059): filled in once the list arrives; a dash if it can't be read.
           Promise.all([import('./whatsnew.js'), sb.from('update_seen').select('update_id, user_name').limit(2000)]).then(([w, { data, error }]) => { const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
             for (const td of body.querySelectorAll('.upd-cell')) { if (error) { td.textContent = '–'; continue; } const seen = (data || []).filter((r) => r.user_name === td.dataset.name).map((r) => r.update_id); const n = w.unreadCount(w.rolesOf({ driver: td.dataset.crew === 'driver', dispatcher: td.dataset.role === 'dispatcher' }), seen, today); td.textContent = n ? `${n} to read` : '✓ Up to date'; td.classList.toggle('warn-text', n > 0); } }).catch(() => { for (const td of body.querySelectorAll('.upd-cell')) td.textContent = '–'; });
+          // Stan's School (decision 0065): each person's courses and practice, and whether a new driver still has some to do.
+          Promise.all([import('./training.js'), sb.from('training_progress').select('user_name, item').limit(5000)]).then(([tr, { data, error }]) => {
+            for (const el of body.querySelectorAll('.trn-cell')) { if (error) { el.textContent = '–'; continue; } const done = (data || []).filter((r) => r.user_name === el.dataset.name).map((r) => r.item); el.textContent = tr.progressText(done, { required: !!el.dataset.needs }); el.classList.toggle('warn-text', !!el.dataset.needs && tr.stillNeeded(done).length > 0); } }).catch(() => { for (const el of body.querySelectorAll('.trn-cell')) el.textContent = '–'; });
           return body; })()),
+      h('p', { class: 'small muted' }, 'Training: courses finished in Stan’s School and practice tasks done in Sandbox Stan. A driver with Needs training ticked can go on duty as a helper but not as a driver until the driver course and its four practice tasks are done. New people start with it ticked.'),
       h('h3', null, 'Helpers without a login'),
       h('p', { class: 'small muted' }, 'Names a driver typed under “Other…” when going on duty. They show as buttons on “Who’s with you?”. Remove one if it was a typo.'),
       (() => { const box = h('div', { class: 'dz-polgrid' }, h('span', { class: 'small muted' }, 'Loading…'));

@@ -13,6 +13,7 @@ the full project, so the documentation lives here with the code and changes with
 | Read this | When |
 |---|---|
 | [Family guide](docs/family-guide.md) | Using the app on a run: plain words, no tech |
+| [Stan's School](https://whoisdoingthis-star.github.io/stb-runs/learn/) and [Sandbox Stan](https://whoisdoingthis-star.github.io/stb-runs/sandbox/) | Learning the app with Stan, and practising on made-up runs ([decision 0065](docs/decisions/0065-stans-school.md)) |
 | [Business rules](docs/business-rules.md) | How the sheets are read: publications, retail and dockets, complaints, colours, what counts as a change |
 | [Dispatch guide](docs/dispatch-guide.md) | The dispatch dashboard: address register, operating and service locations, policies, users |
 | [Roadmap](docs/roadmap.md) | What's planned next |
@@ -48,6 +49,11 @@ the full project, so the documentation lives here with the code and changes with
 | `js/sequence.js` | Your own delivery order per route (hold and drag) |
 | `js/dispatch.js` | Dispatch dashboard (loaded only when opened) |
 | `js/village.js` | Run 8 layout: building order, mailbox banks, reception bundle |
+| `js/training.js`, `js/training-sync.js` | Stan's School: courses (built from the What's new cards), practice tasks, progress, the end-of-day email |
+| `js/practice-data.js` | Made-up practice runs for Sandbox Stan |
+| `learn/` | Stan's School (`learn/shots/`: pictures of the app, taken by `tools/training-shots.py`) |
+| `sandbox/` | Sandbox Stan: the real app in demo mode on practice runs, kept apart from the real app's storage |
+| `tools/training-digest.mjs` | Stan's end-of-day email (run by `.github/workflows/training-digest.yml`) |
 | `fetcher/` | Evening fetch from RouteSmart (runs on GitHub Actions) |
 | `supabase/functions/refetch/` | Edge Function behind the Get Runs button |
 | `supabase/functions/admin-users/` | Edge Function for the dashboard's Users tab |

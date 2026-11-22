@@ -7,6 +7,7 @@
 const G = (when, lines) => Object.fromEntries(Object.entries(lines).map(([k, say]) => [k, { say, when }]));
 
 import { UPDATES } from './whatsnew.js';
+import { learnLines } from './training.js';
 
 export const STAN_LINES = {
   ...G('Opening the app', {
@@ -157,6 +158,8 @@ export const clipUrl = (base, key, stamp = '') => `${String(base).replace(/\/$/,
 /** What still needs recording, or recording again because the words changed. recorded: rows from stan_lines. */
 // What's new cards, read aloud (decision 0060): each card's spoken version is one of his lines, so it is recorded the same way.
 for (const u of UPDATES) if (u.say) STAN_LINES[`news.${u.id}`] = { say: u.say, when: 'What’s new, read aloud' };
+// Stan's School (decision 0065): the course steps that aren't cards have their own spoken line, recorded the same way.
+Object.assign(STAN_LINES, learnLines());
 
 export function linesToRecord(recorded = [], lines = STAN_LINES) {
   const have = new Map(recorded.map((r) => [r.key, r.text]));

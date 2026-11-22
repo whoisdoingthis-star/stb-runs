@@ -188,6 +188,15 @@ While you're **on duty**, Mike can tap **Ping** in Dispatch to see where you are
 ## Photos and problems
 The bottom bar of a run always has **Problem** (⚠) and **Photo** (📷). They work for the stop you just did or the next one: if there are both, the app asks which. So you can take a photo, or say *Gate locked*, without ticking first. Once you've ticked a stop the bar also has Undo, and the two buttons shrink to just their pictures.
 
+## Stan's School and Sandbox Stan
+**Stan's School** (⚙ Settings → Stan's School) is where Stan teaches the app. Pick a course (New driver, New helper, Getting more from Stan, Dispatch), and go card by card with **Next** and **Back** (or swipe). Tap **🔊 Stan, read it to me** and he reads each card, then turns the page for you. It's always about the app as it is today: when something changes, its card is in the course straight away, with a picture of the real screen.
+
+**Sandbox Stan** (⚙ Settings → Sandbox Stan) is the real app with two made-up practice runs. Nothing you do there touches the real runs, even on the same phone. A yellow bar at the top gives you one practice task at a time (go on duty, tick three stops, record one you couldn't deliver, finish the shift) and ticks it off by itself when you've done it. **More → Start the practice runs again** gives you fresh runs.
+
+**New drivers** do the New driver course and its practice before their first run as a driver. Until then, tapping On duty says so, with a button to the school, and you can still **come along as a helper**.
+
+**Emails from Stan.** At the end of a day when something changed, Stan emails you the changes you haven't already read in the app, each with a **Learn it with Stan** link.
+
 ## Stan
 Stan is our little yellow robot, with a screen for a face, glowing blue eyes and his name on the black band across his front (new look, 14 Nov). He's the **Stan** button in the bottom bar of a run: tap him for directions to the next stop (that's the Driver Assistant). In the panel he tells you how he's helping: **Turn by turn** (blue lights on his face), **Pointing the way** (amber: he knows where the stop is, not the roads) or **Waiting for GPS** (grey). He talks when the voice is on, and pops up to cheer when you finish a run ("Stan-tastic!" is his word). **Got an idea? Tell Stan.** On the Runs page tap **Got an idea? Tell Stan** (or ⋯ → Tell Stan an idea in a run). Type what would make the app better, or what's bugging you, and tap **Send**. Stan answers, and your idea goes in the ideas book that Mike reads. You can use the microphone on the phone's keyboard to say it instead of typing.
 

@@ -1,0 +1,12 @@
+/* Sandbox Stan (decision 0065): the real app underneath; this is only the practice bar on top. */
+#sbx-bar { position: sticky; top: 0; z-index: 40; background: var(--warn-bg); color: var(--ink); border-bottom: 2px solid var(--warn); padding: calc(8px + var(--safe-top)) 12px 8px; }
+#sbx-bar .sbx-row { display: flex; align-items: center; gap: 8px; max-width: 900px; margin: 0 auto; }
+#sbx-bar .sbx-tag { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); }
+#sbx-bar .sbx-task { flex: 1; min-width: 0; }
+#sbx-bar .sbx-task b { display: block; font-size: 15px; }
+#sbx-bar .sbx-task span { font-size: 13px; }
+#sbx-bar .sbx-done { color: var(--done); font-weight: 800; }
+#sbx-bar .btn { min-height: 40px; padding: 6px 10px; font-size: 14px; white-space: nowrap; }
+#sbx-bar .sbx-list { max-width: 900px; margin: 8px auto 0; display: flex; flex-direction: column; gap: 6px; }
+#sbx-bar .sbx-list button { text-align: left; }
+.sbx .page { padding-top: 12px; }

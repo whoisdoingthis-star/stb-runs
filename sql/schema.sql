@@ -1236,3 +1236,37 @@ drop policy if exists update_seen_read on public.update_seen;
 create policy update_seen_read on public.update_seen for select to authenticated using (public.is_member());
 drop policy if exists update_seen_add on public.update_seen;
 create policy update_seen_add on public.update_seen for insert to authenticated with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());
+
+-- ---- Stan's School: training progress, new drivers, end-of-day emails (Mike, 23 Nov 2026; docs/decisions/0065-stans-school.md) ----
+-- needs_training: a new driver can go on duty as a helper but not as a driver until the driver course and its practice
+-- are done. On by default for people added from now on; everyone already on the list knows the job, so they start off.
+-- Only a dispatcher can change it (members_change policy).
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'members' and column_name = 'needs_training') then
+    alter table public.members add column needs_training boolean not null default false;   -- existing people: off
+    alter table public.members alter column needs_training set default true;                -- people added from now on: on
+  end if;
+end $$;
+-- What each person has finished: 'course:<id>' (reached the end of a course) or 'task:<id>' (a Sandbox Stan practice
+-- task, checked from what the practice app saved). Rows are only added, by the person themselves.
+create table if not exists public.training_progress (
+  user_name text not null,
+  item      text not null,
+  user_id   uuid not null default auth.uid(),
+  done_at   timestamptz not null default now(),
+  primary key (user_name, item)
+);
+alter table public.training_progress enable row level security;
+drop policy if exists training_progress_read on public.training_progress;
+create policy training_progress_read on public.training_progress for select to authenticated using (public.is_member());
+drop policy if exists training_progress_add on public.training_progress;
+create policy training_progress_add on public.training_progress for insert to authenticated with check (public.is_member() and user_id = auth.uid() and user_name = public.my_name());
+-- Which What's new cards have been emailed to whom (the end-of-day email, tools/training-digest.mjs). Written only by
+-- the server job with the server key; nobody signed in can read or change it.
+create table if not exists public.training_emails (
+  email     text not null,
+  update_id text not null,
+  sent_at   timestamptz not null default now(),
+  primary key (email, update_id)
+);
+alter table public.training_emails enable row level security;

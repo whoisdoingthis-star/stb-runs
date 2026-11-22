@@ -150,6 +150,8 @@ Every change on the dashboard is logged (who, when, what) in `dispatch_history`.
 
 **Driver or Helper** (the *On the run* column): drivers take runs; helpers ride with a driver. Stan's day plan and the "Who's with you?" question use it. It doesn't change what anyone can see or do in the app.
 
+**Training** (Stan's School, [decision 0065](decisions/0065-stans-school.md)): each person's finished courses and practice tasks. **Needs training** (drivers only) means they can go on duty as a helper but not as a driver until the New driver course and its four practice tasks in Sandbox Stan are done; the column says how many are left. New people start with it ticked; everyone who was already on the list started with it off. Untick it for someone who already knows the job. The **What's new** column says who hasn't read the latest cards; each evening Stan also emails people the cards they haven't read (once email is set up: see the [runbook](runbook.md#stans-end-of-day-email)).
+
 ## Stan's voice
 Everything Stan says out loud in his recorded voice, grouped by when he says it.
 - **▶** plays a line as the phones will hear it, with his light robot finish. **plain** plays the recording with nothing added.

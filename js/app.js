@@ -1,5 +1,9 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
 import { LocalStore, SupabaseStore, statusFrom, uuid, deviceLabel } from './store.js';
+import { COURSES, TASKS } from './training.js';
+import { syncTraining, cachedTraining } from './training-sync.js';
+// The site's own address (the app's folder), so Stan's School and Sandbox Stan links work from the app and from inside the sandbox.
+const SITE = new URL('../', import.meta.url);
 import { Geo } from './geo.js';
 import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
@@ -186,14 +190,15 @@ async function boot() {
     if (hiddenAt && Date.now() - hiddenAt >= 3000 && !onRun()) openingNow();
     hiddenAt = 0;
   });
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  // Sandbox Stan (decision 0065): the same app, in demo mode with practice runs, whatever config.js says.
+  if (SUPABASE_URL && SUPABASE_ANON_KEY && !globalThis.__stbSandbox) {
     const { createClient } = await import('../vendor/supabase.mjs');
     app.store = new SupabaseStore(createClient, SUPABASE_URL, SUPABASE_ANON_KEY);
   } else {
     app.store = new LocalStore();
   }
   await app.store.init();
-  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !globalThis.__stbSandbox) {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
     // A new version took over: reload straight away on the Runs list, or offer it mid-run.
@@ -220,6 +225,8 @@ async function route() {
     if (app.me) { // people's icons: the saved copy straight away, then fresh ones
       try { setKnown(JSON.parse(localStorage.getItem('stb.avatars') || '{}')); } catch { /* none yet */ }
       app.store.loadAvatars().then(setKnown).catch(() => {});
+      // Stan's School (decision 0065): this person's training, sent and fetched in the background; the last known copy until then.
+      if (app.store.mode === 'shared' && !app.trainingSync) { app.training = cachedTraining(); app.trainingSync = syncTraining(app.store.sb).then((t) => { if (t) app.training = t; return t; }).catch(() => null); }
       // Ping (decision 0026): Dispatch asks where I am. Answer once, only while on duty, and always say so here.
       if (!app.pingOff) app.pingOff = app.store.onPing(app.me.name, async (p) => {
         if (!p || p.state !== 'asked' || Date.now() - Date.parse(p.asked_at) > 90000) return;
@@ -442,6 +449,12 @@ function myRuns() {
 function setMyRuns(ids) { try { localStorage.setItem('stb.myruns', JSON.stringify({ date: nzToday(), ids })); } catch { /* private mode */ } }
 const duty = () => currentDuty(app.store.myDuty());
 const onDuty = () => !!duty()?.onDuty;
+/** On duty today as somebody's helper: the On duty that started this shift named a driver. */
+function helpingNow() {
+  const ev = [...(app.store?.myDuty?.() || [])].sort((a, b) => Date.parse(a.device_time) - Date.parse(b.device_time));
+  let start = null; for (const e of ev) { if (e.state === 'off_duty') start = null; else if (e.state === 'on_duty' && !start) start = e; }
+  return !!(start && start.driver && onDuty());
+}
 
 // Nothing to deliver and nobody on duty: after five seconds Stan gets bored and offers a game
 // (Mike, 14 Nov 2026; decision 0034). Never on duty, never with Stan switched off, never by itself.
@@ -506,6 +519,7 @@ async function showWhatsNew({ force = false } = {}) {
 // ---- Duty hard lines (Mike, 22 Nov 2026; decision 0057) ----
 /** Am I a driver? From the crew list, or what this phone last knew if the list isn't loaded (opened straight onto a run). */
 function amDriver() {
+  if (helpingNow()) return false;   // a driver who went on duty as someone's helper (decision 0065) helps today
   if (app.crew) return app.crew.some((c) => c.name === app.me?.name && c.crew === 'driver');
   try { const r = JSON.parse(localStorage.getItem('stb.myrole') || 'null'); return !!r && r.name === app.me?.name && !!r.driver; } catch { return false; }
 }
@@ -871,8 +885,20 @@ function startShift(rerender, todayRuns = []) {
   const me = crew.find((c) => c.name === app.me?.name);
   if (!me) { (async () => { noteDuty('on_duty', {}, await fix); rerender(); })(); return; }
   const today = app.plan?.today ? app.plan.part : null;
-  if (me.crew === 'helper') {
-    const drivers = crew.filter((c) => c.crew === 'driver').map((c) => c.name);
+  // A new driver (decision 0065): the driver course and its practice first. Until then they can come along as a helper.
+  if (me.crew === 'driver' && !app.training && app.trainingSync && !startShift.waited) { startShift.waited = true; Promise.race([app.trainingSync, new Promise((ok) => setTimeout(ok, 4000))]).then(() => startShift(rerender, todayRuns)); return; }
+  const tr = globalThis.__stbTraining || app.training;   // (tests can hand one in, like __stbLocation)
+  const left = me.crew === 'driver' && tr?.needs ? tr.left || [] : [];
+  if (left.length && !startShift.asHelper) {
+    const close = openSheet('Driver training first',
+      h('div', { class: 'plan-hello' }, stan({ pose: 'wave', size: 64 }), h('div', { class: 'plan-who' }, 'Before your first run as a driver, do the driver course in Stan’s School and its practice in Sandbox Stan.')),
+      h('p', { class: 'muted' }, `Still to do: ${left.map(trainingLabel).join(', ')}.`),
+      h('button', { class: 'btn primary big', onclick: () => { close(); location.href = new URL('learn/?course=driver', SITE).href; } }, 'Open Stan’s School'),
+      h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => { close(); startShift.asHelper = true; try { startShift(rerender, todayRuns); } finally { startShift.asHelper = false; } } }, 'Come along as a helper today'));
+    return;
+  }
+  if (me.crew === 'helper' || startShift.asHelper) {
+    const drivers = crew.filter((c) => c.crew === 'driver' && c.name !== app.me?.name).map((c) => c.name);
     if (!drivers.length) { (async () => { noteDuty('on_duty', {}, await fix); rerender(); })(); return; }
     const planned = today?.role === 'helper' ? today.driver : null;
     const close = openSheet('Who’s driving?',
@@ -912,6 +938,8 @@ function startShift(rerender, todayRuns = []) {
   const close = openSheet('Who’s with you?', row, next);
   draw();
 }
+/** A training item in words, for the "Driver training first" sheet. */
+const trainingLabel = (item) => { const [k, id] = item.split(':'); return k === 'course' ? `the ${COURSES[id]?.title.toLowerCase() || id} course` : `practice: ${TASKS[id]?.title.toLowerCase() || id}`; };
 /** What Stan says about the plan: shown once per plan, and again from the plan card. */
 function openPlan({ row, part, today, lined }) {
   const p = row.plan; const name = app.me.name; const when = today ? 'today' : row.delivery_date === nzDay(1) ? 'tomorrow' : dayLabel(row.delivery_date);
@@ -1100,7 +1128,7 @@ async function viewHome() {
       h('div', { class: 'home-brand' }, stbLogo({ height: 54, outline: !document.documentElement.classList.contains('dark') }), h('h1', null, 'Runs')),
       h('span', { class: 'who-me' }, avatar(app.me.name, 26), app.store.mode === 'shared' ? app.me.name : ''),
       h('button', { class: 'icon-btn settings-btn', 'aria-label': 'Settings', onclick: () => openSettings(fileInput) }, '⚙')),
-    app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: saved on this phone only.') : null,
+    globalThis.__stbSandbox ? null : app.store.mode === 'demo' ? h('div', { class: 'banner' }, 'Demo mode: saved on this phone only.') : null,
     app.me.role === 'dispatcher' ? h('a', { class: 'dispatch-link', href: '#/dispatch' }, 'Dispatch dashboard ›') : null,
     fileInput,
     dutySlot,
@@ -1240,6 +1268,8 @@ function openSettings(fileInput) {
       choiceRow('Opening', [['off', 'Silent'], ['on', 'Chimes']], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') { close(); openingNow(true); } })),
     (close) => h('div', { class: 'menu-group' },
       menuItem('What’s new', () => { close(); showWhatsNew({ force: true }); }, { hint: 'What has changed in the app lately, and why' }),
+      menuItem('Stan’s School', () => { close(); location.href = new URL('learn/', SITE).href; }, { hint: 'Stan walks you through the app, course by course' }),
+      menuItem('Sandbox Stan', () => { close(); location.href = new URL('sandbox/', SITE).href; }, { hint: 'Practise on made-up runs. Nothing there is real' }),
       menuItem('Play the opening', () => { close(); openingNow(); }, { hint: 'It plays each time you open the app' }),
       app.store.mode === 'shared' ? menuItem('Get Runs from RouteSmart…', () => { close(); openRefetch(); }, { hint: 'Fetches the latest sheets for a day. Use it if a change is phoned in' }) : null,
       menuItem('Upload a run sheet (PDF)…', () => { close(); fileInput?.click(); }, { hint: 'A sheet you downloaded yourself' }),

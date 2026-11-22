@@ -1,0 +1,36 @@
+# Fresh pictures of the app for Stan's School (docs/decisions/0065-stans-school.md). After a publish that changes the app,
+# this takes them again in Sandbox Stan (made-up runs only) and saves any that changed, so lessons show the app as it is.
+name: Stan's School pictures
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'styles.css', 'js/**', 'sandbox/**', 'tools/training-shots.py', '.github/workflows/training-shots.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: training-shots
+  cancel-in-progress: true
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright==1.* && python -m playwright install --with-deps chromium
+      - name: Take the pictures
+        run: |
+          python3 -m http.server 8765 >/dev/null 2>&1 &
+          sleep 2
+          python3 tools/training-shots.py http://localhost:8765
+      - name: Save any that changed
+        run: |
+          if git diff --quiet -- learn/shots; then echo "No picture changed."; exit 0; fi
+          git config user.name "Stan (pictures)"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add learn/shots
+          git commit -m "Stan's School: fresh pictures of the app [no-docs]"
+          git pull --rebase origin main && git push

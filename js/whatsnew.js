@@ -8,10 +8,16 @@
 //   title  a few words
 //   what   what changed, as you'd say it to Mum
 //   why    one line: the reason
+//   replaced  (optional) the id of a later card that replaces this one: it leaves Stan's School (decision 0065)
+//   shot   (optional) a picture of the real app for its lesson: learn/shots/<shot>.png (tools/training-shots.py)
 //   say    Stan's spoken version, 300 characters at most, written for the ear (he reads it when the speaker is tapped;
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-23-school', date: '2026-11-23', for: ['all'], title: 'Stan’s School and Sandbox Stan',
+    what: 'There’s now a training site: ⚙ Settings → Stan’s School. Stan walks you through the app, course by course, and Sandbox Stan lets you practise on made-up runs. New changes also come by email at the end of the day. A new driver does the driver course and practice before their first run as a driver.',
+    why: 'Videos go out of date the day the app changes. These are built from the app itself, so they’re always current.',
+    say: "There's a training site now. Stan's School. Find it in settings. I walk you through the app, and my sandbox lets you practise on made up runs. Changes come by email at the end of the day too. New drivers do the driver course before their first run." },
   { id: '2026-11-23-between-runs', date: '2026-11-23', for: ['driver', 'helper'], title: 'Between runs, on Your morning',
     what: 'Your morning card now shows Between runs: the minutes and kilometres spent driving from the last stop of one run to the first stop of the next.',
     why: 'It’s the first thing Stan is measuring so he can work out the quickest order for your runs. Time is what he’ll go by, not distance.',
@@ -32,7 +38,7 @@ export const UPDATES = [
     what: 'If your phone isn’t letting the app use location, you can’t start the run. The app shows how to switch it on and has a “check again” button. No signal or slow GPS is fine: only “off” stops you.',
     why: 'Where each tick was made is our proof of delivery, and how the kilometres and routes are worked out.',
     say: "Location must be on before you start a run. If it's off, I'll show you how to switch it on. No signal is fine. Only off stops you. Where each tick was made is our proof of delivery." },
-  { id: '2026-11-22-odometer', date: '2026-11-22', for: ['driver'], title: 'Odometer before the first stop',
+  { id: '2026-11-22-odometer', shot: 'odometer', date: '2026-11-22', for: ['driver'], title: 'Odometer before the first stop',
     what: 'You can’t start a run, or tick a stop on today’s runs, until you’re on duty and the odometer is typed in. There’s no Skip any more. Tap a stop too early and the app takes you to what’s needed.',
     why: 'Without the start reading we can’t know how far the morning really was.',
     say: "Odometer first. You can't start a run, or tick a stop, until you're on duty and the odometer is typed in. There's no skip any more. Without it, we can't know how far the morning really was." },
@@ -77,7 +83,7 @@ export const UPDATES = [
     what: "📌 Notice board on the Runs page: leave a note for everyone, or for the people you pick. It pops up for them and they tap Got it. Notes last three days. Pinned rules stay at the top under How we do things, and This morning shows each run’s finish time.",
     why: "One place for “heads up” messages, where you can see who has read them.",
     say: "The notice board is on the runs page. Leave a note for everyone, or just the people you pick. It pops up for them, and they tap got it. Pinned rules stay at the top. And it shows when each run finished this morning." },
-  { id: '2026-11-19-crew', date: '2026-11-19', for: ["driver", "helper"], title: "Going on duty: who’s with you?",
+  { id: '2026-11-19-crew', shot: 'crew', date: '2026-11-19', for: ["driver", "helper"], title: "Going on duty: who’s with you?",
     what: "Everyone is a driver or a helper. A driver going on duty taps who is helping (Other… for someone new, or Just me), then Prepping at the depot or Prepped: starting the run. A helper taps who they’re helping.",
     why: "The morning’s numbers belong to the crew that did the work, so we need to know who was in which car.",
     say: "When a driver goes on duty, I ask who's with you. Tap their names, or just me. Then prepping at the depot, or prepped and starting. Helpers tap who they're helping. That's how I know who was in which car." },
@@ -121,7 +127,7 @@ export const UPDATES = [
     what: "The run screen and the On duty card show “finish about 6:35 am” for the runs you have open, worked out from your pace so far.",
     why: "So you know early if the morning is running late, while there’s still time to ask for help.",
     say: "The run screen shows finish about, with a time, worked out from your pace so far. So you know early if the morning is running late, while there's still time to ask for help." },
-  { id: '2026-11-12-on-duty', date: '2026-11-12', for: ["driver", "helper"], title: "On duty, and My runs",
+  { id: '2026-11-12-on-duty', shot: 'runs-page', date: '2026-11-12', for: ["driver", "helper"], title: "On duty, and My runs",
     what: "Tap On duty at the depot and your clock starts; sorting and loading count. Change my runs sets which runs are yours today and in what order. Off duty ends it.",
     why: "Shift times and who did which run come from here, and it’s what switches on Ping, the plan and your morning card.",
     say: "Tap on duty at the depot and your clock starts. Sorting and loading count. Change my runs sets which runs are yours today, and in what order. Everything else hangs off that." },
@@ -129,11 +135,11 @@ export const UPDATES = [
     what: "On a run, tap Stan’s head and he talks you to the next stop, turn by turn when there’s GPS. The arrow in the bottom bar opens Google Maps to the next stop.",
     why: "For new runs, new addresses and dark streets, when reading the screen isn’t safe.",
     say: "On a run, tap my head and I'll talk you to the next stop. Turn by turn, when there's G P S. The arrow in the bottom bar opens maps to the next stop. Handy on a new run, or a dark street." },
-  { id: '2026-11-10-depot-pick', date: '2026-11-10', for: ["driver", "helper"], title: "What to load: bundles and loose",
+  { id: '2026-11-10-depot-pick', shot: 'depot-pick', date: '2026-11-10', for: ["driver", "helper"], title: "What to load: bundles and loose",
     what: "Before you leave, To collect lists each run’s papers as whole bundles plus loose copies, with an All runs line for the day’s total.",
     why: "So the car is loaded right the first time, straight from the sheet.",
     say: "Before you leave, to collect lists each run's papers as whole bundles plus loose copies, with a total for all your runs. So the car is loaded right the first time." },
-  { id: '2026-11-09-problem', date: '2026-11-09', for: ["driver", "helper"], title: "Couldn’t deliver, or short",
+  { id: '2026-11-09-problem', shot: 'problem', date: '2026-11-09', for: ["driver", "helper"], title: "Couldn’t deliver, or short",
     what: "Tick the stop as usual, then tap ⚠ in the bottom bar and pick why: gate locked, dog, no letterbox, short of papers and so on. Mike and Lisa see it straight away.",
     why: "A stop we couldn’t do is fine. A stop we couldn’t do and didn’t record is a complaint with no answer.",
     say: "If you can't deliver, tick the stop, then tap the warning button in the bottom bar and pick why. Gate locked, dog, short of papers. A stop we couldn't do is fine. One we didn't record is a complaint with no answer." },
@@ -141,7 +147,7 @@ export const UPDATES = [
     what: "📷 in the bottom bar takes a photo for the stop you just ticked, stamped with the address, time and your name. Forgot? ⋯ → Add a photo to an address… adds one later, even from your gallery.",
     why: "A photo of the paper in the box ends an argument faster than anything else we have.",
     say: "The camera button in the bottom bar takes a photo for the stop you just ticked, stamped with the address and time. Forgot? You can add one later from the menu. A photo ends an argument faster than anything." },
-  { id: '2026-11-08-ticking', date: '2026-11-08', for: ["all"], title: "The basics: tap to tick",
+  { id: '2026-11-08-ticking', shot: 'run', date: '2026-11-08', for: ["all"], title: "The basics: tap to tick",
     what: "Each address is a tile. Tap it when the paper’s in the box: it turns green and saves who, when and where. The purple tile is your next stop. Mum has big text; anyone can turn it on in ⚙ Settings.",
     why: "That tap is the delivery record everything else is built on.",
     say: "The basics. Each address is a tile. Tap it when the paper's in the box. It turns green, and saves who, when and where. The purple tile is your next stop. That tap is what everything else is built on." },

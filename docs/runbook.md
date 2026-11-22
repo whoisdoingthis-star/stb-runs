@@ -50,7 +50,20 @@ Done once so far: 9 Nov 2026, an accidental untick and re-tick at Hulme 447 (Run
 ## Find a delivery photo
 Supabase **Storage → delivery-photos → date → route**. The `photos` table lists who took each one, when and where.
 
+## Stan's end-of-day email
+The evening job (`.github/workflows/training-digest.yml`, [decision 0065](decisions/0065-stans-school.md)) is a dry run until it can send. To switch it on (Mike):
+1. In Resend (the account Ollie uses), **Domains → Add domain**: a domain you own (for example a Zalense one), and add the DNS records it shows. Until a domain is verified, Resend only delivers to the account owner's own address.
+2. **API Keys → Create**: "STB end-of-day email", sending access only.
+3. In GitHub, **stb-runs → Settings → Secrets and variables → Actions → New repository secret**: `RESEND_API_KEY` (the key) and `EMAIL_FROM` (for example `Stan <stan@your-domain>`).
+4. **Actions → Stan's end-of-day email → Run workflow**, with *Dry run* ticked first: it lists who would get which cards. Run it again without to send.
+
+Nobody is ever sent the same card twice (`training_emails`). To send a card again to someone, delete that row in Supabase.
+
+## A new driver can't go on duty
+They need the New driver course in Stan's School and its four practice tasks in Sandbox Stan, signed in on that phone so it counts. Dispatch → People shows what's left. If they already know the job, untick **Needs training** there.
+
 ## Known open items
+- The end-of-day email needs a verified domain and a Resend key (above).
 - Rotate the Supabase secret key: it was shown in a screenshot during setup (8 Nov 2026). Kept for the proof of concept by choice.
 - Change the RouteSmart password: it was shared in a chat during setup (8 Nov 2026), and may be a shared login.
 - Photos that fail to upload with no signal are only retried while the photo screen is open.

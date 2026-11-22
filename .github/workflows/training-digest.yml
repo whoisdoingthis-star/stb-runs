@@ -1,0 +1,34 @@
+# Stan's end-of-day email (docs/decisions/0065-stans-school.md): the day's What's new cards for each person who hasn't
+# read them in the app yet, each linked to its lesson. 8:23pm NZ daylight time (7:23am UTC); 7:23pm in winter.
+name: Stan's end-of-day email
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (say who would get what, send nothing)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: training-digest
+  cancel-in-progress: false
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Send
+        run: node tools/training-digest.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          DRY_RUN: ${{ inputs.dry_run }}

@@ -8,7 +8,7 @@ const MANIFEST = 'stb.stan.clips';      // { key: recorded_at } for the clips th
 let ctx = null; let queue = Promise.resolve(); let syncing = null; let current = null; let gen = 0;
 const LONG = 'stb.stan.long';           // { key: recorded_at } for the long read-aloud clips (What's new): known about, fetched only when asked for
 const longOnes = () => { try { return JSON.parse(localStorage.getItem(LONG) || '{}'); } catch { return {}; } };
-const isLong = (key) => key.startsWith('news.');
+const isLong = (key) => key.startsWith('news.') || key.startsWith('learn.');   // Stan's School lines (decision 0065) are read-aloud ones too
 const manifest = () => { try { return JSON.parse(localStorage.getItem(MANIFEST) || '{}'); } catch { return {}; } };
 
 /** Sound can only start after a tap. Call this from the first one. */

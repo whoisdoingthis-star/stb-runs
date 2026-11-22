@@ -1076,3 +1076,4 @@ html.big .home-mini { grid-template-columns: 1fr; }
 .news-acts { display: flex; gap: 8px; margin-top: 16px; } .news-acts .btn { flex: 1; }
 .upd-cell.warn-text { font-weight: 700; }
 .news-read { margin-top: 12px; width: 100%; min-height: 48px; }
+.dz-check { display: flex; gap: 6px; align-items: center; margin-top: 4px; }

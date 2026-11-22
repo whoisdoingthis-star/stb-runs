@@ -1,0 +1,37 @@
+/* Stan's School (decision 0065): the app's own colours and type (styles.css), plus these few pieces. */
+.sc { padding-bottom: calc(40px + var(--safe-bottom)); }
+.sc-hello { display: flex; gap: 14px; align-items: center; margin: 6px 0 10px; }
+.sc-hello h1 { margin: 2px 0 4px; font-size: var(--t-xl); line-height: 1.1; }
+.sc-hello p { margin: 0; }
+.sc-h { font-size: var(--t-l); margin: 22px 0 8px; }
+.sc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.sc-course { display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--edge); border-radius: var(--radius); padding: 14px; color: var(--ink); text-decoration: none; }
+.sc-course.fin { border-color: var(--done-line); }
+.sc-course p { margin: 0; }
+.sc-course-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: var(--t-m); }
+.sc-need { color: var(--warn); font-weight: 700; }
+.sc-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.sc-bar i { display: block; height: 100%; background: var(--done); border-radius: 99px; transition: width .3s; }
+.sc-tasks, .sc-news { display: flex; flex-direction: column; gap: 8px; }
+.sc-task, .sc-newsrow { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border: 1px solid var(--edge); border-radius: var(--radius); padding: 12px 14px; color: var(--ink); text-decoration: none; min-height: 48px; }
+.sc-newsrow { flex-direction: column; gap: 2px; }
+.sc-task.fin { border-color: var(--done-line); }
+.sc-tick { font-size: 20px; line-height: 1; width: 22px; text-align: center; color: var(--muted); }
+.sc-task.fin .sc-tick { color: var(--done); }
+.sc-foot { margin-top: 24px; }
+.sc-foot a { color: var(--info); }
+.sc-step .topbar a.icon-btn { font-size: 28px; text-decoration: none; color: var(--ink); padding: 4px 10px; }
+.sc-card { background: var(--card); border: 1px solid var(--edge); border-radius: 18px; padding: 18px 16px; margin: 14px 0; }
+.sc-kicker { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.sc-card h2 { font-size: var(--t-l); margin: 6px 0 12px; line-height: 1.2; }
+.sc-shot { display: block; width: 100%; max-width: 360px; max-height: 55vh; object-fit: cover; object-position: top; margin: 0 auto 14px; border-radius: 14px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+.sc-stan { display: flex; justify-content: center; margin: 4px 0 10px; }
+.sc-what { font-size: var(--t-m); line-height: 1.5; margin: 0 0 12px; }
+.sc-why { margin: 0 0 14px; padding: 10px 12px; background: var(--info-bg); color: var(--ink); border-radius: 12px; line-height: 1.45; }
+.sc-voice { display: flex; flex-direction: column; gap: 6px; }
+.sc-say { min-height: 52px; }
+.sc-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+.sc-nav .btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+html.big .sc-what { font-size: 22px; }
+.sc a.btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }

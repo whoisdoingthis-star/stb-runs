@@ -34,6 +34,8 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 | `notice_seen` | Who has tapped Got it on a note | One row per `notice_id` and `user_name`, with `seen_at`. Members read; each person adds only their own. |
 | `helper_names` | Helpers with no login, typed under "Other…" | `name`, `added_by`, `added_at`. Members read and add; dispatchers remove (People page). |
 | `update_seen` | What's new ([decision 0059](decisions/0059-whats-new.md)) | One row when a person has tapped through one of Stan's change cards: `update_id` (the card's id in `js/whatsnew.js`), `user_name`, `seen_at`. Members read all and add their own; never changed. |
+| `training_progress` | Stan's School ([decision 0065](decisions/0065-stans-school.md)) | One row when a person finishes something: `item` is `course:<id>` (reached the end of a course) or `task:<id>` (a Sandbox Stan practice task), with `user_name` and `done_at`. Members read all and add their own; never changed. |
+| `training_emails` | Stan's School ([decision 0065](decisions/0065-stans-school.md)) | Which What's new card was emailed to whom (`email`, `update_id`, `sent_at`), so the end-of-day email never sends a card twice. Only the server job (server key) uses it; locked to everyone signed in. |
 | `spare_counts` | Spare papers ([decision 0042](decisions/0042-spares-and-pinned-rules.md)) | One row per answer: `delivery_date`, `user_name`, `moment` (`start` or `end`), `counts` (JSON by paper, e.g. NZH, SST), `given` (JSON list of who got a spare and how many), `device_time`. Added, never changed; each driver's latest answer for a moment is the one used. Members read; each driver adds their own. |
 | `spare_people` | People who regularly get a spare, shown as buttons | `name`, `added_by`, `added_at`. Members read and add; dispatchers remove. |
 | `stan_lines` | Which of Stan's lines have been recorded ([decision 0043](decisions/0043-stan-recorded-voice.md)) | `key` (also the clip's file name), `text` (the words as recorded), `voice_id`, `model`, `bytes`, `recorded_by`, `recorded_at`. Members read; only the `stan-voice` function writes. The clips themselves are in the public `stan-voice` storage bucket. |
@@ -68,6 +70,8 @@ Write the change into `sql/schema.sql` in re-runnable form, run it in the Supaba
 
 
 **Drivers and helpers (19 Nov 2026):** `members.crew` is `driver` or `helper` (default `driver`), separate from `role` (access). `duty_events.helpers` is the list of helpers' names a driver gave when going on duty (empty when on their own; null when not asked, as for a helper's own shift).
+
+**New drivers (23 Nov 2026):** `members.needs_training` (true for people added from 23 Nov 2026 on, false for everyone before) means they can go on duty as a helper but not as a driver until `training_progress` holds the driver course and its four practice tasks ([decision 0065](decisions/0065-stans-school.md)). Only a dispatcher can switch it, on People.
 
 **Duty hard lines (22 Nov 2026, [decision 0057](decisions/0057-duty-hard-lines.md)):** `duty_events.handover_to` (who is finishing the stops) and `duty_events.reason` (`unwell`, `car`, `other`) are set on an `off_duty` made while stops were still to do. The trigger `duty_off_helpers` adds an `off_duty` (`source = auto`, same time) for a driver's helpers whenever the driver's `off_duty` is added: the helpers named on the driver's latest `on_duty`, and anyone whose latest `on_duty` names that driver; a helper who has since gone on duty with another driver is left alone.
 

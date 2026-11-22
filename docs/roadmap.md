@@ -45,4 +45,4 @@ Where the app stands after its first week in use, looked at from the seat of som
 ## Before relying on it
 - Rotate the Supabase secret key and change the RouteSmart password ([decision 0011](decisions/0011-known-security-shortcuts.md)).
 - Protect `main`: changes through pull requests approved by Mike ([decision 0009](decisions/0009-docs-as-code.md)).
-- A proper email sender, so users can be invited by email and reset their own passwords.
+- A proper email sender, so users can be invited by email and reset their own passwords. (Started 23 Nov 2026: Stan's end-of-day email uses Resend, waiting on a verified domain; see the [runbook](runbook.md#stans-end-of-day-email).)
