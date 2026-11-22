@@ -875,17 +875,19 @@ export async function viewDispatch(ctx, tab = 'overview') {
         box.replaceChildren(
           h('h3', null, 'Stan’s report card'),
           h('p', null, 'Before Stan suggests a quicker order, he has to show he can predict how long a morning takes. Each run-morning in these dates is predicted from the ', h('b', null, 'other'), ' days and compared with what it really took.'),
+          h('p', null, h('b', null, 'The test that counts: the driving. '), `An order can only change the drives between stops (legs of ${tm.DRIVE_M} m or more), not the time at each letterbox${r.drive.minutes != null ? `. That is about ${r.drive.minutes} minutes of a run` : ''}.`),
           h('div', { class: 'ins-sum' },
-            h('div', null, h('b', null, r.n), ' run-mornings tested'),
-            h('div', { class: r.pass ? '' : 'act' }, h('b', null, `${r.typicalMissPct}%`), ` typical miss (target ${tm.TARGET_PCT}%)`),
-            h('div', null, h('b', null, `${r.within5}%`), ' within 5%'), h('div', null, h('b', null, `${r.within10}%`), ' within 10%'), h('div', null, h('b', null, `${r.within20}%`), ' within 20%')),
+            h('div', null, h('b', null, r.drive.n), ' run-mornings tested'),
+            h('div', { class: r.pass ? '' : 'act' }, h('b', null, r.drive.typicalMissPct == null ? 'n/a' : `${r.drive.typicalMissPct}%`), ` typical miss on the driving (target ${tm.TARGET_PCT}%)`),
+            h('div', null, h('b', null, `${r.drive.within5}%`), ' within 5%'), h('div', null, h('b', null, `${r.drive.within10}%`), ' within 10%'), h('div', null, h('b', null, `${r.drive.within20}%`), ' within 20%')),
+          h('p', { class: 'small muted' }, `The whole morning, for comparison: typical miss ${r.typicalMissPct}%, ${r.within5}% within 5%, ${r.within10}% within 10%, ${r.within20}% within 20%.`),
           h('p', { class: r.pass ? 'ok-text' : 'warn-text', style: 'font-weight:700' }, r.pass ? 'Good enough: Stan’s predictions can be trusted for comparing orders.' : `Not good enough yet${r.n < tm.MIN_MORNINGS ? ` (needs at least ${tm.MIN_MORNINGS} mornings)` : ''}. Stan is not suggesting any change of order.`),
           h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' }, h('thead', null, h('tr', null, h('th', null, 'Run'), h('th', null, 'Mornings'), h('th', null, 'Typical miss'))),
             h('tbody', null, r.byRun.map((b) => h('tr', null, h('td', null, h('b', null, run(b.route))), h('td', null, String(b.n)), h('td', null, `${b.typicalMissPct}%`)))))),
-          h('details', null, h('summary', null, 'Every morning tested'), h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' }, h('thead', null, h('tr', null, h('th', null, 'Day'), h('th', null, 'Run'), h('th', null, 'Crew'), h('th', null, 'Took'), h('th', null, 'Predicted'), h('th', null, 'Out by'), h('th', null, 'Legs seen before'))),
-            h('tbody', null, r.rows.map((x) => h('tr', null, h('td', null, x.date.slice(5)), h('td', null, run(x.route)), h('td', null, x.kind), h('td', null, `${x.actualMin} min`), h('td', null, `${x.predictedMin} min`), h('td', null, `${x.errPct > 0 ? '+' : ''}${x.errPct}%`), h('td', null, `${x.coverage}%`))))))),
+          h('details', null, h('summary', null, 'Every morning tested'), h('div', { class: 'dz-tablewrap' }, h('table', { class: 'dz-table' }, h('thead', null, h('tr', null, h('th', null, 'Day'), h('th', null, 'Run'), h('th', null, 'Crew'), h('th', null, 'Took'), h('th', null, 'Predicted'), h('th', null, 'Out by'), h('th', null, 'Driving'), h('th', null, 'Driving out by'), h('th', null, 'Legs seen before'))),
+            h('tbody', null, r.rows.map((x) => h('tr', null, h('td', null, x.date.slice(5)), h('td', null, run(x.route)), h('td', null, x.kind), h('td', null, `${x.actualMin} min`), h('td', null, `${x.predictedMin} min`), h('td', null, `${x.errPct > 0 ? '+' : ''}${x.errPct}%`), h('td', null, x.driveMin == null ? '' : `${x.driveMin} min`), h('td', null, x.driveErrPct == null ? '' : `${x.driveErrPct > 0 ? '+' : ''}${x.driveErrPct}%`), h('td', null, `${x.coverage}%`))))))),
           h('p', { class: 'small muted' }, 'A leg is the time from one tick to the next in the same car. Its cost is what it usually took on other mornings, or its distance if it hasn’t been driven that way; the total is scaled by how that crew usually compares. Run 8 is left out: its order is fixed by the buildings.'));
-        const head = { at: new Date().toISOString(), from: INS.from, to: INS.to, n: r.n, typicalMissPct: r.typicalMissPct, biasPct: r.biasPct, within5: r.within5, within10: r.within10, within20: r.within20, byRun: r.byRun, pass: r.pass };
+        const head = { at: new Date().toISOString(), from: INS.from, to: INS.to, n: r.n, typicalMissPct: r.typicalMissPct, biasPct: r.biasPct, within5: r.within5, within10: r.within10, within20: r.within20, byRun: r.byRun, drive: r.drive, pass: r.pass };
         app.store.setSetting('predictor_report', head, by()).catch(() => {});
       }).catch((e) => box.replaceChildren(h('h3', null, 'Stan’s report card'), h('p', { class: 'bad' }, `Couldn’t work it out: ${e.message}`)));
       INS.pred = { rows: INS.rows, box };

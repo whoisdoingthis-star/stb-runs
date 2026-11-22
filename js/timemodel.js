@@ -12,6 +12,8 @@ export const MIN_LEGS = 15;          // a run-morning needs this many legs to be
 export const MIN_SEEN = 2;           // times a leg must have been driven on other mornings before its own history is used
 export const MAX_SPEED = 25;         // m/s: faster than this between two ticks and they weren't made from the same car
 export const TARGET_PCT = 5;         // the gate: the typical miss must be within this (decision 0064)
+export const DRIVE_M = 150;          // a leg at least this long is a drive, not a walk to the next letterbox (decision 0067)
+export const MIN_DRIVES = 5;         // a morning needs this many drives to be tested on its driving
 export const MIN_MORNINGS = 10;      // …over at least this many mornings
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : null; };
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -83,7 +85,7 @@ export function rawSeconds(model, u, notDate = null) { let s = 0; let seen = 0; 
 
 /**
  * The report card: every usable morning is predicted from all the *other* days and compared with what it took.
- * Returns { n, typicalMissPct, biasPct, within5, within10, within20, byRun, rows, pass }.
+ * Returns { n, typicalMissPct, biasPct, within5, within10, within20, byRun, rows, drive, wholePass, pass }; pass is the driving part's.
  */
 export function reportCard(mornings, opts = {}) {
   const model = learn(mornings, opts);
@@ -95,10 +97,17 @@ export function reportCard(mornings, opts = {}) {
     const predicted = r.secs * scale;
     return { run_id: r.u.run_id, route: r.u.route, date: r.u.date, kind: r.u.kind, legs: r.u.legs.length, coverage: Math.round(r.coverage * 100), actualMin: Math.round(r.u.actual / 60), predictedMin: Math.round(predicted / 60), errPct: Math.round(((predicted - r.u.actual) / r.u.actual) * 1000) / 10 };
   });
+  // The driving part (decision 0067): the same test on the legs an order can change, the drives between stops.
+  const dr = model.used.map((u) => { const legs = u.legs.filter((l) => l.m != null && l.m >= DRIVE_M); return { u, legs, actual: legs.reduce((s, l) => s + l.cs, 0), secs: legs.reduce((s, l) => s + legCost(model, u.route, l, u.date).secs, 0) }; }).filter((d) => d.legs.length >= MIN_DRIVES && d.actual > 0).map((d) => ({ ...d, ratio: d.actual / d.secs }));
+  const dErr = dr.map((d) => { const same = dr.filter((o) => o !== d && o.u.date !== d.u.date && o.u.kind === d.u.kind).map((o) => o.ratio); const any = dr.filter((o) => o !== d && o.u.date !== d.u.date).map((o) => o.ratio);
+    const predicted = d.secs * (same.length >= 2 ? median(same) : any.length ? median(any) : 1); const errPct = Math.round(((predicted - d.actual) / d.actual) * 1000) / 10;
+    const row = rows.find((r) => r.run_id === d.u.run_id); if (row) Object.assign(row, { driveMin: Math.round(d.actual / 6) / 10, drivePredMin: Math.round(predicted / 6) / 10, driveErrPct: errPct }); return Math.abs(errPct); });
+  const dShare = (lim) => (dErr.length ? Math.round((100 * dErr.filter((e) => e <= lim).length) / dErr.length) : 0); const dTyp = dErr.length ? Math.round(median(dErr) * 10) / 10 : null;
+  const drive = { n: dErr.length, typicalMissPct: dTyp, within5: dShare(5), within10: dShare(10), within20: dShare(20), minutes: dr.length ? Math.round(mean(dr.map((d) => d.actual)) / 6) / 10 : null, pass: dErr.length >= MIN_MORNINGS && dTyp != null && dTyp <= TARGET_PCT };
   const abs = rows.map((r) => Math.abs(r.errPct)); const share = (lim) => (rows.length ? Math.round((100 * abs.filter((e) => e <= lim).length) / rows.length) : 0);
   const routes = [...new Set(rows.map((r) => r.route))].sort();
   const typical = rows.length ? Math.round(median(abs) * 10) / 10 : null;
   return { n: rows.length, typicalMissPct: typical, biasPct: rows.length ? Math.round(median(rows.map((r) => r.errPct)) * 10) / 10 : null, within5: share(5), within10: share(10), within20: share(20),
     byRun: routes.map((route) => { const rs = rows.filter((r) => r.route === route); return { route, n: rs.length, typicalMissPct: Math.round(median(rs.map((r) => Math.abs(r.errPct))) * 10) / 10 }; }),
-    rows, pass: rows.length >= MIN_MORNINGS && typical != null && typical <= TARGET_PCT };
+    rows, drive, wholePass: rows.length >= MIN_MORNINGS && typical != null && typical <= TARGET_PCT, pass: drive.pass };   // the gate is the driving part (decision 0067)
 }
