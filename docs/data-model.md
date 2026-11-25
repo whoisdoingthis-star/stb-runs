@@ -45,6 +45,12 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 
 | `pings` | Dispatch asking where an on-duty driver is: `target_name`, `asked_by`, `asked_at`, then the phone's answer (`state` answered / off_duty / no_gps, position, `answered_at`). Dispatchers add; only the pinged person's phone answers; kept as a record. ([decision 0026](decisions/0026-run-map-and-ping.md)) |
 
+**Voice-to-Laptop Bridge (26 Nov 2026, [decision 0070](decisions/0070-laptop-bridge.md)).** Nothing to do with runs. Nobody reads or writes these tables directly; it all goes through functions.
+- `bridge_devices`: each laptop, a bcrypt hash of its secret, `last_seen` (heartbeat), `listener_seen` and what it reports (`info`: folders it accepts, Claude Code version).
+- `bridge_jobs`: work for the laptop: `code` (6 letters, to say out loud), `job_type` (`ping` or `claude`), `target` (a folder name the laptop knows), `request`, `status` (`awaiting_allow`, `queued`, `running`, `done`, `held`, `failed`, `timed_out`, `cancelled`), limits, and the result (`summary`, `held_reason`, `branch`, `commit_sha`).
+- `bridge_job_log`: every queue, allow, claim, finish, cancel and pause. `bridge_control`: the kill switch.
+- From a Claude session (server only): `bridge_status()`, `bridge_enqueue(target, request)`, `bridge_allow(code)`, `bridge_cancel(code)`, `bridge_pause(true/false)`, `bridge_queue()`. The laptop calls `bridge_heartbeat`, `bridge_claim_job`, `bridge_job_should_stop` and `bridge_finish_job` with the public key and its secret.
+
 ## Views
 - `line_status`: latest tick state per tile, with its outcome, reason, quantity delivered and method.
 - `address_positions`: where each letterbox is, learned from real delivery ticks: the average of the ticks that agree (within 30 m of the middle of them), only when at least two agree and they are at least half of the ticks there. Stan guides to it when Dispatch has set no stop ([decision 0039](decisions/0039-learned-letterbox.md)).

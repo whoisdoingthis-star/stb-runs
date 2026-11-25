@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Voice-to-Laptop Bridge** (Mike, 26 Nov): any Claude session, including voice on the drive, can now see whether Mike's home laptop is on and hand it work in a queue of its own. The laptop picks a job up within seconds, does one at a time, and reports back; anything iffy waits for Mike's Allow, and there's a kill switch. STB changes still go through voice builds. Nothing changes on the phones. See [decision 0070](docs/decisions/0070-laptop-bridge.md).
 - **An address that comes back lands in its usual place** (Mike, 23 Nov, after 26 Marine Parade on Run 6): if your own order was made while an address was off the sheet, it now goes where the usual order has it, not beside whatever it follows on the sheet, and Stan asks about any address your order has never placed that sits away from its street. [Decision 0068](docs/decisions/0068-returning-addresses-and-one-letterbox.md), lesson L-013.
 - **One letterbox, two tiles** (Mike, 23 Nov, 12 Selwyn Road): Stan spots the same letterbox keyed two ways and asks a dispatcher whether to show one tile; from the next sheet it is one tile with both papers.
 - **Time between stops, on Insights** (Mike, 23 Nov): the same legs driven by two people each on their own, street by street, with complaints beside it. Dispatch board only. [Decision 0069](docs/decisions/0069-time-between-stops.md).

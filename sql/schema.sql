@@ -1292,3 +1292,257 @@ comment on table public.build_requests is 'Voice builds queue (decision 0065). T
 alter table public.build_requests enable row level security;
 drop policy if exists build_requests_read on public.build_requests;
 create policy build_requests_read on public.build_requests for select to authenticated using (public.is_dispatcher());
+
+-- ---- Voice-to-Laptop Bridge (Mike, 26 Nov 2026; docs/decisions/0070-laptop-bridge.md) ----
+-- Lets any Claude session (voice, chat, scheduled tasks) see whether Mike's home laptop is up, and hand it jobs.
+-- STB code builds do NOT come here: they stay on build_requests and the GitHub job (0065). This is for work that needs
+-- the laptop itself. The laptop's own scripts live on the laptop (Projects\bridge), not in this public repository.
+-- Devices are registered by hand with only a bcrypt hash of their secret; the secret never leaves the laptop.
+do $$ begin
+  create extension if not exists pgcrypto with schema extensions;
+exception when others then null; -- not available in the local test database
+end $$;
+
+create table if not exists public.bridge_devices (
+  device        text primary key,
+  label         text not null,
+  secret_hash   text not null,
+  last_seen     timestamptz,                    -- heartbeat, every minute
+  listener_seen timestamptz,                    -- the listener checking the queue, every 5 seconds
+  info          jsonb not null default '{}'::jsonb,
+  created_at    timestamptz not null default now()
+);
+alter table public.bridge_devices add column if not exists listener_seen timestamptz;
+
+create table if not exists public.bridge_control (
+  id            int primary key default 1 check (id = 1),
+  paused        boolean not null default false, -- the kill switch
+  paused_reason text,
+  updated_at    timestamptz not null default now()
+);
+insert into public.bridge_control (id) values (1) on conflict do nothing;
+
+create table if not exists public.bridge_jobs (
+  id           uuid primary key default gen_random_uuid(),
+  code         text generated always as (upper(left(replace(id::text,'-',''),6))) stored,
+  job_type     text not null default 'claude' check (job_type in ('ping','claude')),
+  target       text,
+  request      text not null check (char_length(request) between 2 and 8000),
+  requested_by text not null default 'Mike',
+  source       text not null default 'chat' check (source in ('voice','chat','schedule','code','other')),
+  status       text not null default 'queued'
+               check (status in ('awaiting_allow','queued','running','done','held','failed','timed_out','cancelled')),
+  max_minutes  int  not null default 45 check (max_minutes between 1 and 240),
+  max_turns    int  not null default 80 check (max_turns between 1 and 300),
+  device       text,
+  created_at   timestamptz not null default now(),
+  allowed_at   timestamptz,
+  started_at   timestamptz,
+  finished_at  timestamptz,
+  summary      text,
+  held_reason  text,
+  output_tail  text,
+  result       jsonb,
+  branch       text,
+  commit_sha   text,
+  check (job_type <> 'claude' or target is not null)
+);
+create index if not exists bridge_jobs_queue_idx on public.bridge_jobs (status, created_at);
+
+create table if not exists public.bridge_job_log (
+  id      bigint generated always as identity primary key,
+  job_id  uuid references public.bridge_jobs(id) on delete cascade,
+  at      timestamptz not null default now(),
+  actor   text not null,
+  event   text not null,
+  detail  text
+);
+create index if not exists bridge_job_log_job_idx on public.bridge_job_log (job_id, at);
+
+comment on table public.bridge_devices is 'Voice-to-Laptop Bridge (0070). Is the laptop up? select * from bridge_status();';
+comment on table public.bridge_jobs is
+  'Voice-to-Laptop Bridge job queue (laptop work only; STB code builds go to build_requests). Add a job with select bridge_enqueue(target, request); targets are listed by bridge_status(). Check with select * from bridge_queue(); Allow with bridge_allow(code); stop with bridge_cancel(code) or bridge_pause(true). Anything iffy: enqueue with p_needs_allow => true. Never queue work that changes or deletes live database records or spends money: that needs Mike in the chat.';
+
+-- Nobody reads or writes these tables directly: everything goes through the functions below.
+alter table public.bridge_devices enable row level security;
+alter table public.bridge_control enable row level security;
+alter table public.bridge_jobs    enable row level security;
+alter table public.bridge_job_log enable row level security;
+
+create or replace function public.bridge__auth(p_device text, p_secret text)
+returns boolean language plpgsql stable security definer set search_path = public, extensions as $$
+begin
+  return exists (select 1 from public.bridge_devices
+                  where device = p_device and secret_hash = extensions.crypt(p_secret, secret_hash));
+end $$;
+
+create or replace function public.bridge__job(p_ref text)
+returns uuid language sql stable security definer set search_path = public as $$
+  select id from public.bridge_jobs where id::text = p_ref or code = upper(p_ref) order by created_at desc limit 1;
+$$;
+
+-- The laptop's side: called with the public key plus the device's secret.
+create or replace function public.bridge_heartbeat(p_device text, p_secret text, p_info jsonb default '{}'::jsonb)
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
+declare ok boolean;
+begin
+  update public.bridge_devices set last_seen = now(), info = info || coalesce(p_info, '{}'::jsonb)
+   where device = p_device and secret_hash = extensions.crypt(p_secret, secret_hash);
+  get diagnostics ok = row_count;
+  return ok;
+end $$;
+
+create or replace function public.bridge_claim_job(p_device text, p_secret text, p_info jsonb default '{}'::jsonb)
+returns setof public.bridge_jobs language plpgsql security definer set search_path = public as $$
+declare j public.bridge_jobs;
+begin
+  if not public.bridge__auth(p_device, p_secret) then return; end if;
+  update public.bridge_devices set listener_seen = now(), info = info || coalesce(p_info, '{}'::jsonb)
+   where device = p_device;
+  with stale as (
+    update public.bridge_jobs set status = 'timed_out', finished_at = now(),
+           held_reason = 'No result within ' || max_minutes || ' minutes'
+     where status = 'running' and started_at < now() - make_interval(mins => max_minutes + 5)
+    returning id)
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  select id, 'database', 'timed_out', 'listener did not report back' from stale;
+  if (select paused from public.bridge_control where id = 1) then return; end if;
+  if exists (select 1 from public.bridge_jobs where status = 'running') then return; end if; -- one at a time
+  select * into j from public.bridge_jobs where status = 'queued' order by created_at for update skip locked limit 1;
+  if not found then return; end if;
+  update public.bridge_jobs set status = 'running', started_at = now(), device = p_device where id = j.id returning * into j;
+  insert into public.bridge_job_log (job_id, actor, event) values (j.id, p_device, 'claimed');
+  return next j;
+end $$;
+
+create or replace function public.bridge_job_should_stop(p_device text, p_secret text, p_job uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare s text;
+begin
+  if not public.bridge__auth(p_device, p_secret) then return 'unauthorised'; end if;
+  update public.bridge_devices set listener_seen = now() where device = p_device;
+  select status into s from public.bridge_jobs where id = p_job and device = p_device;
+  if s is null then return 'missing'; end if;
+  if s = 'cancelled' then return 'cancelled'; end if;
+  if (select paused from public.bridge_control where id = 1) then return 'paused'; end if;
+  return '';
+end $$;
+
+create or replace function public.bridge_finish_job(
+  p_device text, p_secret text, p_job uuid, p_status text,
+  p_summary text default null, p_held_reason text default null, p_output_tail text default null,
+  p_result jsonb default null, p_branch text default null, p_commit_sha text default null)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  if not public.bridge__auth(p_device, p_secret) then return false; end if;
+  if p_status not in ('done','held','failed','timed_out','cancelled') then return false; end if;
+  update public.bridge_jobs
+     set status = case when status = 'cancelled' then 'cancelled' else p_status end, finished_at = now(),
+         summary = left(p_summary, 4000), held_reason = left(p_held_reason, 2000), output_tail = left(p_output_tail, 8000),
+         result = p_result, branch = p_branch, commit_sha = p_commit_sha
+   where id = p_job and device = p_device and status in ('running','cancelled');
+  if not found then return false; end if;
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  values (p_job, p_device, p_status, left(coalesce(p_held_reason, p_summary), 500));
+  return true;
+end $$;
+
+-- The sessions' side: server only (the Supabase connector or the server key).
+create or replace function public.bridge_enqueue(
+  p_target text, p_request text, p_job_type text default 'claude', p_source text default 'chat',
+  p_needs_allow boolean default false, p_requested_by text default 'Mike',
+  p_max_minutes int default 45, p_max_turns int default 80)
+returns text language plpgsql security definer set search_path = public as $$
+declare j public.bridge_jobs; known jsonb;
+begin
+  if p_job_type = 'claude' then
+    select info->'targets' into known from public.bridge_devices where info ? 'targets' limit 1;
+    if known is not null and not known ? p_target then
+      raise exception 'Unknown target %. Known targets: %', p_target, known;
+    end if;
+  end if;
+  insert into public.bridge_jobs (job_type, target, request, requested_by, source, status, max_minutes, max_turns)
+  values (p_job_type, p_target, p_request, p_requested_by, p_source,
+          case when p_needs_allow then 'awaiting_allow' else 'queued' end, p_max_minutes, p_max_turns)
+  returning * into j;
+  insert into public.bridge_job_log (job_id, actor, event, detail) values (j.id, p_source, j.status, left(p_request, 300));
+  return j.code;
+end $$;
+
+create or replace function public.bridge_allow(p_ref text)
+returns text language plpgsql security definer set search_path = public as $$
+declare jid uuid := public.bridge__job(p_ref);
+begin
+  update public.bridge_jobs set status = 'queued', allowed_at = now() where id = jid and status = 'awaiting_allow';
+  if not found then return 'Nothing waiting for Allow with that code'; end if;
+  insert into public.bridge_job_log (job_id, actor, event) values (jid, 'Mike', 'allowed');
+  return 'Allowed';
+end $$;
+
+create or replace function public.bridge_cancel(p_ref text)
+returns text language plpgsql security definer set search_path = public as $$
+declare jid uuid := public.bridge__job(p_ref);
+begin
+  update public.bridge_jobs set status = 'cancelled', finished_at = case when status = 'running' then finished_at else now() end
+   where id = jid and status in ('awaiting_allow','queued','running');
+  if not found then return 'Nothing to cancel with that code'; end if;
+  insert into public.bridge_job_log (job_id, actor, event) values (jid, 'Mike', 'cancelled');
+  return 'Cancelled';
+end $$;
+
+create or replace function public.bridge_pause(p_paused boolean, p_reason text default null)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  update public.bridge_control set paused = p_paused, paused_reason = p_reason, updated_at = now() where id = 1;
+  insert into public.bridge_job_log (actor, event, detail) values ('Mike', case when p_paused then 'paused' else 'resumed' end, p_reason);
+  return case when p_paused then 'Paused: the laptop takes no new jobs and stops the running one' else 'Resumed' end;
+end $$;
+
+create or replace function public.bridge_queue(p_limit int default 10)
+returns table(code text, status text, job_type text, target text, request text, source text,
+              created_at timestamptz, started_at timestamptz, finished_at timestamptz,
+              waiting_minutes int, summary text, held_reason text)
+language sql stable security definer set search_path = public as $$
+  select code, status, job_type, target, left(request, 200), source, created_at, started_at, finished_at,
+         case when status in ('queued','awaiting_allow') then floor(extract(epoch from now() - created_at)/60)::int end,
+         summary, held_reason
+    from public.bridge_jobs order by created_at desc limit p_limit;
+$$;
+
+drop function if exists public.bridge_status();
+create function public.bridge_status()
+returns table(device text, label text, online boolean, last_seen timestamptz, minutes_ago int,
+              listener_online boolean, listener_seen timestamptz, paused boolean,
+              queued int, awaiting_allow int, running int, stuck_queued int, targets jsonb, info jsonb)
+language sql stable security definer set search_path = public as $$
+  select d.device, d.label, coalesce(d.last_seen > now() - interval '3 minutes', false), d.last_seen,
+         floor(extract(epoch from now() - d.last_seen)/60)::int,
+         coalesce(d.listener_seen > now() - interval '2 minutes', false), d.listener_seen, c.paused,
+         (select count(*) from public.bridge_jobs where status = 'queued')::int,
+         (select count(*) from public.bridge_jobs where status = 'awaiting_allow')::int,
+         (select count(*) from public.bridge_jobs where status = 'running')::int,
+         (select count(*) from public.bridge_jobs where status = 'queued' and created_at < now() - interval '10 minutes')::int,
+         d.info->'targets', d.info - 'targets'
+    from public.bridge_devices d cross join public.bridge_control c order by d.device;
+$$;
+
+-- Who may call what: the laptop's four functions with the public key (they check the device secret);
+-- everything else only from the server.
+revoke all on function public.bridge__auth(text,text), public.bridge__job(text),
+  public.bridge_enqueue(text,text,text,text,boolean,text,int,int), public.bridge_allow(text), public.bridge_cancel(text),
+  public.bridge_pause(boolean,text), public.bridge_queue(int), public.bridge_status(),
+  public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
+  public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text)
+  from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log from anon;
+    grant execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
+      public.bridge_job_should_stop(text,text,uuid),
+      public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text) to anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log from authenticated;
+    revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_status() from authenticated;
+  end if;
+end $$;

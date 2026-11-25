@@ -2,6 +2,8 @@
 
 Mike can ask for a change on a voice call, while driving, and have it built without typing ([decision 0065](decisions/0065-voice-builds.md)).
 
+Work that needs Mike's laptop itself (its folders, projects not on GitHub) goes to the laptop's own queue instead ([decision 0070](decisions/0070-laptop-bridge.md)).
+
 ## How it works
 1. **On the call,** Claude takes down what Mike asked for and adds it to a queue in the database (`build_requests`).
 2. **Every ten minutes** a job on GitHub looks at the queue. If something is waiting, and it is not between **1 am and 8 am** New Zealand time (the runs are on), it starts.
