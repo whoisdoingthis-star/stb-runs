@@ -1,6 +1,6 @@
 // What-changed detection between two versions of a run sheet (js/rows.js).
 import assert from 'assert';
-import { diffLines, changeRecord, sha256Hex, runRow, rebundle } from '../js/rows.js';
+import { diffLines, changeRecord, sha256Hex, runRow, rebundle, keptTicks } from '../js/rows.js';
 const t = (n, f) => { try { f(); console.log('✓', n); } catch (e) { console.log('✗', n, e.message); process.exitCode = 1; } };
 const line = (num, street, parts, note = null) => ({ address_key: `HOWICK|${street}|${num}`, number: num, street, parts: parts.map(([pub, qty]) => ({ pub, qty })), note });
 const before = [line('13', 'AMBROSE LANE', [['NZH', 1]]), line('37', 'GRIGGS ROAD', [['NZH', 1]]), line('319', 'CLIFTON ROAD', [['NZH', 1]])];
@@ -42,3 +42,14 @@ t('RB-015 all runs: sheets that disagree on the size are added up, not guessed',
   t('sha256 of "abc"', () => assert.equal(hex, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'));
   t('the run row carries the fingerprint', () => assert.equal(runRow({ route: 'X', sourceHash: hex }, 'f.pdf').source_hash, hex));
 })();
+// Zaph's idea (17 Nov 2026; decision 0075): a tick undone straight after doesn't start the run's clock.
+{
+  const ev = [
+    { run_id: 'r', line_key: 'a', done: true, device_time: '2026-11-28T04:00:00Z' },   // ticked by accident
+    { run_id: 'r', line_key: 'a', done: false, device_time: '2026-11-28T04:00:05Z' },  // undone
+    { run_id: 'r', line_key: 'b', done: true, device_time: '2026-11-28T04:20:00Z' },   // the real start
+    { run_id: 'r', line_key: 'a', done: true, device_time: '2026-11-28T04:21:00Z' }];  // delivered later
+  const kept = keptTicks(ev).filter((e) => e.done).map((e) => e.device_time);
+  t('a tick undone afterwards doesn’t count; the real start and the later re-tick do', () => assert.deepEqual(kept, ['2026-11-28T04:20:00Z', '2026-11-28T04:21:00Z']));
+  t('nothing undone: every tick counts', () => assert.equal(keptTicks(ev.slice(2)).length, 2));
+}

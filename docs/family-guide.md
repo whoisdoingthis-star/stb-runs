@@ -37,6 +37,8 @@ These are remembered on that phone only.
 - When you get to the depot, tap **On duty** (the big button at the top of the Runs page). A clock starts: it counts sorting and loading too. If the phone knows you're at the depot it says so.
 - It changes to **On the run** by itself when you drive off, or when you tick your first stop.
 - **Choose my runs**: tap your runs in the order you'll do them (a number appears on each), then **Start my runs**. When you finish one, the app says "✓ Run 11 done. On to Run 6" and carries on with the next.
+- **Named routes** (Zaph's idea): after tapping your runs, tap **Save these as a named route…** and give it a name, like *Dad's Route*. Next time its name is at the top of **Choose my runs**: one tap picks those runs in that order. Everyone sees the named routes; ✕ deletes one you made.
+- While you're on duty the card also reminds you about **bags** (Lisa's idea): none go to waste, collect old ones from properties to reuse, and never put a bag in a letterbox.
 - Helping someone else finish theirs? Just open their run and tick. When it's done, the app offers **Go to** your next run.
 - The bar at the top of a run shows **finish about 6:35 am**: about when all the runs you have open will be done, at the pace you're going. If that's later than you'd like, ring someone for a hand. It also shows on the On duty card.
 - At the end, tap **Off duty**. After your last run the app asks if you're finished. **Forgot?** Once all of the day's runs are finished (every stop ticked, or the run closed), the app puts you off duty by itself, from the time the last run finished, and Stan tells you next time you open it.
@@ -193,6 +195,9 @@ The same works the other way. Anyone on duty (and Mike in Dispatch) can ping you
 **⚙ Settings → My icon → Change**: pick one of the little robots, or tap **Upload a photo** to use a picture of yourself (it's cropped to a small circle). It shows beside your name, and Mike sees it in Dispatch. Only you can change yours.
 
 ## Photos and problems
+**Notes on tiles** (Lisa's idea): to leave a note on a tile for everyone, like *Leave by the side gate*, tap **⋯ → Note on a stop…** (or **Problem → Add a note to this tile…**). It shows on that tile with 📝, every day, until someone changes or clears it the same way.
+**Ticked by mistake?** Tap **Undo** straight away: the run's timer doesn't start from a tick you undo (Zaph's idea).
+
 The bottom bar of a run always has **Problem** (⚠) and **Photo** (📷). They work for the stop you just did or the next one: if there are both, the app asks which. So you can take a photo, or say *Gate locked*, without ticking first. Once you've ticked a stop the bar also has Undo, and the two buttons shrink to just their pictures.
 
 ## Stan's School and Sandbox Stan

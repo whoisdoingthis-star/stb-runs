@@ -79,3 +79,15 @@ export function rebundle(items) {
 
 /** A run is complete (moves to History) when it is closed in Dispatch or every stop has been dealt with. */
 export const runComplete = (r) => !!r.closed_at || (r.summary?.lines > 0 && (r.done || 0) >= r.summary.lines);
+
+/**
+ * Ticks that count for timing (Zaph's idea, 17 Nov 2026; decision 0075): a tick that was undone afterwards
+ * (same stop, later untick) doesn't start a run's clock or count as delivered. Unticks themselves pass through.
+ * events: [{ run_id, line_key | address_key, done, device_time }]
+ */
+export function keptTicks(events = []) {
+  const k = (e) => `${e.run_id}::${e.line_key || e.address_key}`;
+  const undone = new Map();
+  for (const e of events) if (!e.done) { const t = String(e.device_time); if (!undone.has(k(e)) || t > undone.get(k(e))) undone.set(k(e), t); }
+  return events.filter((e) => !e.done || !(undone.has(k(e)) && undone.get(k(e)) >= String(e.device_time)));
+}

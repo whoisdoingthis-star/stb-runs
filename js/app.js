@@ -8,7 +8,7 @@ import { Geo } from './geo.js';
 import { applySequence, moveKeys, mergeOrder } from './sequence.js';
 import { layoutFor, arrange } from './village.js';
 import { isRetailPub, basePub } from './parser.js';
-import { sha256Hex, runComplete, rebundle } from './rows.js';
+import { sha256Hex, runComplete, rebundle, keptTicks } from './rows.js';
 import { Guide, parseOrs, stopNotes, showDistance } from './assistant.js';
 import { playSplash, soundOn, setSound, chimes } from './splash.js';
 import { findStrays, findSwaps, findTwins } from './strays.js';
@@ -552,6 +552,7 @@ async function showWhatsNew({ force = false } = {}) {
       box.replaceChildren(
         h('div', { class: 'news-top' }, stanOn() ? stan({ pose: at === cards.length - 1 ? 'wave' : 'point', size: 54 }) : null, h('div', null, h('div', { class: 'news-k' }, `${at + 1} of ${cards.length} · ${day(u.date)}`), h('div', { class: 'news-who' }, `For: ${whoText(u)}`))),
         h('h3', { class: 'news-title' }, u.title),
+        u.idea ? h('p', { class: 'news-idea' }, `\ud83d\udca1 ${u.idea}\u2019s idea, brought to life`) : null,
         h('p', { class: 'news-what' }, u.what),
         h('p', { class: 'news-why' }, h('b', null, 'Why: '), u.why),
         stanOn() && u.say ? h('button', { class: 'btn news-read', onclick: (e) => { if (aloud) { aloud = false; hush(); e.currentTarget.textContent = '🔊 Stan, read it to me'; } else { aloud = true; read(e.currentTarget); } } }, aloud ? '🔇 Stop reading' : '🔊 Stan, read it to me') : null,
@@ -1104,6 +1105,8 @@ function dutyCard(todayRuns, rerender) {
   card.append(...[
     h('div', { class: 'duty-state' }, h('span', null, `${DUTY_LABEL[st.state] || 'On duty'}${where ? `: ${shortRoute(where.route)}` : ''}`), timer),
     h('p', { class: 'muted duty-hint' }, `Since ${fmtTime(new Date(start).toISOString())}.${st.state === 'on_run' ? '' : ' It switches to On the run when you drive off or tick your first stop.'}`),
+    // A standing rule while on duty (Lisa's idea, 22 Nov 2026; decision 0075).
+    h('p', { class: 'small bags-tip' }, '\u267b\ufe0f Bags: none go to waste. Collect old ones from properties to reuse, and never put a bag in a letterbox.'),
     st.state === 'on_duty' && (app.crew || []).some((c) => c.name === app.me?.name && c.crew === 'driver')
       ? h('button', { class: 'btn primary big leave-btn', onclick: () => leaveDepot(todayRuns, rerender) }, 'Leaving the depot now') : null,
     hero, trail, etaRow(), h('div', { class: 'duty-actions' }, pickBtn, h('button', { class: 'btn', onclick: () => goOffDuty(rerender) }, 'Off duty'))].filter(Boolean));
@@ -1129,9 +1132,30 @@ function openMyRuns(todayRuns, done) {
     h('span', { class: 'myrun-n' }, n ? String(n) : ''), `${shortRoute(r.route)}${runComplete(r) ? ' (done)' : ''}`);
   }));
   draw();
+  // Named route setups (Zaph's idea, 17 Nov 2026; decision 0075): one tap picks a saved set of runs, in its order.
+  const setups = h('div', { class: 'setups' });
+  const mayDrop = (su) => su.created_by === app.me?.name || app.me?.role === 'dispatcher';
+  const drawSetups = (all) => setups.replaceChildren(...(all || []).map((su) => {
+    const ids = su.routes.map((rt) => todayRuns.find((r) => r.route === rt)?.id).filter(Boolean);
+    return h('span', { class: 'setup-chip' },
+      h('button', { class: 'btn', disabled: !ids.length, title: ids.length ? '' : 'None of these runs are on today', onclick: () => { order = ids; draw(); } },
+        h('b', null, su.name), ` ${su.routes.map(shortRoute).join(' → ')}`),
+      mayDrop(su) ? h('button', { class: 'icon-btn setup-x', 'aria-label': `Delete ${su.name}`, onclick: async () => {
+        if (!confirm(`Delete “${su.name}” for everyone?`)) return;
+        try { drawSetups(await app.store.dropSetup(su.id)); } catch (e) { toast(`Couldn’t delete: ${e.message}`); } } }, '✕') : null);
+  }));
+  app.store.loadSetups().then(drawSetups).catch(() => {});
+  const saveSetup = async () => {
+    if (!order.length) { toast('Tap your runs first, then save them.'); return; }
+    const name = (prompt('Name these runs, e.g. “Dad’s Route”') || '').trim().slice(0, 40); if (!name) return;
+    const routes = order.map((id) => todayRuns.find((r) => r.id === id)?.route).filter(Boolean);
+    try { drawSetups(await app.store.saveSetup(name, routes)); toast(`Saved “${name}”. Anyone can pick it here.`); } catch (e) { toast(`Couldn’t save: ${e.message}`); }
+  };
   const close = openSheet('My runs today',
+    setups,
     h('p', { class: 'muted' }, 'Tap your runs in the order you’ll do them. When one is finished, the app moves on to the next.'),
     list,
+    h('button', { class: 'btn', style: 'margin-top:8px', onclick: saveSetup }, 'Save these as a named route…'),
     h('button', { class: 'btn primary big', style: 'margin-top:10px', onclick: () => {
       setMyRuns(order);
       close();
@@ -1661,7 +1685,9 @@ async function viewRun(ids) {
     watch: await app.store.loadWatch([...new Set(data.map((d) => d.run.route))]), // route -> addresses to photo every time
     dest: {},          // address key -> where Google Maps should go (loaded below, never blocks the run)
     lineByKey: {},     // tile key -> its line, and bundle key -> its lines, for directions
+    notes: {},         // address key -> the family's note on that tile (Lisa's idea; decision 0075)
   };
+  app.store.loadTileNotes([...new Set(data.flatMap((d) => d.lines.map((l) => l.address_key)))]).then((n) => { S.notes = n || {}; if (Object.keys(S.notes).length) render(); }).catch(() => {});
   app.store.loadDestinations([...new Set(data.flatMap((d) => d.lines.map((l) => l.address_key)))]).then((d) => { S.dest = d || {}; }).catch(() => {});
   for (const r of new Set(data.map((d) => d.run.route))) if (layoutFor(r)) S.codes[r] = await app.store.loadAccessCodes(r);
   const hasCustom = (d) => !!S.seq[d.run.route]?.keys?.length;
@@ -2103,10 +2129,26 @@ async function viewRun(ids) {
     render();
   }
   const qtyOf = (lines) => lines.reduce((n, l) => n + partsOf(l).reduce((m, p) => m + p.qty, 0), 0);
+  // A note on a tile, for everyone, every day (Lisa's idea, 19 Nov 2026; decision 0075): "leave by the side gate".
+  function openTileNote(t) {
+    const key = t.lines[0].address_key; const cur = S.notes[key];
+    const box = h('textarea', { class: 'note-input', rows: 3, maxlength: 200, placeholder: 'e.g. Leave by the side gate' }, cur?.note || '');
+    const save = async (note) => {
+      try { const got = await app.store.saveTileNote(key, note); S.notes = { ...S.notes, ...got }; if (!note) delete S.notes[key]; render(); toast(note ? 'Note saved. Everyone sees it on this tile.' : 'Note cleared.'); }
+      catch (e) { toast(`Couldn\u2019t save the note: ${e.message}`); }
+    };
+    const close = openSheet(`Note for ${t.label}`,
+      h('p', { class: 'small muted', style: 'margin:0 0 8px' }, cur ? `From ${cur.updated_by}. Everyone sees it on this tile, every day.` : 'Everyone sees it on this tile, every day, until someone clears it.'),
+      box,
+      h('button', { class: 'btn primary big', style: 'margin-top:8px', onclick: () => { const v = box.value.trim(); close(); save(v || null); } }, 'Save note'),
+      cur ? h('button', { class: 'btn big', style: 'margin-top:8px', onclick: () => { close(); save(null); } }, 'Clear the note') : null);
+    setTimeout(() => box.focus(), 300);
+  }
   function openProblem(last) {
     const total = qtyOf(last.lines);
     openSheet(`Problem at ${last.label}`,
       h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'Saved with the time and GPS, so Dispatch can answer a complaint.'),
+      (close) => h('div', { class: 'menu-group' }, menuItem(S.notes[last.lines[0].address_key] ? 'Change the note on this tile\u2026' : 'Add a note to this tile\u2026', () => { close(); openTileNote(last); }, { hint: 'For everyone, every day: a gate, a dog, where to leave it' })),
       (close) => h('div', { class: 'menu-group' }, h('div', { class: 'menu-head' }, 'Couldn\u2019t deliver'),
         ...PROBLEMS.map((r) => menuItem(r, () => { close(); recordOutcome(last, 'futile', r); })),
         menuItem('Other reason…', () => { close(); openOtherReason(last); })),
@@ -2457,10 +2499,11 @@ async function viewRun(ids) {
     const p = S.progress;
     if (!p) return;
     const st = status();
-    const times = S.events.filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)).filter(Number.isFinite);
+    const kept = keptTicks(S.events);   // a tick undone straight after doesn't start the clock (Zaph's idea; decision 0075)
+    const times = kept.filter((e) => e.done && p.runIds.includes(e.run_id)).map((e) => Date.parse(e.device_time)).filter(Number.isFinite);
     const finish = () => {
       const a = S.all;
-      const eta = a && estimateFinish({ tickTimes: S.events.filter((e) => e.done).map((e) => Date.parse(e.device_time)), done: a.done, remaining: a.total - a.done, unstarted: Math.max(0, a.unstarted - (p.done ? 0 : 1)) });
+      const eta = a && estimateFinish({ tickTimes: kept.filter((e) => e.done).map((e) => Date.parse(e.device_time)), done: a.done, remaining: a.total - a.done, unstarted: Math.max(0, a.unstarted - (p.done ? 0 : 1)) });
       if (!eta) return '';
       setPref('stb.eta', JSON.stringify({ at: eta.at, saved: Date.now() }));
       return ` \u00b7 finish about ${fmtTime(new Date(eta.at).toISOString())}`;
@@ -2532,6 +2575,7 @@ async function viewRun(ids) {
     flags.length ? h('div', { class: 'flags' }, flags.map((f) => h('span', { class: `flag ${f.type}`, title: f.text }, FLAG_LABEL[f.type] || f.type))) : null,
     ...flags.filter((f) => (f.type === 'complaint' || f.type === 'resume' || (f.type === 'stop' && f.until !== undefined)) && f.text).map((f) => h('div', { class: 'flag-detail' }, f.text.replace(/^Complaint:\s*/, ''))),
     l.note ? h('div', { class: 'note' }, l.note) : null,
+    S.notes[l.address_key] ? h('div', { class: 'note tile-note' }, `\ud83d\udcdd ${S.notes[l.address_key].note}`) : null,
     (wantsPhoto(l) || photosOf(l).length) ? h('span', {
       class: `cam ${photosOf(l).length ? 'has' : ''}`, role: 'button', tabindex: '0',
       'aria-label': `Take a delivery photo at ${l.number} ${titleCase(l.street)}`,
@@ -2558,6 +2602,7 @@ async function viewRun(ids) {
         menuItem('Find an address…', () => { close(); searchRow.hidden = false; search.focus(); }),
         menuItem(stanOn() ? 'Tell Stan an idea\u2026' : 'Send an idea\u2026', () => { close(); openStanChat('run'); }, { hint: 'A tweak, a niggle, something new' }),
         app.store.mode === 'shared' && onDuty() ? menuItem('Ping', () => { close(); openWhereEveryone(); }, { hint: 'Every vehicle on the road: where it is and where it\u2019s heading' }) : null,
+        menuItem('Note on a stop\u2026', () => { close(); whichStop('Note for which stop?', (t) => openTileNote(t)); }, { hint: 'Everyone sees it on that tile, every day' }),
         menuItem('Text a link to this run', () => { close(); shareRuns(ids, `${label} ${fmtDate(date)}`); }, { hint: 'Anyone in the family can open it and help' }),
         hasLayout ? menuItem('Door codes…', () => { close(); const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route)); if (d) openCodes(d); }) : null,
         menuItem('Refresh', async () => { close(); S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.'); }),

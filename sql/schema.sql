@@ -1002,9 +1002,13 @@ exception when undefined_object then null; end $$;
 
 -- ---- Morning watch (Mike, 13 Nov 2026; docs/decisions/0028-morning-watch.md) ----
 -- When each run's app ticks started and ended: how long a route usually takes, and whether it made its deadline.
+-- A tick undone afterwards (same stop, later untick) doesn't count (Zaph's idea, 17 Nov 2026; decision 0075).
 create or replace view public.run_times with (security_invoker = true) as
-select run_id, min(device_time) as first_tick, max(device_time) as last_tick, count(*)::int as ticks
-from public.tap_events where done and method is distinct from 'paper' group by run_id;
+select t.run_id, min(t.device_time) as first_tick, max(t.device_time) as last_tick, count(*)::int as ticks
+from public.tap_events t
+where t.done and t.method is distinct from 'paper'
+  and not exists (select 1 from public.tap_events u where u.run_id = t.run_id and u.line_key = t.line_key and not u.done and u.device_time >= t.device_time)
+group by t.run_id;
 
 -- ---- Stan's Paper Run (Mike, 14 Nov 2026; docs/decisions/0034-stans-paper-run.md) ----
 -- Scores from the little game Stan offers when there are no runs to do. One row per finished game;
@@ -1666,3 +1670,44 @@ do $$ begin
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_status() from authenticated;
   end if;
 end $$;
+
+-- ---- From the ideas book (decision 0075) ----
+-- Named route setups (Zaph, 17 Nov 2026): a named set of runs in the order they're done ("Dad's Route": 6 then 10),
+-- picked with one tap in My runs. Shared with the family; anyone can add one; the maker or a dispatcher changes it.
+create table if not exists public.route_setups (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null unique check (char_length(name) between 1 and 40),
+  routes     text[] not null check (cardinality(routes) between 1 and 20),
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.route_setups enable row level security;
+drop policy if exists route_setups_read on public.route_setups;
+create policy route_setups_read on public.route_setups for select to authenticated using (public.is_member());
+drop policy if exists route_setups_add on public.route_setups;
+create policy route_setups_add on public.route_setups for insert to authenticated with check (public.is_member() and created_by = public.my_name());
+drop policy if exists route_setups_change on public.route_setups;
+create policy route_setups_change on public.route_setups for update to authenticated
+  using (created_by = public.my_name() or public.is_dispatcher()) with check (public.is_member());
+drop policy if exists route_setups_drop on public.route_setups;
+create policy route_setups_drop on public.route_setups for delete to authenticated using (created_by = public.my_name() or public.is_dispatcher());
+
+-- Notes on tiles (Lisa, 19 Nov 2026): one family note per address, shown on its tile ("leave by the side gate").
+-- Anyone in the family can add, change or clear one; every change is kept in dispatch_history.
+create table if not exists public.tile_notes (
+  address_key text primary key,
+  note        text not null check (char_length(note) between 1 and 200),
+  updated_by  text not null,
+  updated_at  timestamptz not null default now()
+);
+alter table public.tile_notes enable row level security;
+drop policy if exists tile_notes_read on public.tile_notes;
+create policy tile_notes_read on public.tile_notes for select to authenticated using (public.is_member());
+drop policy if exists tile_notes_add on public.tile_notes;
+create policy tile_notes_add on public.tile_notes for insert to authenticated with check (public.is_member() and updated_by = public.my_name());
+drop policy if exists tile_notes_change on public.tile_notes;
+create policy tile_notes_change on public.tile_notes for update to authenticated using (public.is_member()) with check (updated_by = public.my_name());
+drop policy if exists tile_notes_drop on public.tile_notes;
+create policy tile_notes_drop on public.tile_notes for delete to authenticated using (public.is_member());
+drop trigger if exists tile_notes_log on public.tile_notes;
+create trigger tile_notes_log after insert or update or delete on public.tile_notes for each row execute function public.log_dispatch_change();

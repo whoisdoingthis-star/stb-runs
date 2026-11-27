@@ -50,7 +50,7 @@ export const COURSES = {
     steps: [
       '2026-11-19-plan', '2026-11-21-runs-page', '2026-11-12-finish-time', '2026-11-12-assistant', '2026-11-21-own-order',
       '2026-11-21-address-check', '2026-11-28-own-street', '2026-11-18-untick', '2026-11-21-your-morning', '2026-11-21-clean-mornings', '2026-11-23-between-runs',
-      '2026-11-19-notice-board', '2026-11-13-ping', '2026-11-28-ping-anyone', '2026-11-17-did-you-know', '2026-11-12-ideas', '2026-11-22-whatsnew', '2026-11-14-game',
+      '2026-11-19-notice-board', '2026-11-13-ping', '2026-11-28-ping-anyone', '2026-11-28-timer-undo', '2026-11-28-setups', '2026-11-28-tile-notes', '2026-11-28-bags', '2026-11-17-did-you-know', '2026-11-12-ideas', '2026-11-22-whatsnew', '2026-11-14-game',
       { id: 'school', title: 'Stan’s School', what: 'Any time something in the app changes, there’s a card in What’s new, a lesson here, and often a practice task in Sandbox Stan. New changes also come by email at the end of the day.',
         why: 'So the training is always about the app as it is today, not as it was when someone made a video.',
         covers: ['2026-11-23-school'],

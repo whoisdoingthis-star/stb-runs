@@ -56,7 +56,7 @@ The database is defined entirely in [`sql/schema.sql`](../sql/schema.sql), which
 - `address_positions`: where each letterbox is, learned from real delivery ticks: the average of the ticks that agree (within 30 m of the middle of them), only when at least two agree and they are at least half of the ticks there. Stan guides to it when Dispatch has set no stop ([decision 0039](decisions/0039-learned-letterbox.md)).
 - `complaint_register`: complaints with who ticked that delivery (time, GPS accuracy, outcome and reason), photos that day, and the address's complaint count, order and previous date.
 - `policy_clashes`: pairs of active policies that disagree (can appear after an address moves to a different stop).
-- `run_times`: per run, the first and last app tick and how many (paper ticks left out). How long a route usually takes, and whether it made its deadline.
+- `run_times`: per run, the first and last app tick and how many (paper ticks, and ticks undone afterwards, left out: [decision 0075](decisions/0075-from-the-ideas-book.md)). How long a route usually takes, and whether it made its deadline.
 - `run_progress`: per run, stops done, not delivered, paper ticks, the last tick and who ticked. Decides when a run is complete and moves to History.
 - `address_destinations`: where Google Maps goes for each address: the Dispatch stop's GPS, else the learned letterbox position.
 - `current_policies`: policies in force today (active, inside their dates).
@@ -89,3 +89,7 @@ Write the change into `sql/schema.sql` in re-runnable form, run it in the Supaba
 **Damaged papers (22 Nov 2026, [decision 0058](decisions/0058-location-and-counted-spares.md)):** `spare_counts.counts` is spares good enough to deliver; `spare_counts.damaged` (`{ "NZH": 2 }`) is extras put aside for damage or poor quality, never added to `counts`. Rows before this date have `{}` and their `counts` may include damaged papers.
 
 **Odometer (21 Nov 2026):** `spare_counts.odometer_km` is the driver's odometer reading given with the spare count: `start` when leaving the depot, `end` when going off duty. Optional.
+
+**From the ideas book (28 Nov 2026, [decision 0075](decisions/0075-from-the-ideas-book.md)).**
+- `route_setups`: named route setups (Zaph): `name` (unique), `routes` (in the order they're done), `created_by`. Everyone reads; anyone adds in their own name; the maker or a dispatcher changes or deletes.
+- `tile_notes`: one family note per address (Lisa): `address_key`, `note` (up to 200 characters), `updated_by`, `updated_at`. Everyone reads and writes in their own name; every change is kept in `dispatch_history`.

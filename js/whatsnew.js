@@ -10,10 +10,27 @@
 //   why    one line: the reason
 //   replaced  (optional) the id of a later card that replaces this one: it leaves Stan's School (decision 0065)
 //   shot   (optional) a picture of the real app for its lesson: learn/shots/<shot>.png (tools/training-shots.py)
+//   idea   (optional) whose idea it was, from the ideas book: the card says "<name>'s idea, brought to life" (Mike, 28 Nov 2026)
 //   say    Stan's spoken version, 300 characters at most, written for the ear (he reads it when the speaker is tapped;
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-28-timer-undo', date: '2026-11-28', for: ['driver', 'helper'], idea: 'Zaph', title: 'An undone tick doesn’t start the clock',
+    what: 'If you tick a stop by mistake and undo it, the run’s timer no longer starts from that tick. It starts from the first tick you keep, on the run screen, on Your morning and on the dispatch board.',
+    why: 'A slip of the finger made a run look longer than it was.',
+    say: "This one's Zaph's idea. If you tick a stop by mistake and undo it, the run's timer doesn't start from that tick any more. It starts from the first tick you keep." },
+  { id: '2026-11-28-setups', date: '2026-11-28', for: ['driver', 'helper'], idea: 'Zaph', title: 'Named routes in My runs',
+    what: 'In My runs, tap your runs in order, then “Save these as a named route…” and give it a name, like Dad’s Route. Next time, one tap on its name picks those runs in that order. Everyone in the family sees the saved routes.',
+    why: 'Most mornings each person does the same runs in the same order.',
+    say: "Another of Zaph's ideas. In my runs, pick your runs in order, then save them with a name, like Dad's route. Next time, one tap picks them all, in that order." },
+  { id: '2026-11-28-tile-notes', date: '2026-11-28', for: ['driver', 'helper'], idea: 'Lisa', title: 'Notes on tiles',
+    what: 'You can now put a note on a tile, like “leave by the side gate”. In a run, tap ⋯ → Note on a stop…, or Problem → Add a note to this tile. Everyone sees it on that tile every day, until someone clears it.',
+    why: 'What one of us learns at a letterbox should help the next person there.',
+    say: "This is Lisa's idea. You can put a note on a tile now, like leave by the side gate. Everyone sees it on that tile, every day, until someone clears it." },
+  { id: '2026-11-28-bags', date: '2026-11-28', for: ['driver', 'helper'], idea: 'Lisa', title: 'Bags: none go to waste',
+    what: 'A reminder now shows while you’re on duty: collect old bags from properties to reuse, and never put a bag in a letterbox.',
+    why: 'Bags cost money and left in a letterbox they cause complaints.',
+    say: "Lisa's idea. No bags go to waste. Collect old ones from properties to reuse. And never put a bag in a letterbox." },
   { id: '2026-11-28-own-street', date: '2026-11-28', for: ['driver'], title: 'Saturday-only addresses land with their street',
     what: 'Some addresses only come on certain days, like 22 Marine Parade on Saturdays. If your own order doesn’t have one, it now goes with the rest of its street. And Stan shows his most important checks first; if he has more than three, tap “Stan has 2 more to check”.',
     why: 'This morning 22 Marine Parade landed among Masefield Street, and Stan’s card about it was hidden behind three others.',

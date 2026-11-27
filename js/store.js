@@ -4,7 +4,7 @@
 // Both keep a local copy of open runs and a queue of taps not yet sent,
 // so the app keeps working with no signal.
 
-import { lineRows, runRow, changeRecord } from './rows.js';
+import { lineRows, runRow, changeRecord, keptTicks } from './rows.js';
 import { seqTarget } from './sequence.js';
 
 const LS = {
@@ -283,8 +283,14 @@ export class LocalStore extends Base {
   async loadCrewEvents() { return this.myDuty().filter((e) => Array.isArray(e.helpers) || e.driver).map((e) => ({ ...e, user_name: e.user_name || this.me?.name || 'Me' })); }
   async getSetting(key) { return LS.get(`stb.setting.${key}`, null); }
   /** Rows for Stan's "Did you know" cards (decision 0036): the runs and ticks on this phone. */
-  async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: runs.flatMap((r) => this.cachedEvents(r.id)), complaints: [] }; }
+  async loadCardRows() { const runs = this.runs().map((r) => ({ id: r.id, route: r.route, delivery_date: r.delivery_date })); return { runs, ticks: keptTicks(runs.flatMap((r) => this.cachedEvents(r.id))), complaints: [] }; }
   async setSetting(key, value) { LS.set(`stb.setting.${key}`, value); }
+  // Named route setups (Zaph's idea; decision 0075) and notes on tiles (Lisa's idea): this phone only in demo mode.
+  async loadSetups() { return LS.get('stb.setups', []); }
+  async saveSetup(name, routes) { const all = LS.get('stb.setups', []).filter((x) => x.name.toLowerCase() !== name.toLowerCase()); all.push({ id: uuid(), name, routes, created_by: this.me?.name || 'Me' }); LS.set('stb.setups', all); return all; }
+  async dropSetup(id) { const all = LS.get('stb.setups', []).filter((x) => x.id !== id); LS.set('stb.setups', all); return all; }
+  async loadTileNotes() { return LS.get('stb.tilenotes', {}); }
+  async saveTileNote(key, note) { const all = LS.get('stb.tilenotes', {}); if (note) all[key] = { note, updated_by: this.me?.name || 'Me', updated_at: new Date().toISOString() }; else delete all[key]; LS.set('stb.tilenotes', all); return all; }
   // Demo mode: tabs on the same device talk to each other, so a second tab
   // behaves like a second driver (handy for trying out working a run together).
   bc() { if (!this._bc && 'BroadcastChannel' in window) this._bc = new BroadcastChannel('stb-demo'); return this._bc; }
@@ -642,13 +648,13 @@ export class SupabaseStore extends Base {
     const ids = runs.map((r) => r.id); const ticks = [];
     for (let i = 0; i < ids.length; i += 20) {
       for (let page = 0; ; page += 1000) {
-        const rows = must(await this.sb.from('tap_events').select('run_id, address_key, done, outcome, method, user_name, device_time, lat, lng, accuracy_m').in('run_id', ids.slice(i, i + 20)).order('device_time').range(page, page + 999));
+        const rows = must(await this.sb.from('tap_events').select('run_id, line_key, address_key, done, outcome, method, user_name, device_time, lat, lng, accuracy_m').in('run_id', ids.slice(i, i + 20)).order('device_time').range(page, page + 999));
         ticks.push(...rows); if (rows.length < 1000) break;
       }
     }
     let complaints = [];
     try { complaints = must(await this.sb.from('complaint_register').select('address_key, route, reported_on, happened_on').gte('reported_on', from).limit(500)); } catch { /* cards about complaints wait */ }
-    return { runs, ticks, complaints };
+    return { runs, ticks: keptTicks(ticks), complaints };
   }
   /** The family's scores, best first; just my own when there's no signal. */
   async loadScores() {
@@ -848,6 +854,33 @@ export class SupabaseStore extends Base {
     if (error) throw error;
     LS.set(`stb.setting.${key}`, value);
   }
+  // Named route setups (Zaph's idea, 17 Nov 2026; decision 0075): shared with the family, anyone can add one.
+  async loadSetups() {
+    try { const { data, error } = await this.sb.from('route_setups').select('id, name, routes, created_by').order('name'); if (error) throw error; LS.set('stb.setups', data); return data; }
+    catch { return LS.get('stb.setups', []); }
+  }
+  async saveSetup(name, routes) {
+    const { error } = await this.sb.from('route_setups').upsert({ name, routes, created_by: this.me.name }, { onConflict: 'name' }); if (error) throw error;
+    return this.loadSetups();
+  }
+  async dropSetup(id) { const { error } = await this.sb.from('route_setups').delete().eq('id', id); if (error) throw error; return this.loadSetups(); }
+  // Notes on tiles (Lisa's idea, 19 Nov 2026; decision 0075): one family note per address, shown on its tile.
+  async loadTileNotes(keys) {
+    try {
+      const out = {};
+      for (let i = 0; i < keys.length; i += 150) {
+        const { data, error } = await this.sb.from('tile_notes').select('address_key, note, updated_by, updated_at').in('address_key', keys.slice(i, i + 150)); if (error) throw error;
+        for (const x of data) out[x.address_key] = x;
+      }
+      LS.set('stb.tilenotes', { ...LS.get('stb.tilenotes', {}), ...out }); return out;
+    } catch { return LS.get('stb.tilenotes', {}); }
+  }
+  async saveTileNote(key, note) {
+    const q = note ? this.sb.from('tile_notes').upsert({ address_key: key, note, updated_by: this.me.name, updated_at: new Date().toISOString() }) : this.sb.from('tile_notes').delete().eq('address_key', key);
+    const { error } = await q; if (error) throw error;
+    return this.loadTileNotes([key]);
+  }
+
   async makeUsualOrder(route, keys, by) {
     const at = new Date().toISOString();
     const { error } = await this.sb.from('route_sequences').upsert({ route, address_keys: keys, updated_by: by, updated_at: at }, { onConflict: 'route' });

@@ -78,6 +78,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0072 | [Where's everyone? Ping from the driver screen](0072-wheres-everyone.md) | 2026-11-28 | Accepted |
 | 0073 | [Voice-to-Laptop Bridge, phase 3: chunked builds and caps](0073-bridge-chunked-builds-and-caps.md) | 2026-11-28 | Accepted |
 | 0074 | [A returning address goes with its own street; Stan's costliest cards first](0074-own-street-first.md) | 2026-11-28 | Accepted |
+| 0075 | [Four from the ideas book, each credited to whoever sent it](0075-from-the-ideas-book.md) | 2026-11-28 | Accepted |
 | 0065 | [Stan's School and Sandbox Stan: training that can't go out of date](0065-stans-school.md) | 2026-11-23 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.

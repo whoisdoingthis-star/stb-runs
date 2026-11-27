@@ -314,3 +314,29 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   check('bridge: the wrong secret can’t checkpoint', (await one(`select bridge_checkpoint('lap','x',$1,'step') ok`, [jb.id])).ok === false);
   await db.exec(`delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
+
+// ---- From the ideas book (decision 0075) ----
+{
+  await as('lisa@example.com');
+  await db.query(`insert into route_setups(name, routes, created_by) values ('Mum''s Route', '{HOWICK06,HOWICK10}', 'Lisa')`);
+  let blocked = false; try { await db.query(`insert into route_setups(name, routes, created_by) values ('X', '{HOWICK06}', 'Mike')`); } catch { blocked = true; }
+  check('a named route is saved in your own name, not someone else’s (0075)', blocked && (await db.query(`select count(*)::int n from route_setups`)).rows[0].n === 1);
+  await as('mike@example.com');
+  await db.query(`insert into route_setups(name, routes, created_by) values ('Dad''s Route', '{HOWICK06}', 'Mike')`);
+  await as('lisa@example.com');
+  await db.query(`delete from route_setups where name = 'Dad''s Route'`);
+  check('you can’t delete someone else’s named route (a dispatcher can)', (await db.query(`select count(*)::int n from route_setups where name = 'Dad''s Route'`)).rows[0].n === 1);
+  await db.query(`insert into tile_notes(address_key, note, updated_by) values ('K|A|1', 'Side gate', 'Lisa')`);
+  await as('mike@example.com');
+  await db.query(`update tile_notes set note = 'Side gate, mind the dog', updated_by = 'Mike', updated_at = now() where address_key = 'K|A|1'`);
+  check('anyone in the family can add or change a tile note, in their own name (0075)', (await db.query(`select note, updated_by from tile_notes`)).rows[0].updated_by === 'Mike');
+  await db.exec(`reset role;`);
+  check('tile note changes are kept in the history', (await db.query(`select count(*)::int n from dispatch_history where entity = 'tile_notes'`)).rows[0].n >= 2);
+  const rid = (await db.query(`select id from runs limit 1`)).rows[0].id;
+  await db.query(`delete from tap_events where run_id = $1 and line_key like 'T%'`, [rid]).catch(() => {});
+  await db.query(`insert into tap_events(id,run_id,line_key,address_key,route,done,device_time) values
+    (gen_random_uuid(),$1,'Tz','Tz','HOWICK06',true,'2026-01-01T03:00:00Z'), (gen_random_uuid(),$1,'Tz','Tz','HOWICK06',false,'2026-01-01T03:00:05Z')`, [rid]);
+  const rt = (await db.query(`select first_tick from run_times where run_id = $1`, [rid])).rows[0];
+  check('a tick undone afterwards doesn’t start the run’s clock (Zaph’s idea, 0075)', !rt || new Date(rt.first_tick) > new Date('2026-01-01T03:00:05Z'));
+  await db.exec(`set role authenticated;`);
+}

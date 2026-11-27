@@ -254,3 +254,9 @@ A crew's morning is clean when no run was ticked in one go afterwards, and at le
 
 ## Run 8 and Run 10 (Mike, 21 Nov 2026)
 Run 8 (the village) is normally dropped off part-way through Run 10, by the same crew. On rare mornings someone does Run 8 on its own. The app shows them together when the plan has them together, and never forces it: whoever has Run 8 without Run 10 in My runs sees it as a run of its own.
+
+## From the ideas book (Mike, 28 Nov 2026, by voice)
+- **An idea that gets built is credited to the person who sent it.** Its *What's new* card says "Zaph's idea, brought to life", and Stan says so too, so everyone sees their ideas turn into the app. ([decision 0075](decisions/0075-from-the-ideas-book.md))
+- **Bags: none go to waste** (Lisa, 22 Nov 2026): collect old bags from properties to reuse; never put a bag in a letterbox. Shown on the On duty card.
+- **A tick undone afterwards doesn't count for timing** (Zaph, 17 Nov 2026): not for the run's clock, Your morning, or the dispatch board.
+- **Named routes** (Zaph, 17 Nov 2026) are shared with the family; **tile notes** (Lisa, 19 Nov 2026) are for everyone, every day, until changed or cleared.

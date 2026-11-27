@@ -1084,3 +1084,13 @@ html.big .home-mini { grid-template-columns: 1fr; }
 
 /* Stan's report card on Insights (decision 0066) */
 .predictor h3 { margin: 0 0 6px; } .predictor details { margin-top: 10px; } .predictor .ok-text { color: var(--done-ink, var(--ink)); }
+
+/* From the ideas book (decision 0075) */
+.setups { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.setup-chip { display: inline-flex; align-items: center; gap: 2px; }
+.setup-x { min-width: 36px; min-height: 36px; font-size: 16px; }
+.tile-note { font-style: italic; }
+.note-input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card, transparent); color: var(--ink); }
+.bags-tip { margin: 6px 0; }
+.news-idea { margin: 4px 0 8px; font-weight: 600; }
+.check-more { margin-top: 6px; }
