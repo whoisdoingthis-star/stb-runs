@@ -68,6 +68,9 @@ The Supabase plan is free, so Supabase keeps no backups. Every night at 10 pm a 
 - **Set it up again** (new Google account, lost script): a Claude session runs `select bridge_open_enrolment('gdrive-backup');` (first `update bridge_devices set secret_hash = '!' where device = 'gdrive-backup';` to forget the old secret), then paste the script into a new Apps Script project and press **Run** on `setup` within 30 minutes.
 - **Restore:** give a Claude session the file and say what to bring back (one table, one run, everything). It reads the copy and writes the rows back with Mike in the chat (changing live records is Mike's call). The copy holds customer addresses and door codes: it stays in Mike's Drive.
 
+## Where does a job run: cloud or laptop?
+Cloud by default ([decision 0081](decisions/0081-cloud-lane-for-bridge-jobs.md), bridge decision B012): repository work, web checks, reading the database and anything through Drive, Gmail or Calendar runs in a cloud Claude session or a cloud scheduled task, so Mike's laptop can be off. Only work that needs the laptop itself (its own files or apps, the `sandbox` and `mods` folders, a site signed in only there) goes to the laptop through the bridge. App changes still go through voice builds. Ask Mike before disabling or moving any live job. Before working on anything shared, read the bridge notes and write a claim note; release it with a handover note.
+
 ## Known open items
 - The end-of-day email needs a verified domain and a Resend key (above).
 - Rotate the Supabase secret key: it was shown in a screenshot during setup (8 Nov 2026). Kept for the proof of concept by choice.
