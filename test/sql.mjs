@@ -275,3 +275,42 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   check(`every store method the app calls exists in the live app and in demo mode${notLive.length || notDemo.length ? ` (missing live: ${notLive.join(', ') || 'none'}; demo: ${notDemo.join(', ') || 'none'})` : ''}`, called.length > 40 && notLive.length === 0 && notDemo.length === 0);
   if (missing.length || own.length) console.log('  missing:', [...missing, ...own].join(', '));
 }
+
+// ---- Voice-to-Laptop Bridge, phase 3 (decision 0073): caps, checkpoints, pause-with-Allow, big builds ----
+{
+  // The test database has no pgcrypto: a stand-in crypt() that accepts the secret 's'.
+  await db.exec(`reset role; create schema if not exists extensions;
+    create or replace function extensions.crypt(p text, h text) returns text language sql as $$ select case when p = 's' then h else 'no' end $$;
+    insert into bridge_devices(device, label, secret_hash) values ('lap', 'Laptop', 'h') on conflict do nothing;
+    delete from bridge_jobs; delete from bridge_job_log; update bridge_control set paused = false, max_jobs_per_day = 20, max_minutes_per_day = 300;`);
+  const one = async (q, p) => (await db.query(q, p)).rows[0];
+  const claim = async () => (await db.query(`select id, code, resume_count, checkpoint from bridge_claim_job('lap','s')`)).rows[0];
+  const code1 = (await one(`select bridge_enqueue(null, 'ping', 'ping') c`)).c;
+  const j1 = await claim();
+  check('bridge: the laptop claims a queued job', j1?.code === code1);
+  check('bridge: a checkpoint is recorded for the running job', (await one(`select bridge_checkpoint('lap','s',$1,'step 1: schema','tables made','abc123') ok`, [j1.id])).ok === true);
+  await db.query(`select bridge_finish_job('lap','s',$1,'timed_out', null, 'out of turns')`, [j1.id]);
+  const p1 = await one(`select status, held_reason from bridge_jobs where id=$1`, [j1.id]);
+  check('bridge: out of time after a checkpoint pauses the job instead of killing it', p1.status === 'paused' && /step 1: schema/.test(p1.held_reason));
+  const allowed = (await one(`select bridge_allow($1, 90) a`, [code1])).a;
+  const j1b = await claim();
+  check('bridge: Allow carries a paused job on from its checkpoint, with more minutes', /carries on from "step 1: schema"/.test(allowed) && /90 minutes/.test(allowed) && j1b?.resume_count === 1 && j1b.checkpoint.step === 'step 1: schema');
+  await db.query(`select bridge_finish_job('lap','s',$1,'done','built')`, [j1b.id]);
+  const code2 = (await one(`select bridge_enqueue(null, 'ping', 'ping') c`)).c; const j2 = await claim();
+  await db.query(`select bridge_finish_job('lap','s',$1,'timed_out')`, [j2.id]);
+  check('bridge: out of time with no checkpoint is still timed out', (await one(`select status from bridge_jobs where id=$1`, [j2.id])).status === 'timed_out');
+  const big = (await one(`select bridge_enqueue(null, 'a big build', 'ping', 'voice', false, 'Mike', 45, 80, true, 120) c`)).c;
+  check('bridge: a big build waits for Mike to approve its budget', (await one(`select status, max_minutes from bridge_jobs where code=$1`, [big])).status === 'awaiting_allow');
+  let bad = false; try { await db.query(`select bridge_enqueue(null, 'big', 'ping', 'voice', false, 'Mike', 45, 80, true, null)`); } catch { bad = true; }
+  check('bridge: a big build has to say how long it will take', bad);
+  await db.query(`select bridge_caps(2, 300)`);
+  const code3 = (await one(`select bridge_enqueue(null, 'ping', 'ping') c`)).c;
+  check('bridge: over the daily job cap, a new job waits', !(await claim()) && (await one(`select over_cap from bridge_status()`)).over_cap === true);
+  await db.query(`select bridge_allow($1)`, [big]);
+  const jb = await claim();
+  check('bridge: a big build Mike approved still goes when over the cap', jb?.code === big);
+  await db.query(`select bridge_finish_job('lap','s',$1,'done')`, [jb.id]);
+  check('bridge: the rest waits until tomorrow, and the status says why', !(await claim()) && (await one(`select status from bridge_jobs where code=$1`, [code3])).status === 'queued');
+  check('bridge: the wrong secret can’t checkpoint', (await one(`select bridge_checkpoint('lap','x',$1,'step') ok`, [jb.id])).ok === false);
+  await db.exec(`delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
+}

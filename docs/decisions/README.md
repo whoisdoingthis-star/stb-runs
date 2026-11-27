@@ -76,6 +76,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0070 | [Voice-to-Laptop Bridge: any Claude session can see the laptop and hand it work](0070-laptop-bridge.md) | 2026-11-26 | Accepted |
 | 0071 | [Ping from the driver screen](0071-ping-from-the-driver-screen.md) | 2026-11-28 | Superseded by 0072 |
 | 0072 | [Where's everyone? Ping from the driver screen](0072-wheres-everyone.md) | 2026-11-28 | Accepted |
+| 0073 | [Voice-to-Laptop Bridge, phase 3: chunked builds and caps](0073-bridge-chunked-builds-and-caps.md) | 2026-11-28 | Accepted |
 | 0065 | [Stan's School and Sandbox Stan: training that can't go out of date](0065-stans-school.md) | 2026-11-23 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
