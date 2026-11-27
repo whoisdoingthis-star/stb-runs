@@ -1798,6 +1798,94 @@ language sql stable security definer set search_path = public as $$
    limit least(greatest(p_limit, 1), 200);
 $$;
 
+-- ---- Phase 6: backups and rollback (the Voice-to-Laptop Bridge doc, "Safeguards"; decision 0078) ----
+-- The Supabase plan is free: no backups to restore from. So (1) every version of every shared note is kept, and any merge,
+-- retirement or edit can be undone; (2) the laptop pulls a dated copy of the bridge each day into its own folder (off site);
+-- (3) logs and history expire after 180 days, so the safety net doesn't become the bloat.
+create table if not exists public.bridge_notes_history (
+  id      bigint generated always as identity primary key,
+  note_id uuid not null,
+  at      timestamptz not null default now(),
+  op      text not null,
+  row     jsonb not null
+);
+create index if not exists bridge_notes_history_note_idx on public.bridge_notes_history (note_id, at);
+create index if not exists bridge_notes_history_at_idx on public.bridge_notes_history (at);
+create index if not exists bridge_job_log_at_idx on public.bridge_job_log (at);
+alter table public.bridge_notes_history enable row level security;
+
+create or replace function public.bridge__note_history() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.bridge_notes_history (note_id, op, row) values (coalesce(new.id, old.id), lower(tg_op), to_jsonb(coalesce(new, old)));
+  return null;
+end $$;
+drop trigger if exists bridge_notes_history_log on public.bridge_notes;
+create trigger bridge_notes_history_log after insert or update or delete on public.bridge_notes for each row execute function public.bridge__note_history();
+
+-- Rollback: a note's versions, newest first; and put it back as it was at a time (or just before its latest change).
+create or replace function public.bridge_note_versions(p_id uuid)
+returns table(at timestamptz, op text, retired boolean, weight numeric, body text, why text)
+language sql stable security definer set search_path = public as $$
+  select at, op, (row->>'retired_at') is not null, (row->>'weight')::numeric, left(row->>'body', 200), row->>'retired_why'
+    from public.bridge_notes_history where note_id = p_id order by at desc, id desc;
+$$;
+create or replace function public.bridge_note_restore(p_id uuid, p_at timestamptz default null)
+returns text language plpgsql security definer set search_path = public as $$
+declare v jsonb; n public.bridge_notes;
+begin
+  select row into v from public.bridge_notes_history
+   where note_id = p_id and (p_at is null or at <= p_at)
+     and (p_at is not null or id < (select max(id) from public.bridge_notes_history where note_id = p_id))
+   order by id desc limit 1;
+  if v is null then return 'No earlier version of that note'; end if;
+  n := jsonb_populate_record(null::public.bridge_notes, v);
+  insert into public.bridge_notes select (n).* on conflict (id) do update
+     set kind = excluded.kind, topics = excluded.topics, body = excluded.body, expires_at = excluded.expires_at,
+         retired_at = excluded.retired_at, retired_why = excluded.retired_why, weight = excluded.weight,
+         reinforced_at = excluded.reinforced_at, merged_count = excluded.merged_count, flag = excluded.flag;
+  return 'Restored';
+end $$;
+-- Undo a merge: the notes merged into this one come back, and its weight and count go back to before.
+create or replace function public.bridge_note_unmerge(p_id uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare k int;
+begin
+  update public.bridge_notes set retired_at = null, retired_why = null where retired_why = 'merged into ' || p_id;
+  get diagnostics k = row_count;
+  if k = 0 then return 'Nothing was merged into that note'; end if;
+  update public.bridge_notes n set weight = 1, merged_count = 0, reinforced_at = null where n.id = p_id;
+  return k || ' note(s) put back';
+end $$;
+
+-- The laptop's daily copy (it checks the device secret): every live note, everything retired in the last 180 days,
+-- the last 180 days of jobs and their log, and the controls. The laptop keeps the files; nothing leaves otherwise.
+create or replace function public.bridge_backup_export(p_device text, p_secret text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not public.bridge__auth(p_device, p_secret) then return null; end if;
+  update public.bridge_devices set listener_seen = now() where device = p_device;
+  return jsonb_build_object(
+    'taken_at', now(), 'from', 'stb-runs bridge', 'version', 1,
+    'notes', coalesce((select jsonb_agg(to_jsonb(n) order by n.created_at) from public.bridge_notes n where n.retired_at is null or n.retired_at > now() - interval '180 days'), '[]'),
+    'jobs', coalesce((select jsonb_agg(to_jsonb(j) - 'output_tail' order by j.created_at) from public.bridge_jobs j where j.created_at > now() - interval '180 days'), '[]'),
+    'job_log', coalesce((select jsonb_agg(to_jsonb(l) order by l.at) from public.bridge_job_log l where l.at > now() - interval '180 days'), '[]'),
+    'control', (select to_jsonb(c) from public.bridge_control c where id = 1));
+end $$;
+
+-- Expiry for the safety net itself (the doc: "logs need their own expiry"): run as jobs finish.
+create or replace function public.bridge__prune() returns void
+language sql security definer set search_path = public as $$
+  delete from public.bridge_job_log where at < now() - interval '180 days';
+  delete from public.bridge_notes_history where at < now() - interval '180 days';
+  delete from public.bridge_notes where retired_at < now() - interval '180 days';
+$$;
+create or replace function public.bridge__prune_after_job() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin perform public.bridge__prune(); return null; end $$;
+drop trigger if exists bridge_jobs_prune on public.bridge_jobs;
+create trigger bridge_jobs_prune after update of status on public.bridge_jobs for each statement execute function public.bridge__prune_after_job();
+
 -- Who may call what: the laptop's four functions with the public key (they check the device secret);
 -- everything else only from the server.
 revoke all on function public.bridge__auth(text,text), public.bridge__job(text), public.bridge__today(),
@@ -1808,7 +1896,9 @@ revoke all on function public.bridge__auth(text,text), public.bridge__job(text),
   public.bridge_checkpoint(text,text,uuid,text,text,text),
   public.bridge_note(text,text[],text,text,text,text,uuid,int), public.bridge_notes_for(text[],int),
   public.bridge_note_retire(uuid,text), public.bridge__job_note(),
-  public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid)
+  public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid),
+  public.bridge__note_history(), public.bridge_note_versions(uuid), public.bridge_note_restore(uuid,timestamptz), public.bridge_note_unmerge(uuid),
+  public.bridge_backup_export(text,text), public.bridge__prune(), public.bridge__prune_after_job()
   from public;
 do $$ begin
   -- Supabase grants new functions to anon and authenticated directly, so revoking from public isn't enough (lesson L-015).
@@ -1818,21 +1908,24 @@ do $$ begin
       public.bridge_queue(int), public.bridge_status(), public.bridge__auth(text,text), public.bridge__job(text),
       public.bridge_note(text,text[],text,text,text,text,uuid,int), public.bridge_notes_for(text[],int),
       public.bridge_note_retire(uuid,text), public.bridge__job_note(),
-      public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid)
+      public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid),
+      public.bridge__note_history(), public.bridge_note_versions(uuid), public.bridge_note_restore(uuid,timestamptz), public.bridge_note_unmerge(uuid),
+      public.bridge__prune(), public.bridge__prune_after_job()
       from anon, authenticated;
+    revoke execute on function public.bridge_backup_export(text,text) from authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
       public.bridge_checkpoint(text,text,uuid,text,text,text) from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes from anon;
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history from anon;
     grant execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid),
       public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
-      public.bridge_checkpoint(text,text,uuid,text,text,text) to anon;
+      public.bridge_checkpoint(text,text,uuid,text,text,text), public.bridge_backup_export(text,text) to anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes from authenticated;
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history from authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_status() from authenticated;
   end if;
 end $$;

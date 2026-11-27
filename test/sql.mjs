@@ -349,6 +349,21 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   check('bridge: a clash is flagged on both and read first, for Mike', (await db.query(`select flag from bridge_notes_for(array['bridge'])`)).rows.slice(0, 2).every((r) => /Clashes with/.test(r.flag)));
   await db.query(`update bridge_notes set created_at = now() - interval '28 days', reinforced_at = null where kind = 'status'`);
   check('bridge: weight fades by half every 14 days unless repeated', (await db.query(`select weight from bridge_notes_for(array['cars']) order by weight desc limit 1`)).rows[0].weight < 0.6);
+  // ---- Phase 6: backups and rollback (decision 0078) ----
+  await db.exec(`delete from bridge_notes`);
+  const a = (await one(`select bridge_note('status', array['cars'], 'Watching three electric cars on Trade Me under budget', 'schedule') id`)).id;
+  await db.query(`update bridge_notes set created_at = now() - interval '2 days' where id = $1`, [a]);
+  const b = (await one(`select bridge_note('status', array['cars'], 'Watching three electric cars on Trade Me under budget today', 'voice') id`)).id;
+  check('bridge: every version of a note is kept (0078)', (await db.query(`select * from bridge_note_versions($1)`, [a])).rows.length >= 3);
+  check('bridge: a merge can be undone: the merged note comes back', /1 note/.test((await one(`select bridge_note_unmerge($1) r`, [b])).r) && (await db.query(`select * from bridge_notes_for(array['cars'])`)).rows.length === 2);
+  await db.query(`select bridge_note_retire($1, 'by mistake')`, [b]);
+  check('bridge: a retired note can be restored to its last version', (await one(`select bridge_note_restore($1) r`, [b])).r === 'Restored' && (await db.query(`select * from bridge_notes_for(array['cars']) where id = $1`, [b])).rows.length === 1);
+  const bk = (await one(`select bridge_backup_export('lap', 's') b`)).b;
+  check('bridge: the laptop’s copy has the notes, jobs, log and controls', bk && bk.notes.length >= 2 && Array.isArray(bk.jobs) && bk.control && bk.version === 1);
+  check('bridge: the copy needs the laptop’s secret', (await one(`select bridge_backup_export('lap', 'x') b`)).b === null);
+  await db.query(`update bridge_notes_history set at = now() - interval '200 days' where note_id = $1`, [a]);
+  await db.query(`select bridge__prune()`);
+  check('bridge: history older than 180 days expires', (await db.query(`select * from bridge_note_versions($1)`, [a])).rows.length === 0);
   await db.exec(`delete from bridge_notes; delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
 

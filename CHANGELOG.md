@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Laptop bridge, phase 6: backups and rollback** (Mike, 28 Nov): every version of every shared note is kept and can be put back; the laptop takes a daily copy of the bridge into its own folder (the Supabase plan has no backups); folders that aren't git get a snapshot before a laptop job; logs expire after 180 days. Nothing changes on the phones. [Decision 0078](docs/decisions/0078-bridge-backups-and-rollback.md).
 - **Laptop bridge, phase 5: tidy-up and weighting** (Mike, 28 Nov): the shared notes merge near-duplicates as they're written, weight what keeps coming back across days and sessions (fading over time), never touch decisions, and put clashing decisions in front of Mike. Nothing changes on the phones. [Decision 0077](docs/decisions/0077-bridge-tidy-and-weighting.md).
 - **Laptop bridge, phase 3 finished on the laptop** (Mike, 28 Nov): the laptop's job runner now saves progress after each step, pauses instead of stopping, and carries on after Allow; tested with two sandbox jobs. A job's shared note now keeps only its latest outcome.
 - **Laptop bridge, phase 4: shared notes** (Mike, 28 Nov): one place where voice, chat, Claude Code, the laptop and scheduled tasks read and write decisions, results and status by topic, with expiry against clutter. Laptop job results land there by themselves. Nothing changes on the phones. [Decision 0076](docs/decisions/0076-bridge-shared-notes.md).
