@@ -14,6 +14,10 @@
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-28-own-street', date: '2026-11-28', for: ['driver'], title: 'Saturday-only addresses land with their street',
+    what: 'Some addresses only come on certain days, like 22 Marine Parade on Saturdays. If your own order doesn’t have one, it now goes with the rest of its street. And Stan shows his most important checks first; if he has more than three, tap “Stan has 2 more to check”.',
+    why: 'This morning 22 Marine Parade landed among Masefield Street, and Stan’s card about it was hidden behind three others.',
+    say: "Some addresses only come on certain days. Like twenty two Marine Parade on Saturdays. Now they go with the rest of their street. And I'll show my most important checks first. If I have more than three, tap the button to see the rest." },
   { id: '2026-11-28-ping-anyone', date: '2026-11-28', for: ['driver', 'helper'], title: 'Ping: every vehicle on the road',
     what: 'While you’re on duty, tap Ping at the top of a run. Stan pings everyone else on duty and shows a card for each vehicle (a driver, with their helpers if they have any): where they are now and how far from you, the stops they’ve just done, and where they’re heading next. They see that you asked.',
     why: 'So we can help each other and coordinate during runs, and Life360 can use less battery.',

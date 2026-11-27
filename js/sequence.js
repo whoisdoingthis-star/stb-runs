@@ -11,9 +11,16 @@
 export function applySequence(lines, keys, usual = null) {
   if (!keys || !keys.length) return lines;
   const pos = new Map(keys.map((k, i) => [k, i]));
-  // Where the usual order puts an address this order doesn't have: after the nearest address before it that both know.
+  // Where the usual order puts an address this order doesn't have. Its own street wins (22 Marine Parade, 28 Nov 2026,
+  // lesson L-016): the usual order's neighbour before it may be on another street that this order drives at another time.
   const viaUsual = new Map();
-  if (usual?.length) { let last; for (const k of usual) { if (pos.has(k)) last = pos.get(k); else if (!viaUsual.has(k)) viaUsual.set(k, last === undefined ? -1 : last); } }
+  if (usual?.length) {
+    const known = usual.map((k) => (pos.has(k) ? pos.get(k) : null));
+    for (let i = 0; i < usual.length; i++) {
+      const k = usual[i]; if (known[i] !== null || viaUsual.has(k)) continue;
+      viaUsual.set(k, placeFor(k, i, usual, known, keys, pos));
+    }
+  }
   let anchor = -1;
   const sortKeys = lines.map((l, i) => {
     const p = pos.get(l.address_key);
@@ -68,4 +75,30 @@ export function seqTarget(v, personal) {
   if (v?.dropOwn) return { own: true, drop: true };
   if (!v) return { own: !!personal, drop: true };
   return { own: !!personal || !!v.mine, drop: false };
+}
+
+const streetOf = (k) => { const p = String(k).split('|'); return p.length >= 3 ? p[1] : null; };
+const houseOf = (k) => { const p = String(k).split('|'); const m = /^(.+?)\/\s*(.+)$/.exec(p[p.length - 1] || ''); const n = parseInt(/\d+/.exec(m ? m[2] : p[p.length - 1] || '')?.[0] ?? '', 10); return Number.isFinite(n) ? n : null; };
+/**
+ * Position (a sort number) for an address this order doesn't have, at index `i` of the usual order.
+ * 1. after the nearest address before it in the usual order that this order knows, if that is on the same street;
+ * 2. else before the nearest one after it, if that is on the same street;
+ * 3. else beside the house on its street (in this order) with the nearest number, keeping the block's direction;
+ * 4. else after the nearest one before it (no street to go by).
+ */
+function placeFor(k, i, usual, known, keys, pos) {
+  let p = i - 1; while (p >= 0 && known[p] === null) p--;
+  let n = i + 1; while (n < usual.length && known[n] === null) n++;
+  const st = streetOf(k); const before = p >= 0 ? known[p] : -1;
+  if (st && p >= 0 && streetOf(usual[p]) === st) return before;
+  if (st && n < usual.length && streetOf(usual[n]) === st) return known[n] - 0.5;
+  const mine = st ? keys.filter((x) => streetOf(x) === st && houseOf(x) != null) : [];
+  const h = houseOf(k);
+  if (mine.length && h != null) {
+    const anchor = mine.reduce((a, b) => (Math.abs(houseOf(b) - h) < Math.abs(houseOf(a) - h) ? b : a));
+    const rising = houseOf(mine[mine.length - 1]) >= houseOf(mine[0]);
+    const after = rising ? h > houseOf(anchor) : h < houseOf(anchor);
+    return pos.get(anchor) + (after ? 0 : -0.5);
+  }
+  return before;
 }

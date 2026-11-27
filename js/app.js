@@ -1705,12 +1705,12 @@ async function viewRun(ids) {
       const placed = S.useCustom && S.seq[route]?.keys ? new Set(S.seq[route].keys) : null;
       for (const sx of findStrays(lines, { unplaced: placed ? new Set(lines.filter((l) => !placed.has(l.address_key)).map((l) => l.address_key)) : null })) {
         const sig = `stray|${route}|${sx.key}|${sx.anchorKey}`; if (seen.has(sig)) continue;
-        cards.push(h('div', { class: 'check-card' }, stanOn() ? stan({ pose: 'point', size: 40 }) : null, h('div', { class: 'check-body' },
+        cards.push(Object.assign(h('div', { class: 'check-card' }, stanOn() ? stan({ pose: 'point', size: 40 }) : null, h('div', { class: 'check-body' },
           h('div', { class: 'check-say' }, `${name(sx.key)} is ${sx.gap} stops away from the rest of ${titleCase(sx.street)}. Put it ${sx.after ? 'after' : 'before'} ${name(sx.anchorKey)}?`),
           h('div', { class: 'check-acts' },
             h('button', { class: 'btn small primary', onclick: () => { const before = S.seq[route] || null; const current = orderedLines(d).map((l) => l.address_key); const next = moveKeys(current, [sx.key], sx.anchorKey, sx.after); const merged = mergeOrder(before?.keys, next); const own = app.store.personalOrders || !!before?.mine;
               S.seq[route] = { keys: merged, by: app.me.name, at: new Date().toISOString(), mine: own }; S.useCustom = true; app.store.saveSequence(route, merged, app.me.name, { own }); render(); toast(`Moved ${name(sx.key)} next to ${name(sx.anchorKey)}${own ? ', in your own order' : ''}.`); } }, 'Move it'),
-            h('button', { class: 'btn small', onclick: () => leave(sig) }, 'Leave it')))));
+            h('button', { class: 'btn small', onclick: () => leave(sig) }, 'Leave it')))), { rank: 1000 + sx.gap }));   // a drive back costs most: these first
       }
       if (isBoss()) for (const tw of findTwins(d.lines)) {
         const sig = `twin|${tw.key}|${tw.intoKey}`; if (seen.has(sig) || same[tw.key]) continue;
@@ -1731,7 +1731,11 @@ async function viewRun(ids) {
             h('button', { class: 'btn small', onclick: () => leave(sig) }, 'No, leave it')))));
       }
     }
-    checkSlot.replaceChildren(...cards.slice(0, 3));
+    // Most costly first (an address far from its street), three at a time, and never a card hidden without saying so
+    // (22 Marine Parade, 28 Nov 2026, lesson L-016: it was found but sat fourth behind three other cards).
+    cards.sort((a, b) => (b.rank || 0) - (a.rank || 0));
+    const more = cards.length - 3;
+    checkSlot.replaceChildren(...cards.slice(0, 3), more > 0 ? h('button', { class: 'btn small check-more', onclick: (e) => { e.currentTarget.replaceWith(...cards.slice(3)); } }, `Stan has ${more} more to check`) : document.createTextNode(''));
   }
   const search = h('input', { class: 'search', type: 'search', placeholder: 'Find a number, street or note', enterkeyhint: 'search', autocomplete: 'off' });
   search.addEventListener('input', () => { S.query = search.value.trim().toLowerCase(); render(); });

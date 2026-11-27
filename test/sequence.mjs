@@ -18,6 +18,19 @@ t('merge keeps addresses not on today\'s sheet', () => assert.deepEqual(mergeOrd
 t('merge with nothing stored', () => assert.deepEqual(mergeOrder(null, ['b', 'a']), ['b', 'a']));
 // Own order for dispatchers too (decision 0031)
 t('a driver’s order is always their own', () => { assert.deepEqual(seqTarget({ keys: ['a'], mine: true }, true), { own: true, drop: false }); assert.deepEqual(seqTarget(null, true), { own: true, drop: true }); });
+// Run 6, 28 Nov 2026 (lesson L-016): 22 Marine Parade, on Saturday sheets only. Mike drives Marine Parade before Masefield
+// Street; the usual order has it after 40 Masefield, so it landed among Masefield, 13 stops from its street.
+{
+  const K = (s, n) => `HOWICK|${s}|${n}`; const LL = (...ks) => ks.map((k) => ({ address_key: k }));
+  const mp22 = K('MARINE PARADE', '22'), mp44 = K('MARINE PARADE', '44'), mp54 = K('MARINE PARADE', '54'), m36 = K('MASEFIELD STREET', '36'), m40 = K('MASEFIELD STREET', '40'), s59 = K('SALE STREET', '59');
+  const sheet = LL(m36, m40, mp22, mp44, mp54, s59);
+  const mine = [mp44, mp54, m36, m40, s59];
+  const usual = [m36, m40, mp22, mp44, mp54, s59];
+  t('a missing address goes next to its own street, not after another street’s house the usual order has before it', () => assert.equal(keys(applySequence(sheet, mine, usual)), [mp22, mp44, mp54, m36, m40, s59].join(',')));
+  const mp30 = K('MARINE PARADE', '30');
+  t('…and with no neighbour on its street in the usual order, beside the house with the nearest number on its street', () => assert.equal(keys(applySequence(LL(m40, mp30, mp44, mp54, s59), mine, [m36, m40, mp30, s59, mp44, mp54])), [mp30, mp44, mp54, m40, s59].join(',')));
+  t('…the same street before it in the usual order still wins (as before)', () => assert.equal(keys(applySequence(LL(mp44, mp22, mp54), [mp54, mp44], [mp44, mp22, mp54])), [mp54, mp44, mp22].join(',')));
+}
 t('a dispatcher’s drags change the usual order', () => { assert.deepEqual(seqTarget({ keys: ['a'], mine: false }, false), { own: false, drop: false }); assert.deepEqual(seqTarget(null, false), { own: false, drop: true }); });
 t('a dispatcher who keeps their own order changes only their own', () => assert.deepEqual(seqTarget({ keys: ['a'], mine: true }, false), { own: true, drop: false }));
 t('a dispatcher dropping their own order leaves the usual order alone', () => assert.deepEqual(seqTarget({ dropOwn: true }, false), { own: true, drop: true }));
