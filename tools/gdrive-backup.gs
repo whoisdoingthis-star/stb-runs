@@ -10,6 +10,13 @@
  *      connecting to an external service). It makes its own secret, enrols it, sets the nightly trigger and
  *      takes the first backup. The secret stays in this script's properties; nobody sees it.
  *
+ * Photos (decision 0080): each night it also copies any delivery photo it hasn't copied yet into "STB backups/photos",
+ * through the edge function backup-photos (30-minute links, device secret), a few minutes' worth at a time; the first
+ * night catches up on the backlog over a run or two. Photos are kept in Drive for good (they stay in Supabase too).
+ *
+ * Updating this script: paste the new version over the old one in the same Apps Script project and Save. No need to
+ * run setup again.
+ *
  * Keeps: every night for 30 days, plus the 1st of each month for a year. Failures email Mike (Apps Script does this
  * for failed triggers) and any Claude session can see when it last ran: select * from bridge_status();
  * The copy holds family and customer details (addresses, door codes): it stays in Mike's own Drive. Don't share the folder.
@@ -48,6 +55,37 @@ function backup() {
   prune_(folder);
   const rows = Object.values(data.tables).reduce((n, t) => n + t.length, 0);
   console.log(`Saved ${name}.gz: ${Object.keys(data.tables).length} tables, ${rows} rows, ${Math.round(gz.getBytes().length / 1024)} KB.`);
+  backupPhotos();
+}
+
+// Copy photos not yet in Drive, in batches, stopping before Apps Script's 6-minute limit (the rest go tomorrow).
+function backupPhotos() {
+  const secret = PropertiesService.getScriptProperties().getProperty('SECRET');
+  const started = Date.now(); let copied = 0; let failed = 0;
+  const root = folder_(); const sub = root.getFoldersByName('photos'); const photos = sub.hasNext() ? sub.next() : root.createFolder('photos');
+  while (Date.now() - started < 4 * 60 * 1000) {
+    const r = UrlFetchApp.fetch(`${SUPABASE_URL}/functions/v1/backup-photos`, {
+      method: 'post', contentType: 'application/json', headers: { apikey: PUBLIC_KEY },
+      payload: JSON.stringify({ device: DEVICE, secret: secret, limit: 40 }), muteHttpExceptions: true,
+    });
+    if (r.getResponseCode() !== 200) throw new Error(`backup-photos: ${r.getResponseCode()} ${r.getContentText().slice(0, 200)}`);
+    const list = JSON.parse(r.getContentText()).photos || [];
+    if (!list.length) break;
+    const done = [];
+    for (const p of list) {
+      if (Date.now() - started > 5 * 60 * 1000) break;
+      try {
+        const f = UrlFetchApp.fetch(p.url, { muteHttpExceptions: true });
+        if (f.getResponseCode() !== 200) { failed++; continue; }
+        const file = photos.createFile(f.getBlob().setName(`${p.bucket}__${p.name.replace(/\//g, '__')}`));
+        done.push({ bucket: p.bucket, name: p.name, size: p.size, drive_file_id: file.getId() });
+      } catch (e) { failed++; }
+    }
+    if (done.length) rpc_('photo_copied', { p_device: DEVICE, p_secret: secret, p_items: done });
+    copied += done.length;
+    if (!done.length) break;   // nothing would copy: stop rather than loop
+  }
+  console.log(`Photos: ${copied} copied to Drive${failed ? `, ${failed} couldn't be fetched (tried again tomorrow)` : ''}.`);
 }
 
 function folder_() {

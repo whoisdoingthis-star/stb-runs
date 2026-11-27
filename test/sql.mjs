@@ -376,6 +376,11 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   const full = (await one(`select stb_backup_export('gdrive-backup', $1) b`, [sec])).b;
   check('backup: the copy has every table in the app (runs, ticks, people)', full && full.version === 1 && Array.isArray(full.tables.runs) && full.tables.runs.length >= 1 && Array.isArray(full.tables.tap_events) && 'members' in full.tables);
   check('backup: the copy needs the device’s secret', (await one(`select stb_backup_export('gdrive-backup', 'nope') b`)).b === null);
+  // Photo copies and the size watch (decision 0080)
+  check('photos: the device records what it saved in Drive (0080)', (await one(`select photo_copied('gdrive-backup', $1, '[{"bucket":"delivery-photos","name":"r1/a.jpg","size":"1200","drive_file_id":"d1"}]'::jsonb) n`, [sec])).n === 1);
+  check('photos: not without its secret', (await one(`select photo_copied('gdrive-backup', 'nope', '[]'::jsonb) n`)).n === -1);
+  const use = (await db.query(`select * from stb_usage()`)).rows;
+  check('size watch: database and photo storage against the free plan’s limits, with the Drive count', use.length === 2 && use.find((u) => u.what === 'database').limit_bytes == 524288000 && use[0].photos_in_drive === 1);
   await db.exec(`delete from bridge_notes; delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
 

@@ -65,6 +65,8 @@ export async function viewDispatch(ctx, tab = 'overview') {
 
   const must = (r) => { if (r.error) throw new Error(r.error.message); return r.data; };
   async function load() {
+    // The size watch (decision 0080): how full the free plan is. Never holds up the board.
+    sb.rpc('stb_usage').then(({ data }) => { D.usage = data || []; }).catch(() => {});
     const [a, g, o, s, p, m] = await Promise.all([
       sb.from('address_register').select('*').order('street').order('number'),
       sb.from('location_groups').select('*').order('name'),
@@ -252,7 +254,7 @@ export async function viewDispatch(ctx, tab = 'overview') {
     bottom.replaceChildren(...SECTIONS.map((sec) => { const n = sec.key === 'proof' ? open : sec.key === 'setup' ? unplaced : 0;
       return h('a', { href: `#/dispatch/${lastIn(sec)}`, class: sec === here ? 'on' : '', 'aria-current': sec === here ? 'true' : null, onclick: (e) => { e.preventDefault(); go(sec === here ? sec.pages[0][0] : lastIn(sec), null); } },
         h('span', { class: 'dz-bottom-i', 'aria-hidden': 'true' }, sec.icon), h('span', null, sec.label), n ? h('span', { class: `dz-dot ${sec.key === 'proof' ? 'bad' : ''}`, 'aria-label': `${n} to look at` }, n) : null); }));
-    body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]),
+    body.replaceChildren(h('h1', { class: 'dz-title' }, tabs.find(([k]) => k === tab)[1]), usageWarning(D.usage, h),
       ({ overview: renderOverview, insights: renderInsights, plan: renderPlan, voice: renderVoice, runs: renderRuns, complaints: renderComplaints, addresses: renderAddresses, locations: renderLocations, policies: renderPolicies, users: renderUsers, history: renderHistory })[tab]());
   };
   const refresh = async () => { await load(); render(); };
@@ -1663,4 +1665,17 @@ function numKey(n) {
   const m = /^(?:(\w+)\/)?(\d+)(.*)$/.exec(n || '');
   if (!m) return n || '';
   return `${m[2].padStart(6, '0')}${m[3]}${m[1] ? `/${m[1].padStart(4, '0')}` : ''}`;
+}
+
+/**
+ * The size watch (Mike, 28 Nov 2026; decision 0080): a banner only when something needs doing, at 70% of the free plan's
+ * database (500 MB) or file storage (1 GB). Says what to do, not just the number.
+ */
+export function usageWarning(usage, h) {
+  const full = (usage || []).filter((u) => Number(u.pct) >= 70);
+  if (!full.length) return null;
+  const mb = (b) => `${Math.round(Number(b) / 1048576)} MB`;
+  return h('div', { class: 'banner bad', role: 'status' }, ...full.map((u) => h('p', null, u.what === 'photos'
+    ? `Photo storage is ${u.pct}% full (${mb(u.used_bytes)} of ${mb(u.limit_bytes)}). ${u.photos_in_drive} of ${u.photos_total} photos are copied to Google Drive. Ask Claude to clear photos older than 60 days from the app (they stay in Drive).`
+    : `The database is ${u.pct}% full (${mb(u.used_bytes)} of ${mb(u.limit_bytes)}). Ask Claude to archive old tick detail to Google Drive, or move to a paid Supabase plan.`)));
 }

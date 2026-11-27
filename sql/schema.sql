@@ -1937,6 +1937,66 @@ begin
   return jsonb_build_object('taken_at', now(), 'from', 'stb-runs', 'version', 1, 'tables', out, 'storage_files', rows);
 end $$;
 
+-- ---- Photo copies to Drive and the size watch (Mike, 28 Nov 2026; decision 0080) ----
+-- New photos stay in Supabase (offline queue, private, shown in the app and reports). Each night the backup script copies
+-- any photo it hasn't copied yet into Drive, through the edge function backup-photos (signed links, device secret).
+-- The size watch tells dispatchers when the database or photo storage passes 70% of the free plan's limits.
+create table if not exists public.photo_backups (
+  bucket        text not null,
+  name          text not null,
+  size          bigint,
+  drive_file_id text,
+  copied_at     timestamptz not null default now(),
+  primary key (bucket, name)
+);
+alter table public.photo_backups enable row level security;
+
+-- Server only (the edge function): photos not copied yet, oldest first.
+create or replace function public.photos_to_copy(p_limit int default 100)
+returns table(bucket text, name text, size bigint, created_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  return query select o.bucket_id::text, o.name::text, (o.metadata->>'size')::bigint, o.created_at from storage.objects o
+   where not exists (select 1 from public.photo_backups b where b.bucket = o.bucket_id and b.name = o.name)
+   order by o.created_at limit least(greatest(p_limit, 1), 500);
+end $$;
+create or replace function public.bridge_device_ok(p_device text, p_secret text)
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin return public.bridge__auth(p_device, p_secret); end $$;
+
+-- The device says which photos it has saved in Drive.
+create or replace function public.photo_copied(p_device text, p_secret text, p_items jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare k int;
+begin
+  if not public.bridge__auth(p_device, p_secret) then return -1; end if;
+  insert into public.photo_backups (bucket, name, size, drive_file_id)
+  select x->>'bucket', x->>'name', nullif(x->>'size', '')::bigint, x->>'drive_file_id' from jsonb_array_elements(coalesce(p_items, '[]')) x
+   where x->>'bucket' is not null and x->>'name' is not null
+  on conflict (bucket, name) do update set drive_file_id = excluded.drive_file_id, copied_at = now();
+  get diagnostics k = row_count;
+  update public.bridge_devices set last_seen = now() where device = p_device;
+  return k;
+end $$;
+
+-- The size watch: how full the free plan is (database 500 MB, file storage 1 GB), and how many photos are in Drive.
+-- Dispatchers in the app, or a Claude session; nobody else.
+create or replace function public.stb_usage()
+returns table(what text, used_bytes bigint, limit_bytes bigint, pct numeric, photos_total int, photos_in_drive int)
+language plpgsql stable security definer set search_path = public as $$
+declare ph bigint := 0; n int := 0; c int := 0;
+begin
+  if session_user = 'authenticator' and not public.is_dispatcher() then return; end if;
+  begin
+    execute 'select coalesce(sum((metadata->>''size'')::bigint), 0), count(*) from storage.objects' into ph, n;
+  exception when others then ph := 0; n := 0;
+  end;
+  select count(*) into c from public.photo_backups;
+  return query values
+    ('database', pg_database_size(current_database()), 500::bigint * 1024 * 1024, round(100.0 * pg_database_size(current_database()) / (500.0 * 1024 * 1024), 1), n, c),
+    ('photos', ph, 1024::bigint * 1024 * 1024, round(100.0 * ph / (1024.0 * 1024 * 1024), 1), n, c);
+end $$;
+
 -- Who may call what: the laptop's four functions with the public key (they check the device secret);
 -- everything else only from the server.
 revoke all on function public.bridge__auth(text,text), public.bridge__job(text), public.bridge__today(),
@@ -1950,7 +2010,8 @@ revoke all on function public.bridge__auth(text,text), public.bridge__job(text),
   public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid),
   public.bridge__note_history(), public.bridge_note_versions(uuid), public.bridge_note_restore(uuid,timestamptz), public.bridge_note_unmerge(uuid),
   public.bridge_backup_export(text,text), public.bridge__prune(), public.bridge__prune_after_job(),
-  public.bridge_open_enrolment(text,int), public.bridge_enrol(text,text), public.stb_backup_export(text,text)
+  public.bridge_open_enrolment(text,int), public.bridge_enrol(text,text), public.stb_backup_export(text,text),
+  public.photos_to_copy(int), public.bridge_device_ok(text,text), public.photo_copied(text,text,jsonb), public.stb_usage()
   from public;
 do $$ begin
   -- Supabase grants new functions to anon and authenticated directly, so revoking from public isn't enough (lesson L-015).
@@ -1964,22 +2025,25 @@ do $$ begin
       public.bridge__note_history(), public.bridge_note_versions(uuid), public.bridge_note_restore(uuid,timestamptz), public.bridge_note_unmerge(uuid),
       public.bridge__prune(), public.bridge__prune_after_job(), public.bridge_open_enrolment(text,int)
       from anon, authenticated;
-    revoke execute on function public.bridge_enrol(text,text), public.stb_backup_export(text,text) from authenticated;
+    revoke execute on function public.bridge_enrol(text,text), public.stb_backup_export(text,text), public.photo_copied(text,text,jsonb) from authenticated;
+    revoke execute on function public.photos_to_copy(int), public.bridge_device_ok(text,text), public.stb_usage() from anon;
+    revoke execute on function public.photos_to_copy(int), public.bridge_device_ok(text,text) from authenticated;
+    grant execute on function public.stb_usage() to authenticated;
     revoke execute on function public.bridge_backup_export(text,text) from authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
       public.bridge_checkpoint(text,text,uuid,text,text,text) from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history from anon;
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history, public.photo_backups from anon;
     grant execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid),
       public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
       public.bridge_checkpoint(text,text,uuid,text,text,text), public.bridge_backup_export(text,text),
-      public.bridge_enrol(text,text), public.stb_backup_export(text,text) to anon;
+      public.bridge_enrol(text,text), public.stb_backup_export(text,text), public.photo_copied(text,text,jsonb) to anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history from authenticated;
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history, public.photo_backups from authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_status() from authenticated;
   end if;
 end $$;

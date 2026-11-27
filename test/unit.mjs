@@ -95,3 +95,11 @@ t('Different publications at one address share a tile, NZH first', () => { const
   t('no icon chosen: initials', () => { assert.equal(initials('Mike'), 'M'); assert.equal(initials('Mary Jane Smith'), 'MJ'); assert.equal(initials(''), '?'); });
   t('only a small image made by the app counts as a photo', () => { assert.ok(okPhoto('data:image/jpeg;base64,AAAA')); assert.ok(!okPhoto('javascript:alert(1)')); assert.ok(!okPhoto('https://example.com/x.jpg')); assert.ok(!okPhoto('data:image/svg+xml;base64,AAAA')); assert.ok(!okPhoto('data:image/jpeg;base64,' + 'A'.repeat(70000))); });
 }
+// The size watch banner in Dispatch (decision 0080): only when something needs doing, and it says what to do.
+{
+  const { usageWarning } = await import('../js/dispatch.js');
+  const h = (t, a, ...c) => ({ t, a, c: c.flat() });
+  const row = (what, pct) => ({ what, pct: String(pct), used_bytes: 7.5e8, limit_bytes: what === 'photos' ? 1073741824 : 524288000, photos_total: 3000, photos_in_drive: 2990 });
+  t('size watch: no banner under 70%', () => assert.equal(usageWarning([row('photos', 45), row('database', 10)], h), null));
+  t('size watch: at 70% it says how full and what to do', () => { const w = usageWarning([row('photos', 72.5)], h); assert.match(w.c[0].c[0], /72\.5% full.*2990 of 3000 photos are copied to Google Drive.*older than 60 days/); });
+}

@@ -15,6 +15,10 @@
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
+  { id: '2026-11-28-size-watch', date: '2026-11-28', for: ['dispatcher'], title: 'Stan watches how full the app is',
+    what: 'The app’s free plan holds 500 MB of data and 1 GB of photos. If either gets to 70%, a red banner shows at the top of Dispatch saying how full it is and what to do. Every photo is also copied to Google Drive each night.',
+    why: 'So we find out months before anything fills up, not the morning it does.',
+    say: "I'm keeping an eye on how full the app is. If the data or the photos get to seventy per cent, I'll show a red banner in dispatch, and say what to do. Every photo is copied to Google Drive each night too." },
   { id: '2026-11-28-timer-undo', date: '2026-11-28', for: ['driver', 'helper'], idea: 'Zaph', title: 'An undone tick doesn’t start the clock',
     what: 'If you tick a stop by mistake and undo it, the run’s timer no longer starts from that tick. It starts from the first tick you keep, on the run screen, on Your morning and on the dispatch board.',
     why: 'A slip of the finger made a run look longer than it was.',
