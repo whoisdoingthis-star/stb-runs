@@ -44,7 +44,7 @@ export function pingText(name, ping, last, fmt = (t) => new Date(t).toLocaleTime
 }
 
 /**
- * Where's everyone (Mike, 28 Nov 2026, by voice; decision 0071): one ping to everyone on duty, then one picture per crew.
+ * Where's everyone (Mike, 28 Nov 2026, by voice; decision 0072): one ping to everyone on duty, then one picture per crew.
  * A driver and their helpers are one crew: their phones' answers and their ticks are combined.
  *   onDuty: [names on duty now]   crews: shiftCrews() output   me: my name
  *   pings: { name: ping row or null }   runs: [{ route, stops }] where stops come from runMapData (delivery order)

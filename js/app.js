@@ -457,7 +457,7 @@ function helpingNow() {
   return !!(start && start.driver && onDuty());
 }
 
-// ---- Where's everyone? Ping from the driver screen (Mike, 28 Nov 2026, by voice; decision 0071) ----
+// ---- Where's everyone? Ping from the driver screen (Mike, 28 Nov 2026, by voice; decision 0072) ----
 // One tap pings everyone else on duty. Each crew (a driver and their helpers, combined) comes back as one card:
 // where they are now, the stops they've just done, and where they're likely heading next. So we can coordinate
 // and know who's near if someone needs a hand. Same rules as Dispatch's Ping: answered once, on duty only, always told.
