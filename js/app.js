@@ -22,8 +22,8 @@ import { readExif, photoProof } from './exif.js';
 import { cleanNotice, expiryFor, unreadFor, boardFor, seenBy, NOTICE_DAYS } from './notices.js';
 import { stanLine, STAN_LINES } from './stanlines.js';
 import { deadlineFor } from './watch.js';
-import { peerPingText } from './runmap.js';
-import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt, runFinishedAt } from './shifts.js';
+import { runMapData, crewPicture } from './runmap.js';
+import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt, runFinishedAt, shiftCrews } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
 
@@ -457,39 +457,52 @@ function helpingNow() {
   return !!(start && start.driver && onDuty());
 }
 
-// ---- Ping from the driver screen (Mike, 28 Nov 2026; decision 0071) ----
-// Anyone on duty can ask where another on-duty person is. Same as Dispatch's Ping: their phone answers once,
-// only while they're on duty with Stan open, and they always see who asked.
-async function openPingSomeone() {
+// ---- Where's everyone? Ping from the driver screen (Mike, 28 Nov 2026, by voice; decision 0071) ----
+// One tap pings everyone else on duty. Each crew (a driver and their helpers, combined) comes back as one card:
+// where they are now, the stops they've just done, and where they're likely heading next. So we can coordinate
+// and know who's near if someone needs a hand. Same rules as Dispatch's Ping: answered once, on duty only, always told.
+async function openWhereEveryone() {
   if (app.store.mode !== 'shared') { toast('Ping needs the shared database.'); return; }
-  if (!onDuty()) { toast('Go on duty first: Ping works while you\u2019re both on duty.'); return; }
+  if (!onDuty()) { toast('Go on duty first: Ping works while you\u2019re on duty.'); return; }
+  const body = h('div', { class: 'where-list', role: 'status', 'aria-live': 'polite' }, h('p', { class: 'ping-msg' }, 'Looking for who\u2019s on duty\u2026'));
+  openSheet('Where\u2019s everyone?', body);
   let ev = [];
   try { ev = await app.store.loadDuty(new Date(Date.now() - 20 * 3600e3).toISOString()); } catch { /* none */ }
-  const names = [...new Set(ev.map((e) => e.user_name).filter(Boolean))]
-    .filter((n) => n !== app.me.name && currentDuty(ev.filter((e) => e.user_name === n))?.onDuty);
-  const msg = h('p', { class: 'ping-msg', role: 'status', 'aria-live': 'polite' });
-  const link = h('a', { class: 'btn big', hidden: true, target: '_blank', rel: 'noopener', style: 'margin-top:8px' }, 'Show them on Google Maps');
-  async function go(name, btn) {
-    btn.disabled = true; link.hidden = true; msg.textContent = `Pinging ${name}\u2026`;
-    let ping = null;
-    try {
-      const id = await app.store.ping(name, app.me.name);
-      for (let i = 0; i < 10 && msg.isConnected; i++) { await new Promise((ok) => setTimeout(ok, 2000)); ping = await app.store.getPing(id); if (ping && ping.state !== 'asked') break; }
-    } catch (e) { msg.textContent = `Couldn\u2019t ping: ${e.message}`; btn.disabled = false; return; }
-    const got = ping && ping.state !== 'asked' ? ping : null;
-    let away = null;
-    if (got?.state === 'answered') {
-      const me = await quietFix();
-      if (me) away = distanceM({ lat: me.lat, lng: me.lng }, { lat: got.lat, lng: got.lng });
-      link.href = `https://www.google.com/maps/search/?api=1&query=${got.lat},${got.lng}`; link.hidden = false;
-    }
-    msg.textContent = peerPingText(name, got, away);
-    btn.disabled = false;
+  const onNow = [...new Set(ev.map((e) => e.user_name).filter(Boolean))].filter((n) => currentDuty(ev.filter((e) => e.user_name === n))?.onDuty);
+  const crews = shiftCrews(ev.filter((e) => e.state === 'on_duty'));
+  const mine = crews.find((c) => c.driver === app.me.name || c.helpers.includes(app.me.name));
+  const targets = onNow.filter((n) => n !== app.me.name && !(mine && (mine.driver === n || mine.helpers.includes(n))));
+  if (!targets.length) { body.replaceChildren(h('p', { class: 'ping-msg' }, 'Nobody else is on duty right now.')); return; }
+  body.replaceChildren(h('p', { class: 'ping-msg' }, `Pinging ${targets.join(', ')}\u2026 (up to 20 seconds)`));
+  const pings = {};
+  const ids = {};
+  await Promise.all(targets.map(async (n) => { try { ids[n] = await app.store.ping(n, app.me.name); } catch { /* counted as no answer */ } }));
+  // Meanwhile: today's runs, for where they've been and where they're heading.
+  const runsP = (async () => {
+    let runs = app.todayRuns;
+    if (!runs?.length) { try { runs = (await app.store.listRuns()).filter((r) => r.delivery_date === nzToday()); } catch { runs = []; } }
+    return Promise.all(runs.map(async (r) => { try { return { route: shortRoute(r.route), stops: runMapData(await app.store.loadRunMap(r.id, r.route)).stops }; } catch { return { route: shortRoute(r.route), stops: [] }; } }));
+  })();
+  for (let i = 0; i < 10 && body.isConnected; i++) {
+    await new Promise((ok) => setTimeout(ok, 2000));
+    await Promise.all(Object.entries(ids).filter(([n]) => !pings[n] || pings[n].state === 'asked').map(async ([n, id]) => { pings[n] = await app.store.getPing(id).catch(() => null); }));
+    if (targets.every((n) => pings[n] && pings[n].state !== 'asked')) break;
   }
-  openSheet('Ping someone',
-    h('p', { class: 'muted' }, names.length ? 'Who do you want to find? Their phone answers once, and they see that you asked.' : 'Nobody else is on duty right now, so there\u2019s nobody to ping.'),
-    ...names.map((n) => h('button', { class: 'btn big', style: 'margin-top:8px', onclick: (e) => go(n, e.currentTarget) }, avatar(n, 24), ` Ping ${n}`)),
-    msg, link);
+  for (const n of targets) if (pings[n]?.state === 'asked') pings[n] = null;
+  const [runs, me] = await Promise.all([runsP, quietFix()]);
+  const pic = crewPicture({ onDuty: onNow, crews, me: app.me.name, pings, runs });
+  const t = (x) => new Date(x).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+  const far = (p) => { if (!me) return ''; const m = distanceM({ lat: me.lat, lng: me.lng }, p); return m < 150 ? ', right near you' : `, ${m < 1000 ? `${Math.round(m / 50) * 50} m` : `${(m / 1000).toFixed(1)} km`} from you`; };
+  body.replaceChildren(...pic.map((c) => h('div', { class: 'card where-card' },
+    h('b', null, ...c.names.flatMap((n, i) => [i ? ' + ' : '', avatar(n, 22), ` ${n}`]), c.route ? ` \u00b7 ${c.route}` : ''),
+    h('p', null, c.now ? `Now: found at ${t(c.now.at)}${far(c.now)}.`
+      : c.state === 'off_duty' ? 'Just gone off duty, so nothing was shared.'
+      : c.state === 'no_gps' ? 'Their phone got the ping but couldn\u2019t find its position.'
+      : 'No answer: Stan isn\u2019t open on their phone. Give them a call.'),
+    c.recent.length ? h('p', { class: 'small' }, `Just done: ${c.recent.map((r) => `${r.label} (${t(r.at)})`).join(', ')}.`) : null,
+    c.next ? h('p', { class: 'small' }, `Heading to: ${c.next}, ${c.left} to go.`) : c.route ? h('p', { class: 'small' }, `${c.route} is done.`) : null,
+    c.now ? h('a', { class: 'btn', target: '_blank', rel: 'noopener', href: `https://www.google.com/maps/search/?api=1&query=${c.now.lat},${c.now.lng}` }, 'Show on Google Maps') : null)),
+    h('p', { class: 'small muted' }, 'They each see that you asked. Phones only answer while on duty with Stan open.'));
 }
 
 // Nothing to deliver and nobody on duty: after five seconds Stan gets bored and offers a game
@@ -2540,7 +2553,7 @@ async function viewRun(ids) {
       (close) => h('div', { class: 'menu-group' },
         menuItem('Find an address…', () => { close(); searchRow.hidden = false; search.focus(); }),
         menuItem(stanOn() ? 'Tell Stan an idea\u2026' : 'Send an idea\u2026', () => { close(); openStanChat('run'); }, { hint: 'A tweak, a niggle, something new' }),
-        app.store.mode === 'shared' && onDuty() ? menuItem('Ping someone\u2026', () => { close(); openPingSomeone(); }, { hint: 'See where another driver is right now' }) : null,
+        app.store.mode === 'shared' && onDuty() ? menuItem('Where\u2019s everyone?', () => { close(); openWhereEveryone(); }, { hint: 'Ping everyone on duty: where they are and where they\u2019re heading' }) : null,
         menuItem('Text a link to this run', () => { close(); shareRuns(ids, `${label} ${fmtDate(date)}`); }, { hint: 'Anyone in the family can open it and help' }),
         hasLayout ? menuItem('Door codes…', () => { close(); const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route)); if (d) openCodes(d); }) : null,
         menuItem('Refresh', async () => { close(); S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.'); }),
@@ -2605,6 +2618,7 @@ async function viewRun(ids) {
           h('h1', null, h('span', { class: 'rh-name' }, data.map((d) => shortRoute(d.run.route)).join(' + ')), h('span', { class: 'rh-date' }, fmtDate(date))),
           h('div', { class: 'rh-status' }, withChip, orderChip, gpsChip, syncChip)),
         h('button', { class: 'icon-btn search-btn', 'aria-label': 'Find an address', onclick: () => { searchRow.hidden = !searchRow.hidden; if (!searchRow.hidden) search.focus(); } }, icon('search')),
+        app.store.mode === 'shared' && onDuty() ? h('button', { class: 'icon-btn ping-btn', 'aria-label': 'Where\u2019s everyone? Ping everyone on duty', onclick: openWhereEveryone }, '\ud83d\udccd') : null,
         h('button', { class: 'icon-btn', 'aria-label': 'Run options', onclick: openMenu }, '⋯')),
       floatbar,
       seg ? h('div', { class: 'rh-row' }, seg) : null,

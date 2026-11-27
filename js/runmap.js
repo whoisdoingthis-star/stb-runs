@@ -43,13 +43,37 @@ export function pingText(name, ping, last, fmt = (t) => new Date(t).toLocaleTime
   return `No answer: STB isn’t open on ${name}’s phone.${lastBit}`;
 }
 
-/** Ping from the driver screen (decision 0071): no map there, so say how far away they are and when. */
-export function peerPingText(name, ping, metresAway, fmt = (t) => new Date(t).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })) {
-  if (ping?.state === 'answered') {
-    const far = metresAway == null ? '' : metresAway < 150 ? ', right near you' : `, about ${metresAway < 1000 ? `${Math.round(metresAway / 50) * 50} m` : `${(metresAway / 1000).toFixed(1)} km`} from you`;
-    return `Found ${name} at ${fmt(ping.answered_at)}${far}.`;
+/**
+ * Where's everyone (Mike, 28 Nov 2026, by voice; decision 0071): one ping to everyone on duty, then one picture per crew.
+ * A driver and their helpers are one crew: their phones' answers and their ticks are combined.
+ *   onDuty: [names on duty now]   crews: shiftCrews() output   me: my name
+ *   pings: { name: ping row or null }   runs: [{ route, stops }] where stops come from runMapData (delivery order)
+ * Returns [{ names, driver, route, now: { lat, lng, at, acc, from } | null, recent: [{ label, at }], next: label | null, left, state }]
+ * (state: 'found' | 'off_duty' | 'no_gps' | 'no_answer'), leaving out my own crew.
+ */
+export function crewPicture({ onDuty = [], crews = [], me = '', pings = {}, runs = [] }) {
+  const on = new Set(onDuty); const groups = []; const placed = new Set();
+  for (const c of crews) {
+    const names = [c.driver, ...c.helpers].filter((n) => on.has(n) && !placed.has(n));
+    if (!names.length) continue;
+    names.forEach((n) => placed.add(n)); groups.push({ driver: on.has(c.driver) ? c.driver : names[0], names });
   }
-  if (ping?.state === 'off_duty') return `${name} has just gone off duty, so their phone didn\u2019t share where it is.`;
-  if (ping?.state === 'no_gps') return `${name}\u2019s phone got the ping but couldn\u2019t find its position.`;
-  return `No answer: Stan isn\u2019t open on ${name}\u2019s phone. Try them in a minute, or give them a call.`;
+  for (const n of onDuty) if (!placed.has(n)) { placed.add(n); groups.push({ driver: n, names: [n] }); }
+  return groups.filter((g) => !g.names.includes(me)).map((g) => {
+    const answers = g.names.map((n) => (pings[n] ? { ...pings[n], name: n } : null)).filter(Boolean);
+    const found = answers.filter((p) => p.state === 'answered' && p.lat != null).sort((a, b) => (a.accuracy_m ?? 1e9) - (b.accuracy_m ?? 1e9))[0];
+    const state = found ? 'found' : answers.some((p) => p.state === 'no_gps') ? 'no_gps' : answers.length && answers.every((p) => p.state === 'off_duty') ? 'off_duty' : 'no_answer';
+    // Their ticks today, newest first, across every run: where they've just been.
+    const mine = runs.flatMap((r) => r.stops.map((st, i) => ({ ...st, i, run: r }))).filter((st) => st.state !== 'todo' && st.at && g.names.includes(st.by))
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const last = mine[0]; const run = last?.run || null;
+    let next = null; let left = 0;
+    if (run) {
+      const todo = run.stops.map((st, i) => ({ ...st, i })).filter((st) => st.state === 'todo');
+      left = todo.length; next = (todo.find((st) => st.i > last.i) || todo[0])?.label || null;
+    }
+    return { names: g.names, driver: g.driver, route: run?.route || null, state, left, next,
+      now: found ? { lat: found.lat, lng: found.lng, at: found.answered_at, acc: found.accuracy_m, from: found.name } : null,
+      recent: mine.slice(0, 3).map((st) => ({ label: st.label, at: st.at })) };
+  });
 }

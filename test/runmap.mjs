@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { runMapData, pingText, peerPingText } from '../js/runmap.js';
+import { runMapData, pingText, crewPicture } from '../js/runmap.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 const L = (k, n, seq) => ({ line_key: `k${k}`, address_key: `A${n}`, number: String(n), street: 'PICTON STREET', seq });
@@ -28,11 +28,16 @@ const fmt = () => '5:41 am';
 t('ping answered: says where and how exact', () => assert.match(pingText('Lisa', { state: 'answered', answered_at: 1, accuracy_m: 8.4 }, null, fmt), /Lisa is here \(as of 5:41 am, to about 8 m\)/));
 t('no answer: says the app isn’t open, and gives the last tick', () => assert.match(pingText('Lisa', null, { at: 1, label: '2 Picton Street' }, fmt), /isn’t open on Lisa’s phone\. Last tick: 5:41 am, 2 Picton Street/));
 t('off duty: nothing is shared', () => assert.match(pingText('Lisa', { state: 'off_duty' }, null, fmt), /off duty/));
-t('driver-screen ping: says how far away, in metres or km', () => {
-  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, 640, fmt), 'Found Lisa at 5:41 am, about 650 m from you.');
-  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, 2345, fmt), 'Found Lisa at 5:41 am, about 2.3 km from you.');
-  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, 90, fmt), 'Found Lisa at 5:41 am, right near you.');
-  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, null, fmt), 'Found Lisa at 5:41 am.');
-});
-t('driver-screen ping: no answer suggests a call', () => assert.match(peerPingText('Moana', null, null, fmt), /isn’t open on Moana’s phone\. Try them in a minute, or give them a call/));
+{
+  const stop = (n, state, by, at) => ({ key: `A${n}`, label: `${n} Picton Street`, state, by, at });
+  const run6 = { route: 'HOWICK06', stops: [stop(1, 'done', 'Lisa', '2026-11-28T04:01:00Z'), stop(2, 'done', 'Lenny', '2026-11-28T04:03:00Z'), stop(3, 'done', 'Lisa', '2026-11-28T04:05:00Z'), stop(4, 'todo'), stop(5, 'todo')] };
+  const crews = [{ driver: 'Mike', helpers: ['Zaph'] }, { driver: 'Lisa', helpers: ['Lenny'] }];
+  const pings = { Lisa: { state: 'answered', lat: -36.9, lng: 174.9, accuracy_m: 30, answered_at: 't' }, Lenny: { state: 'answered', lat: -36.91, lng: 174.91, accuracy_m: 6, answered_at: 't2' } };
+  const pic = crewPicture({ onDuty: ['Mike', 'Zaph', 'Lisa', 'Lenny', 'Moana'], crews, me: 'Mike', pings, runs: [run6] });
+  t('where’s everyone: a driver and helper are one crew, and my own crew is left out', () => assert.deepEqual(pic.map((c) => c.names), [['Lisa', 'Lenny'], ['Moana']]));
+  t('where’s everyone: the crew’s most exact phone says where they are now', () => assert.deepEqual([pic[0].now.from, pic[0].now.lat], ['Lenny', -36.91]));
+  t('where’s everyone: both their ticks make the history, newest first', () => assert.deepEqual(pic[0].recent.map((r) => r.label), ['3 Picton Street', '2 Picton Street', '1 Picton Street']));
+  t('where’s everyone: next is the first stop to do after their last tick, with how many to go', () => assert.deepEqual([pic[0].route, pic[0].next, pic[0].left], ['HOWICK06', '4 Picton Street', 2]));
+  t('where’s everyone: no answer and no ticks is said plainly', () => assert.deepEqual([pic[1].state, pic[1].now, pic[1].next], ['no_answer', null, null]));
+}
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

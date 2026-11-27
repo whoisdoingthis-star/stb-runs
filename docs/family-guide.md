@@ -179,8 +179,13 @@ A tile marked **New** (a new customer's first paper) shows **📷 Take photo**. 
 ## Closing a pop-up
 Every pop-up has a **✕** at its top right. It stays there even when you scroll down a long one, so you never have to hunt for it. Tapping the dark area above the pop-up closes it too.
 
-## Ping: where is everyone?
-While you're **on duty**, you can find another driver who's on duty too: in a run, tap **⋯ → Ping someone…**, then tap their name. In a few seconds Stan tells you when he found them and how far away they are, with a button to **show them on Google Maps**. If their app isn't open, Stan says so: give them a call instead.
+## Where's everyone?
+While you're **on duty**, tap **📍** at the top of a run (or **⋯ → Where's everyone?**). Stan pings everyone else on duty and, within 20 seconds, shows a card for each car. A driver and their helper are one card, like *Lisa + Lenny*. Each card says:
+- **Now:** when Stan found them and how far away they are, with a button to **show them on Google Maps**;
+- **Just done:** the last few stops they ticked;
+- **Heading to:** their next stop, and how many they have left.
+
+If Stan isn't open on their phone, the card says so: give them a call. Use it when someone needs a hand, or to work out who's closest.
 
 The same works the other way. Anyone on duty (and Mike in Dispatch) can ping you. Your phone answers once, and you'll always see a message, like "Lisa checked where you are." It only works while the app is open, and never when you're off duty.
 
