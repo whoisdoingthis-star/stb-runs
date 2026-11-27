@@ -465,7 +465,7 @@ async function openWhereEveryone() {
   if (app.store.mode !== 'shared') { toast('Ping needs the shared database.'); return; }
   if (!onDuty()) { toast('Go on duty first: Ping works while you\u2019re on duty.'); return; }
   const body = h('div', { class: 'where-list', role: 'status', 'aria-live': 'polite' }, h('p', { class: 'ping-msg' }, 'Looking for who\u2019s on duty\u2026'));
-  openSheet('Where\u2019s everyone?', body);
+  openSheet('Ping: who\u2019s on the road', body);
   let ev = [];
   try { ev = await app.store.loadDuty(new Date(Date.now() - 20 * 3600e3).toISOString()); } catch { /* none */ }
   const onNow = [...new Set(ev.map((e) => e.user_name).filter(Boolean))].filter((n) => currentDuty(ev.filter((e) => e.user_name === n))?.onDuty);
@@ -2553,7 +2553,7 @@ async function viewRun(ids) {
       (close) => h('div', { class: 'menu-group' },
         menuItem('Find an address…', () => { close(); searchRow.hidden = false; search.focus(); }),
         menuItem(stanOn() ? 'Tell Stan an idea\u2026' : 'Send an idea\u2026', () => { close(); openStanChat('run'); }, { hint: 'A tweak, a niggle, something new' }),
-        app.store.mode === 'shared' && onDuty() ? menuItem('Where\u2019s everyone?', () => { close(); openWhereEveryone(); }, { hint: 'Ping everyone on duty: where they are and where they\u2019re heading' }) : null,
+        app.store.mode === 'shared' && onDuty() ? menuItem('Ping', () => { close(); openWhereEveryone(); }, { hint: 'Every vehicle on the road: where it is and where it\u2019s heading' }) : null,
         menuItem('Text a link to this run', () => { close(); shareRuns(ids, `${label} ${fmtDate(date)}`); }, { hint: 'Anyone in the family can open it and help' }),
         hasLayout ? menuItem('Door codes…', () => { close(); const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route)); if (d) openCodes(d); }) : null,
         menuItem('Refresh', async () => { close(); S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.'); }),
@@ -2618,7 +2618,7 @@ async function viewRun(ids) {
           h('h1', null, h('span', { class: 'rh-name' }, data.map((d) => shortRoute(d.run.route)).join(' + ')), h('span', { class: 'rh-date' }, fmtDate(date))),
           h('div', { class: 'rh-status' }, withChip, orderChip, gpsChip, syncChip)),
         h('button', { class: 'icon-btn search-btn', 'aria-label': 'Find an address', onclick: () => { searchRow.hidden = !searchRow.hidden; if (!searchRow.hidden) search.focus(); } }, icon('search')),
-        app.store.mode === 'shared' && onDuty() ? h('button', { class: 'icon-btn ping-btn', 'aria-label': 'Where\u2019s everyone? Ping everyone on duty', onclick: openWhereEveryone }, '\ud83d\udccd') : null,
+        app.store.mode === 'shared' && onDuty() ? h('button', { class: 'btn small ping-btn', 'aria-label': 'Ping: where is every vehicle on the road?', onclick: openWhereEveryone }, 'Ping') : null,
         h('button', { class: 'icon-btn', 'aria-label': 'Run options', onclick: openMenu }, '⋯')),
       floatbar,
       seg ? h('div', { class: 'rh-row' }, seg) : null,

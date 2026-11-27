@@ -179,8 +179,8 @@ A tile marked **New** (a new customer's first paper) shows **📷 Take photo**. 
 ## Closing a pop-up
 Every pop-up has a **✕** at its top right. It stays there even when you scroll down a long one, so you never have to hunt for it. Tapping the dark area above the pop-up closes it too.
 
-## Where's everyone?
-While you're **on duty**, tap **📍** at the top of a run (or **⋯ → Where's everyone?**). Stan pings everyone else on duty and, within 20 seconds, shows a card for each car. A driver and their helper are one card, like *Lisa + Lenny*. Each card says:
+## Ping: where's everyone?
+While you're **on duty**, tap **Ping** at the top of a run (or **⋯ → Ping**). Stan pings everyone else on duty and, within 20 seconds, shows a card for each **vehicle**: a driver, with their helpers if they have any, like *Lisa + Lenny*. Each card says:
 - **Now:** when Stan found them and how far away they are, with a button to **show them on Google Maps**;
 - **Just done:** the last few stops they ticked;
 - **Heading to:** their next stop, and how many they have left.

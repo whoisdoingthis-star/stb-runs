@@ -14,10 +14,10 @@
 //          record new ones on Dispatch → Set-up → Stan's voice)
 
 export const UPDATES = [
-  { id: '2026-11-28-ping-anyone', date: '2026-11-28', for: ['driver', 'helper'], title: 'Where’s everyone?',
-    what: 'While you’re on duty, tap 📍 at the top of a run. Stan pings everyone else on duty and shows a card for each car, driver and helper together: where they are now and how far from you, the stops they’ve just done, and where they’re heading next. They see that you asked.',
+  { id: '2026-11-28-ping-anyone', date: '2026-11-28', for: ['driver', 'helper'], title: 'Ping: every vehicle on the road',
+    what: 'While you’re on duty, tap Ping at the top of a run. Stan pings everyone else on duty and shows a card for each vehicle (a driver, with their helpers if they have any): where they are now and how far from you, the stops they’ve just done, and where they’re heading next. They see that you asked.',
     why: 'So we can help each other and coordinate during runs, and Life360 can use less battery.',
-    say: "Need to find someone? While you're on duty, tap the pin at the top of a run. I'll ping everyone else on duty and show you each car. Where they are now, what they've just done, and where they're heading next. They'll see that you asked." },
+    say: "Need to find someone? While you're on duty, tap ping at the top of a run. I'll ping everyone else on duty and show you each vehicle. Where they are now, what they've just done, and where they're heading next. They'll see that you asked." },
   { id: '2026-11-23-comes-back', date: '2026-11-23', for: ['driver'], title: 'An address that comes back goes where it belongs',
     what: 'When an address drops off the sheet for a few days and returns, it now goes where the usual order has it, even if you made your own order while it was away. If it still sits away from its street, Stan asks before the run. And the orange New tag is the newspaper’s word for a subscription that starts or restarts today, not a place we’ve never been.',
     why: 'On Monday, 26 Marine Parade turned up beside Luplau Crescent and cost a drive back.',

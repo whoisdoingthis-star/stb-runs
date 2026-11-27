@@ -440,7 +440,7 @@ html.big .tile .unit { font-size: 18px; }
 html.big .menu-item { font-size: 20px; min-height: 56px; }
 html.big .choice-label { font-size: 16px; width: 84px; }
 .icon-btn.search-btn { font-size: 20px; }
-.icon-btn.ping-btn { font-size: 20px; }
+.ping-btn { align-self: center; margin: 0 2px; }
 .where-card { margin-top: 10px; }
 .where-card p { margin: 6px 0; }
 .where-card .btn { margin-top: 4px; }
