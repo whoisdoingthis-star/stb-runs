@@ -1697,12 +1697,17 @@ end $$;
 -- A laptop job's result becomes a note by itself, under its folder's name, so every session sees what the laptop did.
 create or replace function public.bridge__job_note() returns trigger
 language plpgsql security definer set search_path = public as $$
+declare n uuid;
 begin
   if new.status in ('done', 'held', 'failed', 'paused') and new.status is distinct from old.status
      and new.job_type = 'claude' and coalesce(new.summary, new.held_reason) is not null then
     insert into public.bridge_notes (kind, topics, body, source, stated_by, ref, expires_at)
     values ('result', array['bridge', lower(coalesce(new.target, 'laptop'))],
-            left(new.status || ': ' || coalesce(new.summary, new.held_reason), 1000), 'laptop', 'laptop', new.code, now() + interval '14 days');
+            left(new.status || ': ' || coalesce(new.summary, new.held_reason), 1000), 'laptop', 'laptop', new.code, now() + interval '14 days')
+    returning id into n;
+    -- one live note per job: its latest outcome replaces an earlier one (paused, then done)
+    update public.bridge_notes set retired_at = now(), retired_why = 'superseded by ' || n
+     where ref = new.code and source = 'laptop' and id <> n and retired_at is null;
   end if;
   return new;
 end $$;

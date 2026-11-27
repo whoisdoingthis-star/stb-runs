@@ -324,6 +324,11 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   const jn = (await one(`select bridge_enqueue('sandbox', 'make a file', 'claude') c`)).c; const jj = await claim();
   await db.query(`select bridge_finish_job('lap','s',$1,'done','Made hello.md')`, [jj.id]);
   check('bridge: a laptop job’s result becomes a note everyone can read', (await db.query(`select body, ref from bridge_notes_for(array['sandbox'])`)).rows[0]?.ref === jn);
+  await db.query(`select bridge_caps(50, 5000)`);
+  const jp = (await one(`select bridge_enqueue('sandbox', 'two steps', 'claude') c`)).c; const jq = await claim();
+  await db.query(`select bridge_checkpoint('lap','s',$1,'Step 1')`, [jq.id]); await db.query(`select bridge_finish_job('lap','s',$1,'timed_out','Got to step 1')`, [jq.id]);
+  await db.query(`select bridge_allow($1)`, [jp]); const jr = await claim(); await db.query(`select bridge_finish_job('lap','s',$1,'done','Both steps done')`, [jr.id]);
+  check('bridge: a job paused then finished leaves one live note, its latest', (await db.query(`select body from bridge_notes_for(array['sandbox']) where ref = $1`, [jp])).rows.map((r) => r.body).join() === 'done: Both steps done');
   await db.exec(`delete from bridge_notes; delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
 
