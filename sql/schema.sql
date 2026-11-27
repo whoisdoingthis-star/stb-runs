@@ -1886,6 +1886,57 @@ begin perform public.bridge__prune(); return null; end $$;
 drop trigger if exists bridge_jobs_prune on public.bridge_jobs;
 create trigger bridge_jobs_prune after update of status on public.bridge_jobs for each statement execute function public.bridge__prune_after_job();
 
+-- ---- Nightly backup to Google Drive (Mike, 28 Nov 2026: "roll into a google drive? Evening backups so that it doesn't need my laptop on"; decision 0079) ----
+-- A Google Apps Script in Mike's account (tools/gdrive-backup.gs) calls stb_backup_export each evening as the device
+-- 'gdrive-backup' and saves the copy in his Drive. It makes its own secret and enrols it once, in a window opened from a
+-- Claude session (bridge_open_enrolment), so the secret is never seen by anyone; only its bcrypt hash is stored here.
+alter table public.bridge_control add column if not exists enrol_device     text;
+alter table public.bridge_control add column if not exists enrol_open_until timestamptz;
+
+create or replace function public.bridge_open_enrolment(p_device text, p_minutes int default 30)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.bridge_devices (device, label, secret_hash, info)
+  values (p_device, p_device, '!', '{}'::jsonb) on conflict (device) do nothing;
+  update public.bridge_control set enrol_device = p_device, enrol_open_until = now() + make_interval(mins => least(greatest(p_minutes, 1), 60)) where id = 1;
+  insert into public.bridge_job_log (actor, event, detail) values ('Mike', 'enrolment opened', p_device);
+  return 'Open for ' || p_device || ' for ' || least(greatest(p_minutes, 1), 60) || ' minutes';
+end $$;
+
+-- Called once by the new device with the secret it made. Works only inside the window, only for that device, only once.
+create or replace function public.bridge_enrol(p_device text, p_secret text)
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
+declare c public.bridge_control;
+begin
+  select * into c from public.bridge_control where id = 1;
+  if c.enrol_device is distinct from p_device or c.enrol_open_until is null or c.enrol_open_until < now() or char_length(p_secret) < 32 then return false; end if;
+  update public.bridge_devices set secret_hash = extensions.crypt(p_secret, extensions.gen_salt('bf')), last_seen = now()
+   where device = p_device and secret_hash = '!';
+  if not found then return false; end if;
+  update public.bridge_control set enrol_device = null, enrol_open_until = null where id = 1;
+  insert into public.bridge_job_log (actor, event, detail) values (p_device, 'enrolled', null);
+  return true;
+end $$;
+
+-- The whole Send The Boy database as JSON, for an enrolled device. Every table in the app's schema, plus the list of
+-- stored files (names only; the photos themselves stay in Supabase Storage).
+create or replace function public.stb_backup_export(p_device text, p_secret text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare t record; out jsonb := '{}'::jsonb; rows jsonb;
+begin
+  if not public.bridge__auth(p_device, p_secret) then return null; end if;
+  update public.bridge_devices set last_seen = now() where device = p_device;
+  for t in select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by table_name loop
+    execute format('select coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from public.%I x', t.table_name) into rows;
+    out := out || jsonb_build_object(t.table_name, rows);
+  end loop;
+  begin
+    execute 'select coalesce(jsonb_agg(jsonb_build_object(''bucket'', bucket_id, ''name'', name, ''created_at'', created_at)), ''[]''::jsonb) from storage.objects' into rows;
+  exception when others then rows := '[]'::jsonb;
+  end;
+  return jsonb_build_object('taken_at', now(), 'from', 'stb-runs', 'version', 1, 'tables', out, 'storage_files', rows);
+end $$;
+
 -- Who may call what: the laptop's four functions with the public key (they check the device secret);
 -- everything else only from the server.
 revoke all on function public.bridge__auth(text,text), public.bridge__job(text), public.bridge__today(),
@@ -1898,7 +1949,8 @@ revoke all on function public.bridge__auth(text,text), public.bridge__job(text),
   public.bridge_note_retire(uuid,text), public.bridge__job_note(),
   public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid),
   public.bridge__note_history(), public.bridge_note_versions(uuid), public.bridge_note_restore(uuid,timestamptz), public.bridge_note_unmerge(uuid),
-  public.bridge_backup_export(text,text), public.bridge__prune(), public.bridge__prune_after_job()
+  public.bridge_backup_export(text,text), public.bridge__prune(), public.bridge__prune_after_job(),
+  public.bridge_open_enrolment(text,int), public.bridge_enrol(text,text), public.stb_backup_export(text,text)
   from public;
 do $$ begin
   -- Supabase grants new functions to anon and authenticated directly, so revoking from public isn't enough (lesson L-015).
@@ -1910,8 +1962,9 @@ do $$ begin
       public.bridge_note_retire(uuid,text), public.bridge__job_note(),
       public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid),
       public.bridge__note_history(), public.bridge_note_versions(uuid), public.bridge_note_restore(uuid,timestamptz), public.bridge_note_unmerge(uuid),
-      public.bridge__prune(), public.bridge__prune_after_job()
+      public.bridge__prune(), public.bridge__prune_after_job(), public.bridge_open_enrolment(text,int)
       from anon, authenticated;
+    revoke execute on function public.bridge_enrol(text,text), public.stb_backup_export(text,text) from authenticated;
     revoke execute on function public.bridge_backup_export(text,text) from authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
@@ -1922,7 +1975,8 @@ do $$ begin
     grant execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid),
       public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
-      public.bridge_checkpoint(text,text,uuid,text,text,text), public.bridge_backup_export(text,text) to anon;
+      public.bridge_checkpoint(text,text,uuid,text,text,text), public.bridge_backup_export(text,text),
+      public.bridge_enrol(text,text), public.stb_backup_export(text,text) to anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
     revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes, public.bridge_notes_history from authenticated;

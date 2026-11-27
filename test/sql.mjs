@@ -364,6 +364,18 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   await db.query(`update bridge_notes_history set at = now() - interval '200 days' where note_id = $1`, [a]);
   await db.query(`select bridge__prune()`);
   check('bridge: history older than 180 days expires', (await db.query(`select * from bridge_note_versions($1)`, [a])).rows.length === 0);
+  // ---- Nightly backup to Google Drive (decision 0079) ----
+  await db.exec(`create or replace function extensions.gen_salt(t text) returns text language sql as $$ select 'h2' $$;`);
+  await db.exec(`create or replace function extensions.crypt(p text, h text) returns text language sql as $$ select case when p in ('s', 'gdrive-secret-gdrive-secret-gdrive-secret-1') then h else 'no' end $$;`);
+  const sec = 'gdrive-secret-gdrive-secret-gdrive-secret-1';
+  check('backup: enrolling without an open window is refused (0079)', (await one(`select bridge_enrol('gdrive-backup', $1) ok`, [sec])).ok === false);
+  await db.query(`select bridge_open_enrolment('gdrive-backup', 30)`);
+  check('backup: a short secret is refused', (await one(`select bridge_enrol('gdrive-backup', 'short') ok`)).ok === false);
+  check('backup: the device enrols once inside the window', (await one(`select bridge_enrol('gdrive-backup', $1) ok`, [sec])).ok === true);
+  check('backup: and the window closes behind it', (await one(`select bridge_enrol('gdrive-backup', $1) ok`, [sec])).ok === false);
+  const full = (await one(`select stb_backup_export('gdrive-backup', $1) b`, [sec])).b;
+  check('backup: the copy has every table in the app (runs, ticks, people)', full && full.version === 1 && Array.isArray(full.tables.runs) && full.tables.runs.length >= 1 && Array.isArray(full.tables.tap_events) && 'members' in full.tables);
+  check('backup: the copy needs the device’s secret', (await one(`select stb_backup_export('gdrive-backup', 'nope') b`)).b === null);
   await db.exec(`delete from bridge_notes; delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
 

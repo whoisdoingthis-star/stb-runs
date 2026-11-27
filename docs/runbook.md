@@ -62,6 +62,12 @@ Nobody is ever sent the same card twice (`training_emails`). To send a card agai
 ## A new driver can't go on duty
 They need the New driver course in Stan's School and its four practice tasks in Sandbox Stan, signed in on that phone so it counts. Dispatch → People shows what's left. If they already know the job, untick **Needs training** there.
 
+## Backups (Google Drive, every night)
+The Supabase plan is free, so Supabase keeps no backups. Every night at 10 pm a Google Apps Script in Mike's Google account ("STB backup", the code is `tools/gdrive-backup.gs`) saves a full copy of the database, every table, into the Drive folder **STB backups** as `stb-YYYY-MM-DD.json.gz`: 30 nightly copies, plus the 1st of each month for a year ([decision 0079](decisions/0079-nightly-backup-to-drive.md)). Photos stay in Supabase Storage; the copy lists their names.
+- **Is it running?** Ask any Claude session "when did the backup last run?" (`select device, last_seen from bridge_status() where device = 'gdrive-backup'`). A failed night also emails Mike (Apps Script does that).
+- **Set it up again** (new Google account, lost script): a Claude session runs `select bridge_open_enrolment('gdrive-backup');` (first `update bridge_devices set secret_hash = '!' where device = 'gdrive-backup';` to forget the old secret), then paste the script into a new Apps Script project and press **Run** on `setup` within 30 minutes.
+- **Restore:** give a Claude session the file and say what to bring back (one table, one run, everything). It reads the copy and writes the rows back with Mike in the chat (changing live records is Mike's call). The copy holds customer addresses and door codes: it stays in Mike's Drive.
+
 ## Known open items
 - The end-of-day email needs a verified domain and a Resend key (above).
 - Rotate the Supabase secret key: it was shown in a screenshot during setup (8 Nov 2026). Kept for the proof of concept by choice.

@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Nightly backup to Google Drive** (Mike, 28 Nov): every night at 10 pm a script in Mike's Google account saves a full copy of the database to Drive (STB backups), with no laptop needed; 30 nights plus monthly for a year. Nothing changes on the phones. [Decision 0079](docs/decisions/0079-nightly-backup-to-drive.md).
 - **Laptop bridge, phase 6: backups and rollback** (Mike, 28 Nov): every version of every shared note is kept and can be put back; the laptop takes a daily copy of the bridge into its own folder (the Supabase plan has no backups); folders that aren't git get a snapshot before a laptop job; logs expire after 180 days. Nothing changes on the phones. [Decision 0078](docs/decisions/0078-bridge-backups-and-rollback.md).
 - **Laptop bridge, phase 5: tidy-up and weighting** (Mike, 28 Nov): the shared notes merge near-duplicates as they're written, weight what keeps coming back across days and sessions (fading over time), never touch decisions, and put clashing decisions in front of Mike. Nothing changes on the phones. [Decision 0077](docs/decisions/0077-bridge-tidy-and-weighting.md).
 - **Laptop bridge, phase 3 finished on the laptop** (Mike, 28 Nov): the laptop's job runner now saves progress after each step, pauses instead of stopping, and carries on after Allow; tested with two sandbox jobs. A job's shared note now keeps only its latest outcome.
