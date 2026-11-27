@@ -978,10 +978,20 @@ create table if not exists public.pings (
   lat double precision, lng double precision, accuracy_m double precision
 );
 alter table public.pings enable row level security;
+-- Ping from the driver screen (Mike, 28 Nov 2026; decision 0071): anyone on duty can also ask, about someone else,
+-- in their own name, and can read the answers to their own asks.
+create or replace function public.on_duty_now(who text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select state <> 'off_duty' from public.duty_events
+    where user_name = who and device_time > now() - interval '20 hours' order by device_time desc limit 1), false);
+$$;
 drop policy if exists pings_read on public.pings;
-create policy pings_read on public.pings for select to authenticated using (public.is_dispatcher() or target_name = public.my_name());
+create policy pings_read on public.pings for select to authenticated
+  using (public.is_dispatcher() or target_name = public.my_name() or asked_by = public.my_name());
 drop policy if exists pings_ask on public.pings;
-create policy pings_ask on public.pings for insert to authenticated with check (public.is_dispatcher() and state = 'asked' and lat is null);
+create policy pings_ask on public.pings for insert to authenticated with check (state = 'asked' and lat is null and (
+  public.is_dispatcher()
+  or (public.is_member() and asked_by = public.my_name() and target_name <> public.my_name() and public.on_duty_now(public.my_name()))));
 drop policy if exists pings_answer on public.pings;
 create policy pings_answer on public.pings for update to authenticated using (target_name = public.my_name() and state = 'asked') with check (target_name = public.my_name());
 do $$ begin

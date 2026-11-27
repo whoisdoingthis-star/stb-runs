@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { runMapData, pingText } from '../js/runmap.js';
+import { runMapData, pingText, peerPingText } from '../js/runmap.js';
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('✓', name); } catch (e) { failed++; console.log('✗', name, '\n ', e.message); } };
 const L = (k, n, seq) => ({ line_key: `k${k}`, address_key: `A${n}`, number: String(n), street: 'PICTON STREET', seq });
@@ -28,4 +28,11 @@ const fmt = () => '5:41 am';
 t('ping answered: says where and how exact', () => assert.match(pingText('Lisa', { state: 'answered', answered_at: 1, accuracy_m: 8.4 }, null, fmt), /Lisa is here \(as of 5:41 am, to about 8 m\)/));
 t('no answer: says the app isn’t open, and gives the last tick', () => assert.match(pingText('Lisa', null, { at: 1, label: '2 Picton Street' }, fmt), /isn’t open on Lisa’s phone\. Last tick: 5:41 am, 2 Picton Street/));
 t('off duty: nothing is shared', () => assert.match(pingText('Lisa', { state: 'off_duty' }, null, fmt), /off duty/));
+t('driver-screen ping: says how far away, in metres or km', () => {
+  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, 640, fmt), 'Found Lisa at 5:41 am, about 650 m from you.');
+  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, 2345, fmt), 'Found Lisa at 5:41 am, about 2.3 km from you.');
+  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, 90, fmt), 'Found Lisa at 5:41 am, right near you.');
+  assert.equal(peerPingText('Lisa', { state: 'answered', answered_at: 1 }, null, fmt), 'Found Lisa at 5:41 am.');
+});
+t('driver-screen ping: no answer suggests a call', () => assert.match(peerPingText('Moana', null, null, fmt), /isn’t open on Moana’s phone\. Try them in a minute, or give them a call/));
 console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

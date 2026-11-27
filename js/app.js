@@ -22,6 +22,7 @@ import { readExif, photoProof } from './exif.js';
 import { cleanNotice, expiryFor, unreadFor, boardFor, seenBy, NOTICE_DAYS } from './notices.js';
 import { stanLine, STAN_LINES } from './stanlines.js';
 import { deadlineFor } from './watch.js';
+import { peerPingText } from './runmap.js';
 import { DUTY_LABEL, currentDuty, shiftStart, clock, MotionWatch, distanceM, estimateFinish, autoOffAt, runFinishedAt } from './shifts.js';
 
 // ---------------------------------------------------------------- helpers
@@ -454,6 +455,41 @@ function helpingNow() {
   const ev = [...(app.store?.myDuty?.() || [])].sort((a, b) => Date.parse(a.device_time) - Date.parse(b.device_time));
   let start = null; for (const e of ev) { if (e.state === 'off_duty') start = null; else if (e.state === 'on_duty' && !start) start = e; }
   return !!(start && start.driver && onDuty());
+}
+
+// ---- Ping from the driver screen (Mike, 28 Nov 2026; decision 0071) ----
+// Anyone on duty can ask where another on-duty person is. Same as Dispatch's Ping: their phone answers once,
+// only while they're on duty with Stan open, and they always see who asked.
+async function openPingSomeone() {
+  if (app.store.mode !== 'shared') { toast('Ping needs the shared database.'); return; }
+  if (!onDuty()) { toast('Go on duty first: Ping works while you\u2019re both on duty.'); return; }
+  let ev = [];
+  try { ev = await app.store.loadDuty(new Date(Date.now() - 20 * 3600e3).toISOString()); } catch { /* none */ }
+  const names = [...new Set(ev.map((e) => e.user_name).filter(Boolean))]
+    .filter((n) => n !== app.me.name && currentDuty(ev.filter((e) => e.user_name === n))?.onDuty);
+  const msg = h('p', { class: 'ping-msg', role: 'status', 'aria-live': 'polite' });
+  const link = h('a', { class: 'btn big', hidden: true, target: '_blank', rel: 'noopener', style: 'margin-top:8px' }, 'Show them on Google Maps');
+  async function go(name, btn) {
+    btn.disabled = true; link.hidden = true; msg.textContent = `Pinging ${name}\u2026`;
+    let ping = null;
+    try {
+      const id = await app.store.ping(name, app.me.name);
+      for (let i = 0; i < 10 && msg.isConnected; i++) { await new Promise((ok) => setTimeout(ok, 2000)); ping = await app.store.getPing(id); if (ping && ping.state !== 'asked') break; }
+    } catch (e) { msg.textContent = `Couldn\u2019t ping: ${e.message}`; btn.disabled = false; return; }
+    const got = ping && ping.state !== 'asked' ? ping : null;
+    let away = null;
+    if (got?.state === 'answered') {
+      const me = await quietFix();
+      if (me) away = distanceM({ lat: me.lat, lng: me.lng }, { lat: got.lat, lng: got.lng });
+      link.href = `https://www.google.com/maps/search/?api=1&query=${got.lat},${got.lng}`; link.hidden = false;
+    }
+    msg.textContent = peerPingText(name, got, away);
+    btn.disabled = false;
+  }
+  openSheet('Ping someone',
+    h('p', { class: 'muted' }, names.length ? 'Who do you want to find? Their phone answers once, and they see that you asked.' : 'Nobody else is on duty right now, so there\u2019s nobody to ping.'),
+    ...names.map((n) => h('button', { class: 'btn big', style: 'margin-top:8px', onclick: (e) => go(n, e.currentTarget) }, avatar(n, 24), ` Ping ${n}`)),
+    msg, link);
 }
 
 // Nothing to deliver and nobody on duty: after five seconds Stan gets bored and offers a game
@@ -2504,6 +2540,7 @@ async function viewRun(ids) {
       (close) => h('div', { class: 'menu-group' },
         menuItem('Find an address…', () => { close(); searchRow.hidden = false; search.focus(); }),
         menuItem(stanOn() ? 'Tell Stan an idea\u2026' : 'Send an idea\u2026', () => { close(); openStanChat('run'); }, { hint: 'A tweak, a niggle, something new' }),
+        app.store.mode === 'shared' && onDuty() ? menuItem('Ping someone\u2026', () => { close(); openPingSomeone(); }, { hint: 'See where another driver is right now' }) : null,
         menuItem('Text a link to this run', () => { close(); shareRuns(ids, `${label} ${fmtDate(date)}`); }, { hint: 'Anyone in the family can open it and help' }),
         hasLayout ? menuItem('Door codes…', () => { close(); const d = S.data.find((x) => layoutFor(x.run.route) && (S.show === 'all' || x.run.id === S.show)) || S.data.find((x) => layoutFor(x.run.route)); if (d) openCodes(d); }) : null,
         menuItem('Refresh', async () => { close(); S.events = await app.store.loadEvents(ids); S.seq = await app.store.loadSequences(Object.keys(S.seq)); render(); toast('Up to date.'); }),

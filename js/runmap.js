@@ -42,3 +42,14 @@ export function pingText(name, ping, last, fmt = (t) => new Date(t).toLocaleTime
   if (ping?.state === 'no_gps') return `${name}’s phone got the ping but couldn’t find its position.${lastBit}`;
   return `No answer: STB isn’t open on ${name}’s phone.${lastBit}`;
 }
+
+/** Ping from the driver screen (decision 0071): no map there, so say how far away they are and when. */
+export function peerPingText(name, ping, metresAway, fmt = (t) => new Date(t).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })) {
+  if (ping?.state === 'answered') {
+    const far = metresAway == null ? '' : metresAway < 150 ? ', right near you' : `, about ${metresAway < 1000 ? `${Math.round(metresAway / 50) * 50} m` : `${(metresAway / 1000).toFixed(1)} km`} from you`;
+    return `Found ${name} at ${fmt(ping.answered_at)}${far}.`;
+  }
+  if (ping?.state === 'off_duty') return `${name} has just gone off duty, so their phone didn\u2019t share where it is.`;
+  if (ping?.state === 'no_gps') return `${name}\u2019s phone got the ping but couldn\u2019t find its position.`;
+  return `No answer: Stan isn\u2019t open on ${name}\u2019s phone. Try them in a minute, or give them a call.`;
+}

@@ -179,8 +179,10 @@ A tile marked **New** (a new customer's first paper) shows **📷 Take photo**. 
 ## Closing a pop-up
 Every pop-up has a **✕** at its top right. It stays there even when you scroll down a long one, so you never have to hunt for it. Tapping the dark area above the pop-up closes it too.
 
-## If Dispatch pings you
-While you're **on duty**, Mike can tap **Ping** in Dispatch to see where you are right now (handy if you need a hand or a run is running late). Your phone answers once, and you'll always see a message: "Mike checked where you are." It only works while the app is open, and never when you're off duty.
+## Ping: where is everyone?
+While you're **on duty**, you can find another driver who's on duty too: in a run, tap **⋯ → Ping someone…**, then tap their name. In a few seconds Stan tells you when he found them and how far away they are, with a button to **show them on Google Maps**. If their app isn't open, Stan says so: give them a call instead.
+
+The same works the other way. Anyone on duty (and Mike in Dispatch) can ping you. Your phone answers once, and you'll always see a message, like "Lisa checked where you are." It only works while the app is open, and never when you're off duty.
 
 ## Your icon
 **⚙ Settings → My icon → Change**: pick one of the little robots, or tap **Upload a photo** to use a picture of yourself (it's cropped to a small circle). It shows beside your name, and Mike sees it in Dispatch. Only you can change yours.

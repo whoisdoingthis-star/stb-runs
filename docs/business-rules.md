@@ -167,6 +167,7 @@ A Navigate for several stops at once (Google Maps waypoints) and our own floatin
 ## Run map and Ping (Mike, 13 Nov 2026, via Chat with Stan)
 - Dispatch can see each run on a map: a pin per address (to do / done / couldn't deliver) and the trail in delivery order. ([decision 0026](decisions/0026-run-map-and-ping.md))
 - **Ping** shows where a driver is only when a dispatcher asks, only while that driver is on duty with the app open, and the driver is always told. Off duty, nothing is shared. No continuous tracking.
+- (Mike, 28 Nov 2026, by voice) **Ping from the driver screen too.** Anyone on duty can ping another on-duty person from ⋯ in a run, so the family can see where each other are during runs and Life360 can run on battery-saving settings. Same limits: their phone answers once, only while they're on duty with Stan open, and they always see who asked. You can't ping while you're off duty. ([decision 0071](decisions/0071-ping-from-the-driver-screen.md))
 
 ## People's icons (Mike, 13 Nov 2026, via Chat with Stan)
 - Everyone chooses their own icon (a ready-made robot or a photo); only they can change it. ([decision 0025](decisions/0025-avatars.md))

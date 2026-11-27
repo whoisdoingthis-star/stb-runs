@@ -232,8 +232,17 @@ check('nobody changes someone else’s icon, not even a dispatcher', (await db.q
 
 // ---- Ping ----
 await as('lisa@example.com');
+blocked = false; try { await db.query(`insert into pings(target_name, asked_by) values ('Mike', 'Moana')`); } catch { blocked = true; }
+check('a driver can’t ping in someone else’s name', blocked);
+blocked = false; try { await db.query(`insert into pings(target_name, asked_by) values ('Lisa', 'Lisa')`); } catch { blocked = true; }
+check('a driver can’t ping themselves', blocked);
+await db.query(`insert into duty_events(id, user_name, state, device_time) values (gen_random_uuid(), 'Lisa', 'off_duty', now() + interval '1 second')`);
 blocked = false; try { await db.query(`insert into pings(target_name, asked_by) values ('Mike', 'Lisa')`); } catch { blocked = true; }
-check('only a dispatcher can ping', blocked);
+check('off duty, a driver can’t ping (decision 0071)', blocked);
+await db.query(`insert into duty_events(id, user_name, state, device_time) values (gen_random_uuid(), 'Lisa', 'on_duty', now() + interval '2 seconds')`);
+await db.query(`insert into pings(target_name, asked_by) values ('Mike', 'Lisa')`);
+check('on duty, a driver can ping someone else and read the answer (decision 0071)', (await db.query(`select count(*)::int n from pings where asked_by='Lisa'`)).rows[0].n === 1);
+await db.exec(`reset role; delete from pings;`); await as('mike@example.com');
 await as('mike@example.com');
 await db.query(`insert into pings(target_name, asked_by) values ('Lisa', 'Mike')`);
 await db.query(`update pings set state='answered', lat=-36.9, lng=174.9`);
