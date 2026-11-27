@@ -1638,6 +1638,77 @@ language sql stable security definer set search_path = public as $$
     from public.bridge_devices d cross join public.bridge_control c cross join public.bridge__today() t order by d.device;
 $$;
 
+-- ---- Phase 4: shared notes (the Voice-to-Laptop Bridge doc, "Shared context table"; decision 0076) ----
+-- One place every session reads and writes: voice, chat, Claude Code, the laptop and scheduled tasks. Typed entries only,
+-- each with a topic, a source and a date, and short; status and results expire, decisions stay (against context bloat).
+create table if not exists public.bridge_notes (
+  id          uuid primary key default gen_random_uuid(),
+  kind        text not null check (kind in ('decision', 'result', 'status', 'fact')),
+  topics      text[] not null check (cardinality(topics) between 1 and 5),
+  body        text not null check (char_length(body) between 3 and 1000),
+  source      text not null check (source in ('voice', 'chat', 'code', 'laptop', 'schedule', 'other')),
+  stated_by   text not null default 'Mike',
+  ref         text,                                   -- a job code, decision number, link or thread
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz,                            -- null: stays (decisions and facts)
+  supersedes  uuid references public.bridge_notes(id) on delete set null,
+  retired_at  timestamptz,
+  retired_why text
+);
+create index if not exists bridge_notes_topics_idx on public.bridge_notes using gin (topics);
+create index if not exists bridge_notes_live_idx on public.bridge_notes (created_at desc) where retired_at is null;
+alter table public.bridge_notes enable row level security;
+
+-- Write a note. Topics are lower-case words (stb, ollie, cars, bridge...). A newer note can supersede an older one.
+create or replace function public.bridge_note(p_kind text, p_topics text[], p_body text, p_source text default 'chat',
+  p_stated_by text default 'Mike', p_ref text default null, p_supersedes uuid default null, p_days int default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare n uuid; t text[];
+begin
+  select array_agg(distinct lower(trim(x))) into t from unnest(p_topics) x where trim(x) <> '';
+  insert into public.bridge_notes (kind, topics, body, source, stated_by, ref, supersedes, expires_at)
+  values (p_kind, t, trim(p_body), p_source, p_stated_by, p_ref, p_supersedes,
+          now() + make_interval(days => coalesce(p_days, case p_kind when 'status' then 3 when 'result' then 14 end)))
+  returning id into n;
+  if p_supersedes is not null then
+    update public.bridge_notes set retired_at = now(), retired_why = 'superseded by ' || n where id = p_supersedes and retired_at is null;
+  end if;
+  return n;
+end $$;
+
+-- Read the live notes, by topic (any of them), newest first; decisions and facts before status and results.
+create or replace function public.bridge_notes_for(p_topics text[] default null, p_limit int default 30)
+returns table(id uuid, kind text, topics text[], body text, source text, stated_by text, ref text, created_at timestamptz, expires_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select id, kind, topics, body, source, stated_by, ref, created_at, expires_at from public.bridge_notes
+   where retired_at is null and (expires_at is null or expires_at > now())
+     and (p_topics is null or topics && (select array_agg(lower(x)) from unnest(p_topics) x))
+   order by case when kind in ('decision', 'fact') then 0 else 1 end, created_at desc
+   limit least(greatest(p_limit, 1), 200);
+$$;
+
+create or replace function public.bridge_note_retire(p_id uuid, p_why text default null)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  update public.bridge_notes set retired_at = now(), retired_why = coalesce(p_why, 'retired') where id = p_id and retired_at is null;
+  return case when found then 'Retired' else 'No live note with that id' end;
+end $$;
+
+-- A laptop job's result becomes a note by itself, under its folder's name, so every session sees what the laptop did.
+create or replace function public.bridge__job_note() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status in ('done', 'held', 'failed', 'paused') and new.status is distinct from old.status
+     and new.job_type = 'claude' and coalesce(new.summary, new.held_reason) is not null then
+    insert into public.bridge_notes (kind, topics, body, source, stated_by, ref, expires_at)
+    values ('result', array['bridge', lower(coalesce(new.target, 'laptop'))],
+            left(new.status || ': ' || coalesce(new.summary, new.held_reason), 1000), 'laptop', 'laptop', new.code, now() + interval '14 days');
+  end if;
+  return new;
+end $$;
+drop trigger if exists bridge_jobs_note on public.bridge_jobs;
+create trigger bridge_jobs_note after update of status on public.bridge_jobs for each row execute function public.bridge__job_note();
+
 -- Who may call what: the laptop's four functions with the public key (they check the device secret);
 -- everything else only from the server.
 revoke all on function public.bridge__auth(text,text), public.bridge__job(text), public.bridge__today(),
@@ -1645,28 +1716,32 @@ revoke all on function public.bridge__auth(text,text), public.bridge__job(text),
   public.bridge_pause(boolean,text), public.bridge_caps(int,int), public.bridge_queue(int), public.bridge_status(),
   public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
   public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
-  public.bridge_checkpoint(text,text,uuid,text,text,text)
+  public.bridge_checkpoint(text,text,uuid,text,text,text),
+  public.bridge_note(text,text[],text,text,text,text,uuid,int), public.bridge_notes_for(text[],int),
+  public.bridge_note_retire(uuid,text), public.bridge__job_note()
   from public;
 do $$ begin
   -- Supabase grants new functions to anon and authenticated directly, so revoking from public isn't enough (lesson L-015).
   if exists (select 1 from pg_roles where rolname = 'anon') and exists (select 1 from pg_roles where rolname = 'authenticated') then
     revoke execute on function public.bridge__today(), public.bridge_enqueue(text,text,text,text,boolean,text,int,int,boolean,int),
       public.bridge_allow(text,int), public.bridge_cancel(text), public.bridge_pause(boolean,text), public.bridge_caps(int,int),
-      public.bridge_queue(int), public.bridge_status(), public.bridge__auth(text,text), public.bridge__job(text)
+      public.bridge_queue(int), public.bridge_status(), public.bridge__auth(text,text), public.bridge__job(text),
+      public.bridge_note(text,text[],text,text,text,text,uuid,int), public.bridge_notes_for(text[],int),
+      public.bridge_note_retire(uuid,text), public.bridge__job_note()
       from anon, authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
       public.bridge_checkpoint(text,text,uuid,text,text,text) from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log from anon;
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes from anon;
     grant execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid),
       public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
       public.bridge_checkpoint(text,text,uuid,text,text,text) to anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log from authenticated;
+    revoke all on public.bridge_devices, public.bridge_control, public.bridge_jobs, public.bridge_job_log, public.bridge_notes from authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_status() from authenticated;
   end if;
 end $$;

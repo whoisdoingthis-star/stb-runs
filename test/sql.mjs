@@ -312,7 +312,19 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   await db.query(`select bridge_finish_job('lap','s',$1,'done')`, [jb.id]);
   check('bridge: the rest waits until tomorrow, and the status says why', !(await claim()) && (await one(`select status from bridge_jobs where code=$1`, [code3])).status === 'queued');
   check('bridge: the wrong secret can’t checkpoint', (await one(`select bridge_checkpoint('lap','x',$1,'step') ok`, [jb.id])).ok === false);
-  await db.exec(`delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
+  // ---- Phase 4: shared notes (decision 0076) ----
+  const n1 = (await one(`select bridge_note('decision', array['STB',' stb '], 'Caps stay at 20 jobs and 300 minutes a day', 'voice') id`)).id;
+  await one(`select bridge_note('status', array['cars'], 'Watching three EVs on Trade Me', 'schedule') id`);
+  check('bridge: a note is stored with tidy topics', (await one(`select topics from bridge_notes where id=$1`, [n1])).topics.join() === 'stb');
+  check('bridge: status notes expire on their own; decisions stay', (await one(`select count(*)::int n from bridge_notes where kind='status' and expires_at is not null`)).n === 1 && (await one(`select expires_at from bridge_notes where id=$1`, [n1])).expires_at === null);
+  check('bridge: reading by topic gives only that topic', (await db.query(`select * from bridge_notes_for(array['STB'])`)).rows.length === 1);
+  const n2 = (await one(`select bridge_note('decision', array['stb'], 'Caps now 25 jobs a day', 'chat', 'Mike', null, $1::uuid) id`, [n1])).id;
+  check('bridge: a newer note retires the one it supersedes', (await db.query(`select id from bridge_notes_for(array['stb'])`)).rows.map((r) => r.id).join() === n2);
+  await db.query(`select bridge_caps(20, 300)`); await db.exec(`delete from bridge_jobs where status in ('queued', 'awaiting_allow')`);
+  const jn = (await one(`select bridge_enqueue('sandbox', 'make a file', 'claude') c`)).c; const jj = await claim();
+  await db.query(`select bridge_finish_job('lap','s',$1,'done','Made hello.md')`, [jj.id]);
+  check('bridge: a laptop job’s result becomes a note everyone can read', (await db.query(`select body, ref from bridge_notes_for(array['sandbox'])`)).rows[0]?.ref === jn);
+  await db.exec(`delete from bridge_notes; delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
 
 // ---- From the ideas book (decision 0075) ----
