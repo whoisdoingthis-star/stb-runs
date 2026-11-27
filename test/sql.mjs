@@ -329,6 +329,26 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   await db.query(`select bridge_checkpoint('lap','s',$1,'Step 1')`, [jq.id]); await db.query(`select bridge_finish_job('lap','s',$1,'timed_out','Got to step 1')`, [jq.id]);
   await db.query(`select bridge_allow($1)`, [jp]); const jr = await claim(); await db.query(`select bridge_finish_job('lap','s',$1,'done','Both steps done')`, [jr.id]);
   check('bridge: a job paused then finished leaves one live note, its latest', (await db.query(`select body from bridge_notes_for(array['sandbox']) where ref = $1`, [jp])).rows.map((r) => r.body).join() === 'done: Both steps done');
+  // ---- Phase 5: tidy-up and weighting (decision 0077) ----
+  await db.exec(`delete from bridge_notes`);
+  const st = async (body, src, at) => { const id = (await one(`select bridge_note('status', array['cars'], $1, $2) id`, [body, src])).id; if (at) await db.query(`update bridge_notes set created_at = $2 where id = $1`, [id, at]); return id; };
+  await st('Watching three electric cars on Trade Me under budget', 'schedule', new Date(Date.now() - 2 * 864e5).toISOString());
+  const s2 = await st('Watching three electric cars on Trade Me under budget today', 'voice');
+  const live = (await db.query(`select * from bridge_notes_for(array['cars'])`)).rows;
+  check('bridge: a near-duplicate replaces the older note instead of piling up (0077)', live.length === 1 && live[0].id === s2 && live[0].repeats === 1);
+  check('bridge: a repeat on another day reinforces its weight', Number(live[0].weight) > 1.9);
+  await st('Watching three electric cars on Trade Me under budget today again', 'voice');
+  const w = Number((await db.query(`select * from bridge_notes_for(array['cars'])`)).rows[0].weight);
+  check('bridge: the same session the same day doesn’t add weight (a burst isn’t priority)', w > 1.9 && w < 2.1);
+  await st('Simon stage three is next after the bridge', 'chat');
+  check('bridge: a different note on the same topic stays separate', (await db.query(`select * from bridge_notes_for(array['cars'])`)).rows.length === 2);
+  const d1 = (await one(`select bridge_note('decision', array['bridge'], 'Caps stay at twenty jobs a day', 'chat') id`)).id;
+  const d2 = (await one(`select bridge_note('decision', array['bridge'], 'Caps stay at twenty jobs a day', 'voice') id`)).id;
+  check('bridge: decisions are never merged or weighted', (await db.query(`select * from bridge_notes_for(array['bridge']) where kind = 'decision'`)).rows.length === 2);
+  await db.query(`select bridge_note_flag($1, $2, 'same rule twice')`, [d1, d2]);
+  check('bridge: a clash is flagged on both and read first, for Mike', (await db.query(`select flag from bridge_notes_for(array['bridge'])`)).rows.slice(0, 2).every((r) => /Clashes with/.test(r.flag)));
+  await db.query(`update bridge_notes set created_at = now() - interval '28 days', reinforced_at = null where kind = 'status'`);
+  check('bridge: weight fades by half every 14 days unless repeated', (await db.query(`select weight from bridge_notes_for(array['cars']) order by weight desc limit 1`)).rows[0].weight < 0.6);
   await db.exec(`delete from bridge_notes; delete from bridge_jobs; delete from bridge_job_log; delete from bridge_devices; update bridge_control set max_jobs_per_day = 20, max_minutes_per_day = 300; set role authenticated;`);
 }
 

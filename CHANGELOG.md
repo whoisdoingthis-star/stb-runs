@@ -5,6 +5,7 @@ Every change adds a line under *Unreleased* in the same commit ([CONTRIBUTING](C
 When a batch has been trialled, its lines move under a dated heading.
 
 ## Unreleased
+- **Laptop bridge, phase 5: tidy-up and weighting** (Mike, 28 Nov): the shared notes merge near-duplicates as they're written, weight what keeps coming back across days and sessions (fading over time), never touch decisions, and put clashing decisions in front of Mike. Nothing changes on the phones. [Decision 0077](docs/decisions/0077-bridge-tidy-and-weighting.md).
 - **Laptop bridge, phase 3 finished on the laptop** (Mike, 28 Nov): the laptop's job runner now saves progress after each step, pauses instead of stopping, and carries on after Allow; tested with two sandbox jobs. A job's shared note now keeps only its latest outcome.
 - **Laptop bridge, phase 4: shared notes** (Mike, 28 Nov): one place where voice, chat, Claude Code, the laptop and scheduled tasks read and write decisions, results and status by topic, with expiry against clutter. Laptop job results land there by themselves. Nothing changes on the phones. [Decision 0076](docs/decisions/0076-bridge-shared-notes.md).
 - **Four from the ideas book, each credited** (picked by Mike, 28 Nov): an undone tick no longer starts a run's clock (Zaph's idea); named routes in My runs, like Dad's Route (Zaph's idea); notes on tiles for everyone (Lisa's idea); and the bags rule on the On duty card (Lisa's idea). From now on a built idea's What's new card says whose idea it was. [Decision 0075](docs/decisions/0075-from-the-ideas-book.md).

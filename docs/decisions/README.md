@@ -80,6 +80,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0074 | [A returning address goes with its own street; Stan's costliest cards first](0074-own-street-first.md) | 2026-11-28 | Accepted |
 | 0075 | [Four from the ideas book, each credited to whoever sent it](0075-from-the-ideas-book.md) | 2026-11-28 | Accepted |
 | 0076 | [Voice-to-Laptop Bridge, phase 4: shared notes](0076-bridge-shared-notes.md) | 2026-11-28 | Accepted |
+| 0077 | [Voice-to-Laptop Bridge, phase 5: tidy-up and weighting](0077-bridge-tidy-and-weighting.md) | 2026-11-28 | Accepted |
 | 0065 | [Stan's School and Sandbox Stan: training that can't go out of date](0065-stans-school.md) | 2026-11-23 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.

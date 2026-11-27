@@ -1676,16 +1676,6 @@ begin
   return n;
 end $$;
 
--- Read the live notes, by topic (any of them), newest first; decisions and facts before status and results.
-create or replace function public.bridge_notes_for(p_topics text[] default null, p_limit int default 30)
-returns table(id uuid, kind text, topics text[], body text, source text, stated_by text, ref text, created_at timestamptz, expires_at timestamptz)
-language sql stable security definer set search_path = public as $$
-  select id, kind, topics, body, source, stated_by, ref, created_at, expires_at from public.bridge_notes
-   where retired_at is null and (expires_at is null or expires_at > now())
-     and (p_topics is null or topics && (select array_agg(lower(x)) from unnest(p_topics) x))
-   order by case when kind in ('decision', 'fact') then 0 else 1 end, created_at desc
-   limit least(greatest(p_limit, 1), 200);
-$$;
 
 create or replace function public.bridge_note_retire(p_id uuid, p_why text default null)
 returns text language plpgsql security definer set search_path = public as $$
@@ -1714,6 +1704,100 @@ end $$;
 drop trigger if exists bridge_jobs_note on public.bridge_jobs;
 create trigger bridge_jobs_note after update of status on public.bridge_jobs for each row execute function public.bridge__job_note();
 
+-- ---- Phase 5: tidy-up and weighting (the Voice-to-Laptop Bridge doc, "Guarding against context bloat"; decision 0077) ----
+-- Done as each note is written, not by a nightly job: a new result, status or fact that says nearly the same as a live
+-- one on the same topic replaces it, carrying its weight. Repeats count only across different days or sessions, so a
+-- burst in one session isn't mistaken for priority; weight fades by half every 14 days unless repeated. Decisions are
+-- never merged or weighted: they stay put, and a session that sees two that clash flags them for Mike.
+alter table public.bridge_notes add column if not exists weight        numeric not null default 1;
+alter table public.bridge_notes add column if not exists reinforced_at timestamptz;
+alter table public.bridge_notes add column if not exists merged_count  int not null default 0;
+alter table public.bridge_notes add column if not exists flag          text;
+
+-- The words that carry meaning (4+ letters), for comparing two notes.
+create or replace function public.bridge__words(t text) returns text[]
+language sql immutable as $$
+  select coalesce(array_agg(distinct w), '{}') from regexp_split_to_table(lower(coalesce(t, '')), '[^a-z0-9]+') w where length(w) >= 4;
+$$;
+create or replace function public.bridge__alike(a text, b text) returns numeric
+language sql immutable as $$
+  with x as (select public.bridge__words(a) wa, public.bridge__words(b) wb)
+  select case when cardinality(wa) = 0 or cardinality(wb) = 0 then 0
+         else (select count(*) from unnest(wa) w where w = any(wb))::numeric
+              / (select count(*) from (select unnest(wa) union select unnest(wb)) u) end from x;
+$$;
+
+-- Merge near-duplicates into one note (the newest). Returns how many were merged.
+create or replace function public.bridge__merge_into(p_id uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare n public.bridge_notes; o record; merged int := 0; gain numeric := 0;
+begin
+  select * into n from public.bridge_notes where id = p_id;
+  if n.id is null or n.kind = 'decision' or n.retired_at is not null then return 0; end if;
+  for o in select * from public.bridge_notes
+            where id <> n.id and retired_at is null and kind = n.kind and topics && n.topics and created_at <= n.created_at
+              and (expires_at is null or expires_at > now()) and public.bridge__alike(body, n.body) >= 0.6 loop
+    update public.bridge_notes set retired_at = now(), retired_why = 'merged into ' || n.id where id = o.id;
+    merged := merged + 1 + o.merged_count;
+    -- a repeat on another day or from another session reinforces; the same session the same day doesn't
+    if (o.created_at at time zone 'Pacific/Auckland')::date <> (n.created_at at time zone 'Pacific/Auckland')::date or o.source <> n.source
+      then gain := gain + o.weight; else gain := gain + greatest(o.weight - 1, 0); end if;
+  end loop;
+  if merged > 0 then
+    update public.bridge_notes set weight = weight + gain, merged_count = merged_count + merged,
+           reinforced_at = case when gain > 0 then now() else reinforced_at end,
+           expires_at = case when expires_at is null then null else greatest(expires_at, now() + interval '3 days') end
+     where id = n.id;
+  end if;
+  return merged;
+end $$;
+
+create or replace function public.bridge__note_tidy() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin perform public.bridge__merge_into(new.id); return null; end $$;
+drop trigger if exists bridge_notes_tidy on public.bridge_notes;
+create trigger bridge_notes_tidy after insert on public.bridge_notes for each row execute function public.bridge__note_tidy();
+
+-- A full sweep, for notes written before this existed (or any time). Returns how many were merged.
+create or replace function public.bridge_tidy() returns int
+language plpgsql security definer set search_path = public as $$
+declare r record; total int := 0;
+begin
+  for r in select id from public.bridge_notes where retired_at is null and kind <> 'decision' order by created_at desc loop
+    total := total + public.bridge__merge_into(r.id);
+  end loop;
+  return total;
+end $$;
+
+-- Two decisions that clash: flagged for Mike on both, never resolved by a session.
+create or replace function public.bridge_note_flag(p_id uuid, p_other uuid, p_why text)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  update public.bridge_notes set flag = left('Clashes with ' || p_other || ': ' || p_why, 500) where id = p_id and retired_at is null;
+  update public.bridge_notes set flag = left('Clashes with ' || p_id || ': ' || p_why, 500) where id = p_other and retired_at is null;
+  return 'Flagged for Mike';
+end $$;
+create or replace function public.bridge_note_unflag(p_id uuid)
+returns text language plpgsql security definer set search_path = public as $$
+begin update public.bridge_notes set flag = null where id = p_id; return 'Cleared'; end $$;
+
+-- Reading: anything flagged for Mike first, then decisions and facts, then what keeps coming back (faded by age), newest first.
+drop function if exists public.bridge_notes_for(text[], int);
+create function public.bridge_notes_for(p_topics text[] default null, p_limit int default 30)
+returns table(id uuid, kind text, topics text[], body text, source text, stated_by text, ref text, created_at timestamptz,
+              expires_at timestamptz, weight numeric, repeats int, flag text)
+language sql stable security definer set search_path = public as $$
+  select id, kind, topics, body, source, stated_by, ref, created_at, expires_at,
+         round(weight * power(0.5, extract(epoch from now() - coalesce(reinforced_at, created_at)) / (14 * 86400)), 2),
+         merged_count, flag
+    from public.bridge_notes
+   where retired_at is null and (expires_at is null or expires_at > now())
+     and (p_topics is null or topics && (select array_agg(lower(x)) from unnest(p_topics) x))
+   order by (flag is not null) desc, case when kind in ('decision', 'fact') then 0 else 1 end,
+            weight * power(0.5, extract(epoch from now() - coalesce(reinforced_at, created_at)) / (14 * 86400)) desc, created_at desc
+   limit least(greatest(p_limit, 1), 200);
+$$;
+
 -- Who may call what: the laptop's four functions with the public key (they check the device secret);
 -- everything else only from the server.
 revoke all on function public.bridge__auth(text,text), public.bridge__job(text), public.bridge__today(),
@@ -1723,7 +1807,8 @@ revoke all on function public.bridge__auth(text,text), public.bridge__job(text),
   public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
   public.bridge_checkpoint(text,text,uuid,text,text,text),
   public.bridge_note(text,text[],text,text,text,text,uuid,int), public.bridge_notes_for(text[],int),
-  public.bridge_note_retire(uuid,text), public.bridge__job_note()
+  public.bridge_note_retire(uuid,text), public.bridge__job_note(),
+  public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid)
   from public;
 do $$ begin
   -- Supabase grants new functions to anon and authenticated directly, so revoking from public isn't enough (lesson L-015).
@@ -1732,7 +1817,8 @@ do $$ begin
       public.bridge_allow(text,int), public.bridge_cancel(text), public.bridge_pause(boolean,text), public.bridge_caps(int,int),
       public.bridge_queue(int), public.bridge_status(), public.bridge__auth(text,text), public.bridge__job(text),
       public.bridge_note(text,text[],text,text,text,text,uuid,int), public.bridge_notes_for(text[],int),
-      public.bridge_note_retire(uuid,text), public.bridge__job_note()
+      public.bridge_note_retire(uuid,text), public.bridge__job_note(),
+      public.bridge__merge_into(uuid), public.bridge__note_tidy(), public.bridge_tidy(), public.bridge_note_flag(uuid,uuid,text), public.bridge_note_unflag(uuid)
       from anon, authenticated;
     revoke execute on function public.bridge_heartbeat(text,text,jsonb), public.bridge_claim_job(text,text,jsonb),
       public.bridge_job_should_stop(text,text,uuid), public.bridge_finish_job(text,text,uuid,text,text,text,text,jsonb,text,text),
