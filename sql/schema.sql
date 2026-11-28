@@ -2088,3 +2088,289 @@ drop policy if exists tile_notes_drop on public.tile_notes;
 create policy tile_notes_drop on public.tile_notes for delete to authenticated using (public.is_member());
 drop trigger if exists tile_notes_log on public.tile_notes;
 create trigger tile_notes_log after insert or update or delete on public.tile_notes for each row execute function public.log_dispatch_change();
+
+-- ---- Bridge cloud lane (Mike, 28 Nov 2026: "merge and build the cloud lane", "less frequent checks, but able to be
+-- triggered by an event or on demand"; decision 0081, bridge decision B012 "cloud by default") ----
+-- One queue, two lanes. A job whose target starts with cloud: runs in a cloud Claude session (a scheduled task a few
+-- times a day, or started on demand), so the laptop can be off; everything else stays the laptop's. The laptop's
+-- functions keep their names and arguments: its claim now simply skips cloud jobs. The cloud runner has no secret:
+-- its functions are server-only and it reaches them through Mike's Supabase connector.
+alter table public.bridge_jobs add column if not exists runs_on text not null default 'laptop';
+alter table public.bridge_jobs drop constraint if exists bridge_jobs_runs_on_check;
+alter table public.bridge_jobs add constraint bridge_jobs_runs_on_check check (runs_on in ('laptop', 'cloud'));
+create index if not exists bridge_jobs_lane_idx on public.bridge_jobs (runs_on, status, created_at);
+-- The cloud lane's own daily limit, inside the shared caps (it's one Claude plan). Change with bridge_cloud_caps().
+alter table public.bridge_control add column if not exists cloud_max_jobs_per_day    int not null default 8;
+alter table public.bridge_control add column if not exists cloud_max_minutes_per_day int not null default 120;
+-- The cloud runner as a device, so bridge_status() shows when it last ran. Its secret can't be matched: it can't use
+-- the laptop's functions. The targets here only check what is queued; the runner keeps its own list.
+insert into public.bridge_devices (device, label, secret_hash, info)
+values ('cloud', 'Cloud lane (scheduled cloud session)', '!',
+        jsonb_build_object('targets', jsonb_build_array('cloud:stb-runs', 'cloud:planbench', 'cloud:web', 'cloud:google')))
+on conflict (device) do nothing;
+
+create or replace function public.bridge__lane(p_target text)
+returns text language sql immutable as $$
+  select case when p_target = 'cloud' or p_target like 'cloud:%' then 'cloud' else 'laptop' end;
+$$;
+
+-- Sessions: the lane comes from the target (cloud:… is the cloud). Same arguments as before.
+create or replace function public.bridge_enqueue(
+  p_target text, p_request text, p_job_type text default 'claude', p_source text default 'chat',
+  p_needs_allow boolean default false, p_requested_by text default 'Mike',
+  p_max_minutes int default 45, p_max_turns int default 80,
+  p_big boolean default false, p_estimate_minutes int default null)
+returns text language plpgsql security definer set search_path = public as $$
+declare j public.bridge_jobs; known jsonb; lane text := public.bridge__lane(p_target);
+begin
+  if p_job_type = 'claude' then
+    if lane = 'cloud' then
+      select info->'targets' into known from public.bridge_devices where device = 'cloud';
+    else
+      select info->'targets' into known from public.bridge_devices
+       where device <> 'cloud' and info ? 'targets' order by last_seen desc nulls last limit 1;
+    end if;
+    if known is not null and not known ? p_target then
+      raise exception 'Unknown target %. Known targets: %', p_target, known;
+    end if;
+  end if;
+  if p_big and p_estimate_minutes is null then raise exception 'A big build needs p_estimate_minutes'; end if;
+  insert into public.bridge_jobs (job_type, target, request, requested_by, source, status, max_minutes, max_turns, big, estimate_minutes, runs_on)
+  values (p_job_type, p_target, p_request, p_requested_by, p_source,
+          case when p_needs_allow or p_big then 'awaiting_allow' else 'queued' end,
+          case when p_big then least(240, greatest(p_estimate_minutes, 1)) else p_max_minutes end,
+          case when p_big then 300 else p_max_turns end, p_big, p_estimate_minutes, lane)
+  returning * into j;
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  values (j.id, p_source, j.status, case when lane = 'cloud' then '[cloud] ' else '' end
+          || case when p_big then 'big build, about ' || p_estimate_minutes || ' min: ' else '' end || left(p_request, 300));
+  return j.code;
+end $$;
+
+-- The laptop's claim, as before, but only laptop jobs, and one at a time in its own lane.
+create or replace function public.bridge_claim_job(p_device text, p_secret text, p_info jsonb default '{}'::jsonb)
+returns setof public.bridge_jobs language plpgsql security definer set search_path = public as $$
+declare j public.bridge_jobs; c public.bridge_control; t record;
+begin
+  if not public.bridge__auth(p_device, p_secret) then return; end if;
+  update public.bridge_devices set listener_seen = now(), info = info || coalesce(p_info, '{}'::jsonb)
+   where device = p_device;
+  -- A running job whose runner went quiet: paused if it reached a checkpoint (Allow carries on), else timed out.
+  with stale as (
+    update public.bridge_jobs
+       set status = case when checkpoint is not null then 'paused' else 'timed_out' end,
+           finished_at = now(),
+           held_reason = case when checkpoint is not null
+             then 'Stopped after ' || max_minutes || ' minutes at checkpoint "' || coalesce(checkpoint->>'step', '?') || '". Allow to carry on.'
+             else 'No result within ' || max_minutes || ' minutes' end
+     where status = 'running' and started_at < now() - make_interval(mins => max_minutes + 5)
+    returning id, status)
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  select id, 'database', status, 'runner did not report back' from stale;
+  select * into c from public.bridge_control where id = 1;
+  if c.paused then return; end if;
+  if exists (select 1 from public.bridge_jobs where status = 'running' and runs_on = 'laptop') then return; end if;
+  select * into j from public.bridge_jobs where status = 'queued' and runs_on = 'laptop'
+   order by created_at for update skip locked limit 1;
+  if not found then return; end if;
+  select * into t from public.bridge__today();
+  if t.jobs >= c.max_jobs_per_day or t.minutes + j.max_minutes > c.max_minutes_per_day then
+    if not (j.big and j.allowed_at is not null) then return; end if;
+  end if;
+  update public.bridge_jobs set status = 'running', started_at = now(), finished_at = null, device = p_device
+   where id = j.id returning * into j;
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  values (j.id, p_device, 'claimed', case when j.resume_count > 0 then 'resume ' || j.resume_count || ' from ' || coalesce(j.checkpoint->>'step', '?') end);
+  return next j;
+end $$;
+
+-- The cloud lane's use today (NZ day).
+create or replace function public.bridge__today_cloud()
+returns table(jobs int, minutes int) language sql stable security definer set search_path = public as $$
+  select count(*)::int, coalesce(sum(j.max_minutes), 0)::int
+    from public.bridge_job_log l join public.bridge_jobs j on j.id = l.job_id
+   where l.event = 'claimed' and j.runs_on = 'cloud'
+     and l.at >= (date_trunc('day', now() at time zone 'Pacific/Auckland') at time zone 'Pacific/Auckland');
+$$;
+
+-- The cloud runner (server only, through the Supabase connector). One job per call, or nothing.
+create or replace function public.bridge_claim_cloud()
+returns setof public.bridge_jobs language plpgsql security definer set search_path = public as $$
+declare j public.bridge_jobs; c public.bridge_control; t record; tc record;
+begin
+  update public.bridge_devices set last_seen = now(), listener_seen = now() where device = 'cloud';
+  with stale as (
+    update public.bridge_jobs
+       set status = case when checkpoint is not null then 'paused' else 'timed_out' end,
+           finished_at = now(),
+           held_reason = case when checkpoint is not null
+             then 'Stopped after ' || max_minutes || ' minutes at checkpoint "' || coalesce(checkpoint->>'step', '?') || '". Allow to carry on.'
+             else 'No result within ' || max_minutes || ' minutes' end
+     where status = 'running' and runs_on = 'cloud' and started_at < now() - make_interval(mins => max_minutes + 5)
+    returning id, status)
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  select id, 'database', status, 'cloud runner did not report back' from stale;
+  select * into c from public.bridge_control where id = 1;
+  if c.paused then return; end if;
+  if exists (select 1 from public.bridge_jobs where status = 'running' and runs_on = 'cloud') then return; end if;
+  select * into j from public.bridge_jobs where status = 'queued' and runs_on = 'cloud'
+   order by created_at for update skip locked limit 1;
+  if not found then return; end if;
+  select * into t from public.bridge__today();
+  select * into tc from public.bridge__today_cloud();
+  if t.jobs >= c.max_jobs_per_day or t.minutes + j.max_minutes > c.max_minutes_per_day
+     or tc.jobs >= c.cloud_max_jobs_per_day or tc.minutes + j.max_minutes > c.cloud_max_minutes_per_day then
+    if not (j.big and j.allowed_at is not null) then return; end if;
+  end if;
+  update public.bridge_jobs set status = 'running', started_at = now(), finished_at = null, device = 'cloud'
+   where id = j.id returning * into j;
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  values (j.id, 'cloud', 'claimed', case when j.resume_count > 0 then 'resume ' || j.resume_count || ' from ' || coalesce(j.checkpoint->>'step', '?') end);
+  return next j;
+end $$;
+
+-- Between steps: '' carries on; 'cancelled', 'paused' (the kill switch) or 'missing' stops.
+create or replace function public.bridge_cloud_should_stop(p_job uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare s text;
+begin
+  update public.bridge_devices set listener_seen = now() where device = 'cloud';
+  select status into s from public.bridge_jobs where id = p_job and device = 'cloud' and runs_on = 'cloud';
+  if s is null then return 'missing'; end if;
+  if s = 'cancelled' then return 'cancelled'; end if;
+  if (select paused from public.bridge_control where id = 1) then return 'paused'; end if;
+  return '';
+end $$;
+
+create or replace function public.bridge_cloud_checkpoint(p_job uuid, p_step text, p_note text default null, p_commit_sha text default null)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update public.bridge_jobs
+     set checkpoint = jsonb_build_object('step', left(p_step, 200), 'note', left(p_note, 1000), 'commit_sha', p_commit_sha,
+                                         'at', now(), 'steps', coalesce((checkpoint->>'steps')::int, 0) + 1),
+         commit_sha = coalesce(p_commit_sha, commit_sha)
+   where id = p_job and device = 'cloud' and runs_on = 'cloud' and status = 'running';
+  if not found then return false; end if;
+  insert into public.bridge_job_log (job_id, actor, event, detail) values (p_job, 'cloud', 'checkpoint', left(p_step, 300));
+  return true;
+end $$;
+
+create or replace function public.bridge_cloud_finish(
+  p_job uuid, p_status text, p_summary text default null, p_held_reason text default null,
+  p_branch text default null, p_commit_sha text default null, p_result jsonb default null)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare s text;
+begin
+  if p_status not in ('done','held','failed','timed_out','cancelled','paused') then return false; end if;
+  update public.bridge_jobs
+     set status = case when status = 'cancelled' then 'cancelled'
+                       when p_status in ('timed_out','paused') and checkpoint is not null then 'paused'
+                       when p_status = 'paused' then 'timed_out'
+                       else p_status end,
+         finished_at = now(),
+         summary = left(p_summary, 4000),
+         held_reason = left(case when p_status in ('timed_out','paused') and checkpoint is not null
+           then coalesce(p_held_reason || ' ', '') || 'Paused at checkpoint "' || coalesce(checkpoint->>'step', '?') || '". Allow to carry on.'
+           else p_held_reason end, 2000),
+         result = p_result, branch = coalesce(p_branch, branch), commit_sha = coalesce(p_commit_sha, commit_sha)
+   where id = p_job and device = 'cloud' and runs_on = 'cloud' and status in ('running','cancelled')
+  returning status into s;
+  if not found then return false; end if;
+  insert into public.bridge_job_log (job_id, actor, event, detail)
+  values (p_job, 'cloud', s, left(coalesce(p_held_reason, p_summary), 500));
+  return true;
+end $$;
+
+-- Move a job to the other lane. The cloud runner hands back a job that needs the laptop (with why); a session moves
+-- one to the cloud only when Mike asks. A running job goes back to the queue in its new lane.
+create or replace function public.bridge_reroute(p_ref text, p_to text, p_why text default null)
+returns text language plpgsql security definer set search_path = public as $$
+declare jid uuid := public.bridge__job(p_ref); j public.bridge_jobs;
+begin
+  if p_to not in ('laptop', 'cloud') then raise exception 'p_to is laptop or cloud'; end if;
+  update public.bridge_jobs
+     set runs_on = p_to, device = null, started_at = null,
+         status = case when status = 'running' then 'queued' else status end,
+         held_reason = case when p_why is not null then left('Moved to the ' || p_to || ': ' || p_why, 2000) else held_reason end
+   where id = jid and runs_on <> p_to and status in ('awaiting_allow', 'queued', 'running', 'paused')
+  returning * into j;
+  if not found then return 'Nothing to move with that code (or it is already there)'; end if;
+  insert into public.bridge_job_log (job_id, actor, event, detail) values (jid, case when p_to = 'laptop' then 'cloud' else 'Mike' end, 'rerouted', p_to || coalesce(': ' || p_why, ''));
+  return 'Moved to the ' || p_to || ' (' || j.status || ')';
+end $$;
+
+-- Mike sets the cloud lane's own daily limit.
+create or replace function public.bridge_cloud_caps(p_jobs int default null, p_minutes int default null)
+returns text language plpgsql security definer set search_path = public as $$
+declare c public.bridge_control;
+begin
+  update public.bridge_control set cloud_max_jobs_per_day = coalesce(p_jobs, cloud_max_jobs_per_day),
+         cloud_max_minutes_per_day = coalesce(p_minutes, cloud_max_minutes_per_day), updated_at = now() where id = 1 returning * into c;
+  insert into public.bridge_job_log (actor, event, detail) values ('Mike', 'cloud caps', c.cloud_max_jobs_per_day || ' jobs, ' || c.cloud_max_minutes_per_day || ' min a day');
+  return 'Cloud lane: ' || c.cloud_max_jobs_per_day || ' jobs and ' || c.cloud_max_minutes_per_day || ' minutes a day, inside the shared caps';
+end $$;
+
+-- bridge_status: each device's row counts its own lane's jobs; the cloud row is over cap when either cap is reached.
+create or replace function public.bridge_status()
+returns table(device text, label text, online boolean, last_seen timestamptz, minutes_ago int,
+              listener_online boolean, listener_seen timestamptz, paused boolean,
+              queued int, awaiting_allow int, running int, paused_jobs int, stuck_queued int,
+              jobs_today int, max_jobs_per_day int, minutes_today int, max_minutes_per_day int, over_cap boolean,
+              targets jsonb, info jsonb)
+language sql stable security definer set search_path = public as $$
+  select d.device, d.label, coalesce(d.last_seen > now() - interval '3 minutes', false), d.last_seen,
+         floor(extract(epoch from now() - d.last_seen)/60)::int,
+         coalesce(d.listener_seen > now() - interval '2 minutes', false), d.listener_seen, c.paused,
+         (select count(*) from public.bridge_jobs b where b.status = 'queued' and b.runs_on = l.lane)::int,
+         (select count(*) from public.bridge_jobs b where b.status = 'awaiting_allow' and b.runs_on = l.lane)::int,
+         (select count(*) from public.bridge_jobs b where b.status = 'running' and b.runs_on = l.lane)::int,
+         (select count(*) from public.bridge_jobs b where b.status = 'paused' and b.runs_on = l.lane)::int,
+         (select count(*) from public.bridge_jobs b where b.status = 'queued' and b.runs_on = l.lane
+             and b.created_at < now() - case when l.lane = 'cloud' then interval '6 hours' else interval '10 minutes' end)::int,
+         t.jobs, c.max_jobs_per_day, t.minutes, c.max_minutes_per_day,
+         t.jobs >= c.max_jobs_per_day or t.minutes >= c.max_minutes_per_day
+           or (l.lane = 'cloud' and (tc.jobs >= c.cloud_max_jobs_per_day or tc.minutes >= c.cloud_max_minutes_per_day)),
+         d.info->'targets',
+         (d.info - 'targets') || case when l.lane = 'cloud' then jsonb_build_object('lane', 'cloud',
+           'cloud_jobs_today', tc.jobs, 'cloud_max_jobs_per_day', c.cloud_max_jobs_per_day,
+           'cloud_minutes_today', tc.minutes, 'cloud_max_minutes_per_day', c.cloud_max_minutes_per_day) else '{}'::jsonb end
+    from public.bridge_devices d
+    cross join lateral (select case when d.device = 'cloud' then 'cloud' else 'laptop' end as lane) l
+    cross join public.bridge_control c cross join public.bridge__today() t cross join public.bridge__today_cloud() tc
+   order by d.device;
+$$;
+
+-- A job's result becomes a note by itself: laptop jobs under their folder, cloud jobs under 'cloud' and their target.
+create or replace function public.bridge__job_note() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare n uuid; src text := case when new.runs_on = 'cloud' then 'schedule' else 'laptop' end;
+begin
+  if new.status in ('done', 'held', 'failed', 'paused') and new.status is distinct from old.status
+     and new.job_type = 'claude' and coalesce(new.summary, new.held_reason) is not null then
+    insert into public.bridge_notes (kind, topics, body, source, stated_by, ref, expires_at)
+    values ('result',
+            case when new.runs_on = 'cloud' then array['bridge', 'cloud', lower(replace(coalesce(new.target, 'cloud'), 'cloud:', ''))]
+                 else array['bridge', lower(coalesce(new.target, 'laptop'))] end,
+            left(new.status || ': ' || coalesce(new.summary, new.held_reason), 1000), src, new.runs_on, new.code, now() + interval '14 days')
+    returning id into n;
+    -- one live note per job: its latest outcome replaces an earlier one (paused, then done)
+    update public.bridge_notes set retired_at = now(), retired_why = 'superseded by ' || n
+     where ref = new.code and source in ('laptop', 'schedule') and id <> n and retired_at is null;
+  end if;
+  return new;
+end $$;
+
+-- Server only (lesson L-015): none of the cloud lane's functions can be called with the public key or by app users.
+revoke all on function public.bridge__lane(text), public.bridge__today_cloud(), public.bridge_claim_cloud(),
+  public.bridge_cloud_should_stop(uuid), public.bridge_cloud_checkpoint(uuid,text,text,text),
+  public.bridge_cloud_finish(uuid,text,text,text,text,text,jsonb), public.bridge_reroute(text,text,text),
+  public.bridge_cloud_caps(int,int) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') and exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke execute on function public.bridge__lane(text), public.bridge__today_cloud(), public.bridge_claim_cloud(),
+      public.bridge_cloud_should_stop(uuid), public.bridge_cloud_checkpoint(uuid,text,text,text),
+      public.bridge_cloud_finish(uuid,text,text,text,text,text,jsonb), public.bridge_reroute(text,text,text),
+      public.bridge_cloud_caps(int,int), public.bridge_enqueue(text,text,text,text,boolean,text,int,int,boolean,int),
+      public.bridge_status(), public.bridge__job_note() from anon, authenticated;
+  end if;
+end $$;

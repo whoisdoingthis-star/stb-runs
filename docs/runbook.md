@@ -70,6 +70,10 @@ The Supabase plan is free, so Supabase keeps no backups. Every night at 10 pm a 
 
 ## Where does a job run: cloud or laptop?
 Cloud by default ([decision 0081](decisions/0081-cloud-lane-for-bridge-jobs.md), bridge decision B012): repository work, web checks, reading the database and anything through Drive, Gmail or Calendar runs in a cloud Claude session or a cloud scheduled task, so Mike's laptop can be off. Only work that needs the laptop itself (its own files or apps, the `sandbox` and `mods` folders, a site signed in only there) goes to the laptop through the bridge. App changes still go through voice builds. Ask Mike before disabling or moving any live job. Before working on anything shared, read the bridge notes and write a claim note; release it with a handover note.
+- **Send a job to the cloud:** `select bridge_enqueue('cloud:web', 'what Mike asked, in his words');` (targets `cloud:stb-runs`, `cloud:planbench`, `cloud:web`, `cloud:google`). The scheduled task **STB bridge cloud lane** checks at 8:41 am, 12:41 pm and 5:41 pm NZ; to run it now, a Claude session fires that scheduled task (no added text), or Mike presses **Run now** in Scheduled. Each run opens a thread in this project and sends its summary to Mike's phone.
+- **Check it:** `select * from bridge_status() where device = 'cloud';` (last run, waiting jobs, today's use in `info`) and `select * from bridge_queue();`. A cloud job's result is a shared note under `cloud`.
+- **Stop it:** `select bridge_pause(true);` stops both lanes (the running cloud job stops at its next step); `bridge_cancel(code)` stops one job. Change its daily limit with `bridge_cloud_caps(jobs, minutes)` (8 and 120 now).
+- **A job needs the laptop after all:** the runner hands it back with `bridge_reroute(code, 'laptop', why)`; the laptop picks it up when it's on.
 
 ## Known open items
 - The end-of-day email needs a verified domain and a Resend key (above).
