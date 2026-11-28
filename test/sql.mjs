@@ -329,6 +329,37 @@ check('the pinged driver’s phone answers with where it is', (await db.query(`s
   await db.query(`select bridge_checkpoint('lap','s',$1,'Step 1')`, [jq.id]); await db.query(`select bridge_finish_job('lap','s',$1,'timed_out','Got to step 1')`, [jq.id]);
   await db.query(`select bridge_allow($1)`, [jp]); const jr = await claim(); await db.query(`select bridge_finish_job('lap','s',$1,'done','Both steps done')`, [jr.id]);
   check('bridge: a job paused then finished leaves one live note, its latest', (await db.query(`select body from bridge_notes_for(array['sandbox']) where ref = $1`, [jp])).rows.map((r) => r.body).join() === 'done: Both steps done');
+  // ---- Cloud lane (decision 0081) ----
+  const cloud = async () => (await db.query(`select id, code, device from bridge_claim_cloud()`)).rows[0];
+  const cj = (await one(`select bridge_enqueue('cloud:web', 'look up the council rubbish days', 'claude') c`)).c;
+  check('cloud lane: a cloud: target is queued for the cloud', (await one(`select runs_on from bridge_jobs where code=$1`, [cj])).runs_on === 'cloud');
+  let badCloud = false; try { await db.query(`select bridge_enqueue('cloud:somewhere', 'x x', 'claude')`); } catch { badCloud = true; }
+  check('cloud lane: an unknown cloud target is refused', badCloud);
+  const lj = (await one(`select bridge_enqueue('sandbox', 'make a file', 'claude') c`)).c;
+  check('cloud lane: laptop jobs still go to the laptop while a cloud device exists', (await one(`select runs_on from bridge_jobs where code=$1`, [lj])).runs_on === 'laptop');
+  const lc = await claim();
+  check('cloud lane: the laptop never claims a cloud job', lc?.code === lj);
+  const cc = await cloud();
+  check('cloud lane: the cloud runner claims the cloud job while the laptop is busy (one at a time per lane)', cc?.code === cj && cc.device === 'cloud');
+  check('cloud lane: the cloud runner never claims a laptop job', !(await cloud()));
+  check('cloud lane: a cloud checkpoint is recorded', (await one(`select bridge_cloud_checkpoint($1, 'step 1: found the page') ok`, [cc.id])).ok === true);
+  await db.query(`select bridge_pause(true, 'test')`);
+  check('cloud lane: the kill switch stops the running cloud job at its next step', (await one(`select bridge_cloud_should_stop($1) s`, [cc.id])).s === 'paused');
+  await db.query(`select bridge_pause(false)`);
+  check('cloud lane: carry on when nothing says stop', (await one(`select bridge_cloud_should_stop($1) s`, [cc.id])).s === '');
+  await db.query(`select bridge_cloud_finish($1, 'done', 'Rubbish is Tuesday')`, [cc.id]);
+  const cn = (await db.query(`select body, source from bridge_notes_for(array['cloud']) where ref = $1`, [cj])).rows[0];
+  check('cloud lane: a cloud job’s result becomes a shared note', cn?.body === 'done: Rubbish is Tuesday' && cn.source === 'schedule');
+  await db.query(`select bridge_finish_job('lap','s',$1,'done','made it')`, [lc.id]);
+  const hj = (await one(`select bridge_enqueue('cloud:stb-runs', 'check a file on the laptop', 'claude') c`)).c; const hc = await cloud();
+  check('cloud lane: a job that needs the laptop is handed back, not failed', /Moved to the laptop \(queued\)/.test((await one(`select bridge_reroute($1, 'laptop', 'needs local files') r`, [hj])).r));
+  check('cloud lane: the laptop then picks it up', (await claim())?.code === hj && hc?.code === hj);
+  await db.exec(`delete from bridge_jobs where status in ('queued','running')`);
+  await db.query(`select bridge_cloud_caps(1, 120)`);
+  await db.query(`select bridge_enqueue('cloud:web', 'second cloud job today', 'claude')`);
+  check('cloud lane: over its own daily limit, a cloud job waits', !(await cloud()) && (await one(`select over_cap from bridge_status() where device = 'cloud'`)).over_cap === true);
+  check('cloud lane: the laptop row is not over cap because of the cloud lane', (await one(`select over_cap from bridge_status() where device = 'lap'`)).over_cap === false);
+  await db.query(`select bridge_cloud_caps(8, 120)`); await db.exec(`delete from bridge_jobs where status in ('queued','running')`);
   // ---- Phase 5: tidy-up and weighting (decision 0077) ----
   await db.exec(`delete from bridge_notes`);
   const st = async (body, src, at) => { const id = (await one(`select bridge_note('status', array['cars'], $1, $2) id`, [body, src])).id; if (at) await db.query(`update bridge_notes set created_at = $2 where id = $1`, [id, at]); return id; };

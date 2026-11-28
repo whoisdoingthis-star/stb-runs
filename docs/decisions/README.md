@@ -84,6 +84,7 @@ One short record per decision. Never deleted; a reversed decision gets a new rec
 | 0078 | [Voice-to-Laptop Bridge, phase 6: backups and rollback](0078-bridge-backups-and-rollback.md) | 2026-11-28 | Accepted |
 | 0079 | [Nightly backup of the whole database to Google Drive](0079-nightly-backup-to-drive.md) | 2026-11-28 | Accepted |
 | 0080 | [Photos copied to Drive each night, and a size watch](0080-photo-copies-and-size-watch.md) | 2026-11-28 | Accepted |
+| 0081 | [STB work runs in the cloud by default; the laptop bridge is for laptop-only work](0081-cloud-lane-for-bridge-jobs.md) | 2026-11-28 | Accepted |
 | 0065 | [Stan's School and Sandbox Stan: training that can't go out of date](0065-stans-school.md) | 2026-11-23 | Accepted |
 
 Records are append-only: CI refuses a change to an existing record other than its Status line. To reverse a decision, write a new one that supersedes it.
